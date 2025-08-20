@@ -14,7 +14,7 @@ const logger = getLogger();
 
 /**
  * Downloads IPTV data, caches it, and fills the database with channels and programmes.
- * After completion, schedules regular refresh.
+ * Should only be called at startup to initialize data and scheduling.
  * 
  * @param {boolean} force - Whether to force download even if cache exists
  * @returns {Promise<void>}
@@ -25,7 +25,11 @@ export async function downloadCacheAndFillDb(force = false): Promise<void> {
     await fillDbProgrammes(force);
     logger.debug('Finished parsing');
     await clearCache();
-    scheduleIPTVRefresh();
+
+    // Only schedule refresh if this is initial startup, not a scheduled refresh
+    if (!force) {
+        scheduleIPTVRefresh();
+    }
 }
 
 /**
@@ -123,4 +127,4 @@ export async function fillDbProgrammes(force = false): Promise<void> {
     }
 }
 
-export { scheduleIPTVRefresh };
+export { scheduleIPTVRefresh, stopIPTVRefresh } from './schedulers';
