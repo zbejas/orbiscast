@@ -1,5 +1,5 @@
-# Use the official Bun image as the base
-FROM oven/bun:1.1-alpine AS base
+# Use the official Bun image as the base (Debian-based for better compatibility)
+FROM oven/bun:1.1-debian AS base
 
 # Add labels
 LABEL maintainer="Zbejas <info@zbejas.io>"
@@ -11,8 +11,9 @@ LABEL org.opencontainers.image.licenses="GPL-3.0"
 LABEL org.opencontainers.image.title="Orbiscast"
 
 # Install system dependencies
-RUN apk update && \
-    apk add --no-cache curl git unzip ffmpeg bash
+RUN apt-get update && \
+    apt-get install -y curl git unzip ffmpeg bash build-essential python3 && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
