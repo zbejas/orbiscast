@@ -1,4 +1,3 @@
-import { config as dotenvConfig } from 'dotenv';
 import { getLogger } from './logger';
 
 const logger = getLogger();
@@ -20,9 +19,8 @@ class Config {
 
     constructor() {
         logger.info("Loading environment variables");
-        dotenvConfig();
 
-        const env = process.env;
+        const env = Bun.env;
         this.PLAYLIST = env.PLAYLIST?.trim() || '';
         this.XMLTV = env.XMLTV?.trim() || '';
         this.REFRESH_IPTV = parseInt(env.REFRESH_IPTV?.trim() || '1440');
