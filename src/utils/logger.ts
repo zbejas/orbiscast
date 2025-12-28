@@ -24,10 +24,13 @@ const logger = createLogger({
     ]
 });
 
+// Cache the logger instance
+const appLogger = logger.child({ label: "app" });
+
 /**
  * Returns a configured logger instance for application use
  * @returns Logger instance with "app" label
  */
 export function getLogger() {
-    return logger.child({ label: "app" });
+    return appLogger;
 }

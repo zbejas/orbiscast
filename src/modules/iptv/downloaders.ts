@@ -5,11 +5,12 @@ import { cacheFile, getCachedFile } from '../../utils/cache';
 const logger = getLogger();
 
 /**
- * Fetches data from a URL with retry logic.
+ * Fetches data from a URL with retry logic and exponential backoff.
+ * Implements automatic timeout handling and memory cleanup.
  * 
- * @param {string} url - URL to fetch data from
- * @param {string} cacheFileName - Name to use when caching the file
- * @returns {Promise<Buffer | null>} - Fetched content or null if failed
+ * @param url - URL to fetch data from
+ * @param cacheFileName - Name to use when caching the file
+ * @returns Fetched content as Buffer or null if all retries failed
  */
 export async function fetchWithRetry(url: string, cacheFileName: string): Promise<Buffer | null> {
     const maxRetries = 3;
@@ -40,6 +41,8 @@ export async function fetchWithRetry(url: string, cacheFileName: string): Promis
 
             if (response.data) {
                 const content = Buffer.from(response.data);
+                // Release response data from memory after conversion
+                response.data = null;
                 logger.info(`Downloaded ${content.length} bytes, caching as ${cacheFileName}`);
                 try {
                     await cacheFile(cacheFileName, content);

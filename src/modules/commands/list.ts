@@ -240,7 +240,7 @@ export async function handleListCommand(interaction: CommandInteraction) {
         });
 
         // Set a timeout to delete the message after 30 minutes
-        setTimeout(async () => {
+        const deleteTimeout = setTimeout(async () => {
             try {
                 await reply.delete().catch(() => {
                     // Message may already be deleted, ignore errors
@@ -250,6 +250,11 @@ export async function handleListCommand(interaction: CommandInteraction) {
                 logger.error(`Error deleting list message: ${error}`);
             }
         }, 30 * 60 * 1000); // 30 minutes 
+
+        // Cleanup on collector end
+        collector.on('end', () => {
+            clearTimeout(deleteTimeout);
+        });
 
         collector.on('collect', async (i) => {
             logger.debug(`Button clicked: ${i.customId} by ${i.user.tag}`);

@@ -6,10 +6,11 @@ const logger = getLogger();
 
 /**
  * Parses a date string in the XMLTV format.
+ * Format: YYYYMMDDHHMMSS with optional timezone offset (+/-HHMM)
  * 
- * @param {string} dateString - Date string in YYYYMMDDHHMMSS format with optional timezone
- * @returns {Date} - Parsed date object
- * @throws {Error} - If the date string format is invalid
+ * @param dateString - Date string in XMLTV format
+ * @returns Parsed date object
+ * @throws Error if the date string format is invalid
  */
 export function parseDate(dateString: string): Date {
     // Split by space to separate timestamp from timezone offset
@@ -47,9 +48,9 @@ export function parseDate(dateString: string): Date {
 }
 
 /**
- * Checks if the programme data in the database is stale.
+ * Checks if the programme data in the database is stale and needs refreshing.
  * 
- * @returns {Promise<boolean>} - True if data is stale, false otherwise
+ * @returns True if data is stale or missing, false otherwise
  */
 export async function isProgrammeDataStale(): Promise<boolean> {
     const programmes = await getProgrammeEntries();
@@ -59,9 +60,10 @@ export async function isProgrammeDataStale(): Promise<boolean> {
 
 /**
  * Checks if a date is older than the configured refresh time.
+ * Includes a 3-minute grace period to prevent premature refreshes.
  * 
- * @param {string} dateString - ISO date string to check
- * @returns {boolean} - True if the date is older than the refresh interval
+ * @param dateString - ISO date string to check
+ * @returns True if the date is older than the refresh interval
  */
 export function isOlderThanSetRefreshTime(dateString: string): boolean {
     const date = new Date(dateString);
