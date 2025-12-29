@@ -193,7 +193,7 @@ export async function startStreaming(channelEntry: ChannelEntry) {
         logger.info(`Stopping any possible existing stream.`);
         await stopStreaming();
 
-        //logger.debug(`Stream URL: ${channelEntry.url}`);
+        logger.info(`Attempting to stream: ${channelEntry.url}`);
 
         // Calculate buffer size as 3x the video bitrate for smooth livestreaming
         const bufferSize = config.BITRATE_VIDEO * 3;
@@ -206,10 +206,11 @@ export async function startStreaming(channelEntry: ChannelEntry) {
             videoCodec: Utils.normalizeVideoCodec("H264"),
             h26xPreset: "veryfast",
             customFfmpegFlags: [
+                '-reconnect', '1',
+                '-reconnect_streamed', '1',
+                '-reconnect_delay_max', '5',
                 '-buffer_size', `${bufferSize}k`,
-                '-max_delay', '500000',
-                '-flags', 'low_delay',
-                '-strict', 'experimental'
+                '-max_delay', '500000'
             ],
         }, abortController.signal);
 
