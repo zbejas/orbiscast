@@ -1,4 +1,5 @@
-FROM node:22-alpine AS runtime
+FROM node:lts-alpine3.23 AS runtime
+# Had to switch from bun to node due to zeromq not being supported in bun yet.
 
 LABEL maintainer="Zbejas <info@zbejas.io>"
 LABEL description="A Discord IPTV streaming bot."
@@ -9,8 +10,7 @@ LABEL org.opencontainers.image.licenses="GPL-3.0"
 LABEL org.opencontainers.image.title="Orbiscast"
 
 RUN apk update && \
-    apk add --no-install-recommends ffmpeg python3 make g++ && \
-    rm -rf /var/cache/apk/*
+    apk add --no-cache ffmpeg python3 make g++
 
 WORKDIR /app
 COPY package.json ./
