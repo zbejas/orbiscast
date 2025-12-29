@@ -196,6 +196,10 @@ export async function startStreaming(channelEntry: ChannelEntry) {
         // Detect HLS stream and adjust settings accordingly
         const isHLS = channelEntry.url.includes('streamMode=hls') || channelEntry.url.includes('.m3u8');
 
+        logger.debug(`Stream URL: ${channelEntry.url}`);
+        logger.debug(`HLS detected: ${isHLS}`);
+        logger.debug(`Transcode disabled: ${config.DISABLE_TRANSCODE}`);
+
         const { command, output } = prepareStream(channelEntry.url, {
             noTranscoding: config.DISABLE_TRANSCODE,
             minimizeLatency: config.MINIMIZE_LATENCY,
@@ -206,7 +210,8 @@ export async function startStreaming(channelEntry: ChannelEntry) {
             customFfmpegFlags: isHLS ? [
                 '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
                 '-fflags', '+genpts',
-                '-re'
+                '-re',
+                '-user_agent', 'Mozilla/5.0'
             ] : [],
         }, abortController.signal);
 
