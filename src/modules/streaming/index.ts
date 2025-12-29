@@ -193,8 +193,7 @@ export async function startStreaming(channelEntry: ChannelEntry) {
         logger.info(`Stopping any possible existing stream.`);
         await stopStreaming();
 
-        logger.debug(`Stream URL: ${channelEntry.url}`);
-        logger.debug(`Transcode disabled: ${config.DISABLE_TRANSCODE}`);
+        //logger.debug(`Stream URL: ${channelEntry.url}`);
 
         const { command, output } = prepareStream(channelEntry.url, {
             noTranscoding: config.DISABLE_TRANSCODE,
@@ -203,11 +202,6 @@ export async function startStreaming(channelEntry: ChannelEntry) {
             bitrateVideoMax: config.BITRATE_VIDEO_MAX,
             videoCodec: Utils.normalizeVideoCodec("H264"),
             h26xPreset: "veryfast",
-            customFfmpegFlags: [
-                '-analyzeduration', '5000000',
-                '-probesize', '10000000',
-                '-fflags', '+igndts'
-            ],
         }, abortController.signal);
 
         currentChannelEntry = channelEntry;
