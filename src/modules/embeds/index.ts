@@ -140,7 +140,16 @@ export function createStreamEmbed(
                     return `${hours}h ${remainingMinutes}min`;
                 };
 
-                return `• **${prog.title}** at ${startTime} (in ${formatTime(timeUntilStart)})`;
+                // Build episode info
+                const episodeInfo = [];
+                if (prog.season !== undefined) episodeInfo.push(`S${prog.season}`);
+                if (prog.episode !== undefined) episodeInfo.push(`E${prog.episode}`);
+                const episodeText = episodeInfo.length > 0 ? ` (${episodeInfo.join('')})` : '';
+                const showTitle = prog.subtitle
+                    ? `${prog.title}${episodeText}: ${prog.subtitle}`
+                    : `${prog.title}${episodeText}`;
+
+                return `• **${showTitle}** at ${startTime} (in ${formatTime(timeUntilStart)})`;
             });
 
         streamEmbed.addFields({
