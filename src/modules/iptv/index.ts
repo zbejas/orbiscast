@@ -187,21 +187,26 @@ export async function syncPlaylistChannels(force = false): Promise<void> {
 
     // Retrieve and merge with existing database channels
     const existingChannels = await getChannelEntries();
-    const channelMap = new Map(existingChannels.map(ch => [ch.tvg_id, ch]));
+
+    // Use tvg_name as the unique key instead of tvg_id to prevent duplicates
+    const channelMap = new Map(existingChannels.map(ch => [ch.tvg_name || ch.tvg_id, ch]));
 
     logger.debug(`Located ${existingChannels.length} existing channels in database`);
 
     // Integrate playlist channels with existing data
     for (const playlistCh of playlistChannels) {
-        const existingCh = playlistCh.tvg_id ? channelMap.get(playlistCh.tvg_id) : null;
+        // Use tvg_name as the primary key for uniqueness
+        const channelKey = playlistCh.tvg_name || playlistCh.tvg_id || `playlist_${playlistChannels.indexOf(playlistCh)}`;
+        const existingCh = channelMap.get(channelKey);
+
         if (existingCh) {
             // Update existing channel with playlist URL
             existingCh.url = playlistCh.url;
             if (playlistCh.group_title) existingCh.group_title = playlistCh.group_title;
             if (playlistCh.tvg_logo) existingCh.tvg_logo = playlistCh.tvg_logo;
+            if (playlistCh.tvg_id) existingCh.tvg_id = playlistCh.tvg_id;
         } else {
             // Add new channel from playlist
-            const channelKey = playlistCh.tvg_id || `playlist_${playlistChannels.indexOf(playlistCh)}`;
             channelMap.set(channelKey, playlistCh);
         }
     }
