@@ -20,7 +20,7 @@ class Config {
     constructor() {
         logger.info('Loading environment variables');
 
-        const env = Bun.env;
+        const env = process.env;
 
         // IPTV configuration
         this.PLAYLIST = env.PLAYLIST?.trim() || '';

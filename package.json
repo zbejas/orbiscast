@@ -4,15 +4,14 @@
   "description": "Orbiscast project",
   "main": "index.js",
   "module": "index.ts",
-  "type": "module",
   "scripts": {
-    "start": "bun run src/index.ts",
-    "start:node": "node --loader tsx src/index.ts",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start:prod": "node dist/index.js"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/node": "^22.10.5",
     "@types/xml2js": "^0.4.14",
     "tsx": "^4.19.2",
     "typescript": "^5.8.2"
