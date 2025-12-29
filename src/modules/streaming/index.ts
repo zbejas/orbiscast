@@ -193,14 +193,21 @@ export async function startStreaming(channelEntry: ChannelEntry) {
         logger.info(`Stopping any possible existing stream.`);
         await stopStreaming();
 
-        // Detect HLS stream and adjust settings accordingly
-        const isHLS = channelEntry.url.includes('streamMode=hls') || channelEntry.url.includes('.m3u8');
+        // Transform URL: replace ?streamMode=* with .m3u8 for better FFmpeg compatibility
+        let streamUrl = channelEntry.url;
+        if (streamUrl.includes('?streamMode=')) {
+            streamUrl = streamUrl.replace(/\?streamMode=[^&]*(&.*)?$/, '.m3u8');
+            logger.debug(`Transformed URL from ${channelEntry.url} to ${streamUrl}`);
+        }
 
-        logger.debug(`Stream URL: ${channelEntry.url}`);
+        // Detect HLS stream
+        const isHLS = streamUrl.includes('.m3u8');
+
+        logger.debug(`Stream URL: ${streamUrl}`);
         logger.debug(`HLS detected: ${isHLS}`);
         logger.debug(`Transcode disabled: ${config.DISABLE_TRANSCODE}`);
 
-        const { command, output } = prepareStream(channelEntry.url, {
+        const { command, output } = prepareStream(streamUrl, {
             noTranscoding: config.DISABLE_TRANSCODE,
             minimizeLatency: config.MINIMIZE_LATENCY,
             bitrateVideo: config.BITRATE_VIDEO,
