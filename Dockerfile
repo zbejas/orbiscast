@@ -1,5 +1,4 @@
-# Use the official Alpine base image
-FROM alpine:3.21
+FROM oven-sh/bun:1 AS runtime
 
 # Add labels
 LABEL maintainer="Zbejas <info@zbejas.io>"
@@ -10,23 +9,18 @@ LABEL org.opencontainers.image.authors="Zbejas"
 LABEL org.opencontainers.image.licenses="GPL-3.0"
 LABEL org.opencontainers.image.title="Orbiscast"
 
-# Install dependencies
-RUN apk update && \
-    apk add --no-cache curl git unzip ffmpeg bash
-
-# Install Bun
-RUN curl -fsSL https://bun.sh/install | bash
-
-# Add Bun to PATH
-ENV PATH="/root/.bun/bin:$PATH"
+# Install system dependencies (ffmpeg only)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /app
 
-# Copy the project files into the container
+# Copy the project files
 COPY . .
 
-# Install project dependencies
+# Install dependencies with Bun
 RUN bun install
 
 # Command to run the application
