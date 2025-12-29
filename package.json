@@ -6,14 +6,19 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "start": "bun run src/index.ts"
+    "start": "bun run src/index.ts",
+    "start:node": "node --loader tsx src/index.ts",
+    "build": "tsc",
+    "start:prod": "node dist/index.js"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/xml2js": "^0.4.14"
+    "@types/xml2js": "^0.4.14",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.2"
   },
   "peerDependencies": {
-    "typescript": "^5.8.2"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "@dank074/discord-video-stream": "^5.0.2",
@@ -21,6 +26,7 @@
     "axios": "^1.13.2",
     "discord.js": "^14.25.1",
     "discord.js-selfbot-v13": "^3.7.1",
+    "dotenv": "^16.6.1",
     "lowdb": "^7.0.1",
     "winston": "^3.19.0",
     "xml2js": "^0.6.2"

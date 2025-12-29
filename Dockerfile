@@ -1,4 +1,4 @@
-FROM oven/bun:1 AS runtime
+FROM node:22-alpine AS runtime
 
 LABEL maintainer="Zbejas <info@zbejas.io>"
 LABEL description="A Discord IPTV streaming bot."
@@ -8,14 +8,15 @@ LABEL org.opencontainers.image.authors="Zbejas"
 LABEL org.opencontainers.image.licenses="GPL-3.0"
 LABEL org.opencontainers.image.title="Orbiscast"
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apk update && \
+    apk add --no-install-recommends ffmpeg python3 make g++ && \
+    rm -rf /var/cache/apk/*
 
 WORKDIR /app
+COPY package.json ./
+RUN npm install
+
 COPY . .
+RUN npm run build
 
-# Install deps but skip post-install scripts (prevents zeromq native build crash)
-RUN bun install --ignore-scripts
-
-CMD ["bun", "run", "start"]
+CMD ["npm", "run", "start:prod"]
