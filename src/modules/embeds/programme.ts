@@ -55,6 +55,18 @@ export class ProgrammeEmbedProcessor extends BaseEmbedProcessor<ProgrammeEntry> 
             embed.setDescription(programme.description);
         }
 
+        // Add season/episode information if available
+        if (programme.season !== undefined || programme.episode !== undefined) {
+            const episodeInfo = [];
+            if (programme.season !== undefined) episodeInfo.push(`Season ${programme.season}`);
+            if (programme.episode !== undefined) episodeInfo.push(`Episode ${programme.episode}`);
+            embed.addFields({ name: '📺 Episode', value: episodeInfo.join(' • '), inline: true });
+        }
+
+        if (programme.subtitle) {
+            embed.addFields({ name: 'Subtitle', value: programme.subtitle, inline: true });
+        }
+
         if (programme.category) {
             embed.addFields({ name: 'Category', value: programme.category, inline: true });
         }
@@ -83,8 +95,14 @@ export class ProgrammeEmbedProcessor extends BaseEmbedProcessor<ProgrammeEntry> 
             ? programme.description.substring(0, 150) + (programme.description.length > 150 ? '...' : '')
             : 'No description available';
 
+        // Build episode info if available
+        const episodeInfo = [];
+        if (programme.season !== undefined) episodeInfo.push(`S${programme.season}`);
+        if (programme.episode !== undefined) episodeInfo.push(`E${programme.episode}`);
+        const episodeText = episodeInfo.length > 0 ? ` (${episodeInfo.join('')})` : '';
+
         return {
-            title: programme.title,
+            title: programme.title + episodeText,
             timeRange: `${startTime} - ${stopTime}`,
             description
         };
@@ -159,8 +177,17 @@ export class ProgrammeEmbedProcessor extends BaseEmbedProcessor<ProgrammeEntry> 
 
             const description = typeof currentShow.description === 'string' ? currentShow.description : '';
 
+            // Build episode info for title
+            const episodeInfo = [];
+            if (currentShow.season !== undefined) episodeInfo.push(`S${currentShow.season}`);
+            if (currentShow.episode !== undefined) episodeInfo.push(`E${currentShow.episode}`);
+            const episodeText = episodeInfo.length > 0 ? ` (${episodeInfo.join('')})` : '';
+            const showTitle = currentShow.subtitle
+                ? `${currentShow.title}${episodeText}: ${currentShow.subtitle}`
+                : `${currentShow.title}${episodeText}`;
+
             mainEmbed
-                .setDescription(`${isLive ? '🔴 **NOW LIVE**' : '**Next Up**'}: ${currentShow.title}`)
+                .setDescription(`${isLive ? '🔴 **NOW LIVE**' : '**Next Up**'}: ${showTitle}`)
                 .addFields(
                     { name: 'Time', value: `${startTime} - ${stopTime}`, inline: true },
                     { name: 'Date', value: date, inline: true },
@@ -202,8 +229,17 @@ export class ProgrammeEmbedProcessor extends BaseEmbedProcessor<ProgrammeEntry> 
                         : programme.description)
                     : 'No description available';
 
+                // Build episode info
+                const episodeInfo = [];
+                if (programme.season !== undefined) episodeInfo.push(`S${programme.season}`);
+                if (programme.episode !== undefined) episodeInfo.push(`E${programme.episode}`);
+                const episodeText = episodeInfo.length > 0 ? ` (${episodeInfo.join('')})` : '';
+                const showTitle = programme.subtitle
+                    ? `${programme.title}${episodeText}: ${programme.subtitle}`
+                    : `${programme.title}${episodeText}`;
+
                 dateEmbed.addFields({
-                    name: `${startTime} - ${stopTime}: ${programme.title}`,
+                    name: `${startTime} - ${stopTime}: ${showTitle}`,
                     value: description
                 });
             });
