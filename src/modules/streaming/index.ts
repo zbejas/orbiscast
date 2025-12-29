@@ -204,14 +204,9 @@ export async function startStreaming(channelEntry: ChannelEntry) {
             videoCodec: Utils.normalizeVideoCodec("H264"),
             h26xPreset: "veryfast",
             customFfmpegFlags: [
-                '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-                '-reconnect', '1',
-                '-reconnect_streamed', '1',
-                '-reconnect_delay_max', '2',
-                '-user_agent', 'Mozilla/5.0',
-                '-headers', 'Accept: */*',
-                '-multiple_requests', '1',
-                '-f', 'hls'
+                '-analyzeduration', '5000000',
+                '-probesize', '10000000',
+                '-fflags', '+igndts'
             ],
         }, abortController.signal);
 
