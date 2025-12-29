@@ -5,7 +5,7 @@
     "": {
       "name": "orbiscast",
       "dependencies": {
-        "@dank074/discord-video-stream": "^5.0.1",
+        "@dank074/discord-video-stream": "^5.0.2",
         "@discordjs/voice": "^0.18.0",
         "axios": "^1.13.2",
         "discord.js": "^14.25.1",
