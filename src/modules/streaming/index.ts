@@ -193,33 +193,26 @@ export async function startStreaming(channelEntry: ChannelEntry) {
         logger.info(`Stopping any possible existing stream.`);
         await stopStreaming();
 
-        // Transform URL: replace ?streamMode=* with .m3u8 for better FFmpeg compatibility
-        let streamUrl = channelEntry.url;
-        if (streamUrl.includes('?streamMode=')) {
-            streamUrl = streamUrl.replace(/\?streamMode=[^&]*(&.*)?$/, '.m3u8');
-            logger.debug(`Transformed URL from ${channelEntry.url} to ${streamUrl}`);
-        }
-
-        // Detect HLS stream
-        const isHLS = streamUrl.includes('.m3u8');
-
-        logger.debug(`Stream URL: ${streamUrl}`);
-        logger.debug(`HLS detected: ${isHLS}`);
+        logger.debug(`Stream URL: ${channelEntry.url}`);
         logger.debug(`Transcode disabled: ${config.DISABLE_TRANSCODE}`);
 
-        const { command, output } = prepareStream(streamUrl, {
+        const { command, output } = prepareStream(channelEntry.url, {
             noTranscoding: config.DISABLE_TRANSCODE,
             minimizeLatency: config.MINIMIZE_LATENCY,
             bitrateVideo: config.BITRATE_VIDEO,
             bitrateVideoMax: config.BITRATE_VIDEO_MAX,
             videoCodec: Utils.normalizeVideoCodec("H264"),
             h26xPreset: "veryfast",
-            customFfmpegFlags: isHLS ? [
+            customFfmpegFlags: [
                 '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-                '-fflags', '+genpts',
-                '-re',
-                '-user_agent', 'Mozilla/5.0'
-            ] : [],
+                '-reconnect', '1',
+                '-reconnect_streamed', '1',
+                '-reconnect_delay_max', '2',
+                '-user_agent', 'Mozilla/5.0',
+                '-headers', 'Accept: */*',
+                '-multiple_requests', '1',
+                '-f', 'hls'
+            ],
         }, abortController.signal);
 
         currentChannelEntry = channelEntry;
