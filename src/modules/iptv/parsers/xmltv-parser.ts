@@ -51,6 +51,14 @@ export async function extractXMLTVData(filePath: string): Promise<ParsedXMLTV> {
         });
     }
 
+    // Build channel name map for title cleanup
+    const channelNameMap = new Map<string, string>();
+    output.channels.forEach(ch => {
+        if (ch.tvg_id && ch.tvg_name) {
+            channelNameMap.set(ch.tvg_id, ch.tvg_name);
+        }
+    });
+
     // Process programmes if available
     const programmeList = xmlData.tv.programme || [];
     if (programmeList.length > 0) {
@@ -58,7 +66,7 @@ export async function extractXMLTVData(filePath: string): Promise<ParsedXMLTV> {
 
         programmeList.forEach((programmeNode: any) => {
             try {
-                output.programmes.push(buildProgrammeEntry(programmeNode));
+                output.programmes.push(buildProgrammeEntry(programmeNode, channelNameMap));
             } catch (err) {
                 const programmeTitle = extractTextContent(programmeNode['title']?.[0]) || 'unknown';
                 logger.error(`Programme extraction failed for "${programmeTitle}": ${err}`);
@@ -126,12 +134,20 @@ function extractChannelData(channel: any): ChannelEntry {
  * Builds a structured programme entry from raw XMLTV programme data.
  * 
  * @param programme - Raw programme data from XMLTV
+ * @param channelNameMap - Map of channel IDs to names for title cleanup
  * @returns Structured programme entry
  * @throws Error if programme is missing required fields
  */
-function buildProgrammeEntry(programme: any): ProgrammeEntry {
+function buildProgrammeEntry(programme: any, channelNameMap: Map<string, string>): ProgrammeEntry {
     // Extract text content fields
-    const title = extractTextContent(programme['title']?.[0]);
+    let title = extractTextContent(programme['title']?.[0]);
+
+    // Strip duplicate channel name prefix if present (e.g., "One Piece: One Piece: The Movie" -> "One Piece: The Movie")
+    const channelId = programme.$.channel;
+    const channelName = channelNameMap.get(channelId);
+    if (channelName && title.startsWith(`${channelName}: `)) {
+        title = title.substring(channelName.length + 2);
+    }
     const description = extractTextContent(programme['desc']?.[0]);
     const category = extractTextContent(programme['category']?.[0]);
     const subtitle = extractTextContent(programme['sub-title']?.[0]);

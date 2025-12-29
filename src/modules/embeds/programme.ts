@@ -222,7 +222,6 @@ export class ProgrammeEmbedProcessor extends BaseEmbedProcessor<ProgrammeEntry> 
                     : new Date(programme.stop_timestamp ? programme.stop_timestamp * 1000 : Date.now());
 
                 const startTime = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const stopTime = stopDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                 const description = typeof programme.description === 'string'
                     ? (programme.description.length > 100
                         ? `${programme.description.substring(0, 100)}...`
@@ -239,7 +238,7 @@ export class ProgrammeEmbedProcessor extends BaseEmbedProcessor<ProgrammeEntry> 
                     : `${programme.title}${episodeText}`;
 
                 dateEmbed.addFields({
-                    name: `${startTime} - ${stopTime}: ${showTitle}`,
+                    name: `${startTime}: ${showTitle}`,
                     value: description
                 });
             });
