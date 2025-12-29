@@ -16,7 +16,7 @@
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "@dank074/discord-video-stream": "^5.0.1",
+    "@dank074/discord-video-stream": "^5.0.2",
     "@discordjs/voice": "^0.18.0",
     "@types/fluent-ffmpeg": "^2.1.28",
     "axios": "^1.13.2",
@@ -25,5 +25,8 @@
     "lowdb": "^7.0.1",
     "winston": "^3.19.0",
     "xml2js": "^0.6.2"
+  },
+  "optionalDependencies": {
+    "zeromq": "^6.0.0"
   }
 }
