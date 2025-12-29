@@ -195,6 +195,9 @@ export async function startStreaming(channelEntry: ChannelEntry) {
 
         //logger.debug(`Stream URL: ${channelEntry.url}`);
 
+        // Calculate buffer size as 3x the video bitrate for smooth livestreaming
+        const bufferSize = config.BITRATE_VIDEO * 3;
+
         const { command, output } = prepareStream(channelEntry.url, {
             noTranscoding: config.DISABLE_TRANSCODE,
             minimizeLatency: config.MINIMIZE_LATENCY,
@@ -202,6 +205,12 @@ export async function startStreaming(channelEntry: ChannelEntry) {
             bitrateVideoMax: config.BITRATE_VIDEO_MAX,
             videoCodec: Utils.normalizeVideoCodec("H264"),
             h26xPreset: "veryfast",
+            customFfmpegFlags: [
+                '-buffer_size', `${bufferSize}k`,
+                '-max_delay', '500000',
+                '-flags', 'low_delay',
+                '-strict', 'experimental'
+            ],
         }, abortController.signal);
 
         currentChannelEntry = channelEntry;
