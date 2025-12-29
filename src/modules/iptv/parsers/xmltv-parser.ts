@@ -94,13 +94,14 @@ function extractChannelData(channel: any): ChannelEntry {
         for (const nameElement of channel['display-name']) {
             const displayName = extractTextContent(nameElement);
 
-            // Use first display name as primary channel name
-            if (!channelName) {
-                channelName = displayName;
-            }
             // Identify numeric-only display names as channel numbers
             if (/^\d+$/.test(displayName) && !channelNum) {
                 channelNum = displayName;
+            }
+            // Use first non-numeric display name as primary channel name
+            // This prevents "1 One Piece" format from being used when "One Piece" is available
+            else if (!channelName || /^\d+\s/.test(channelName)) {
+                channelName = displayName;
             }
         }
     }
