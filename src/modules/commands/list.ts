@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, CommandInteraction, EmbedBuilder, GuildMember, MessageFlags, ComponentType } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ChatInputCommandInteraction, EmbedBuilder, GuildMember, MessageFlags, ComponentType } from 'discord.js';
 import { getLogger } from '../../utils/logger';
 import { getChannelEntries } from '../../modules/database';
 import { executeStreamChannel } from './stream';
@@ -213,10 +213,10 @@ async function handlePaginationButton(interaction: ButtonInteraction, currentPag
  * Handles the list command interaction, displaying available channels
  * @param interaction - The Discord command interaction
  */
-export async function handleListCommand(interaction: CommandInteraction) {
+export async function handleListCommand(interaction: ChatInputCommandInteraction) {
     try {
-        const rawPageOption = interaction.options.get('page')?.value;
-        const pageOption = typeof rawPageOption === 'number' || rawPageOption === 'all' ? rawPageOption : undefined;
+        const rawPageOption = interaction.options.getString('page');
+        const pageOption = rawPageOption === 'all' ? 'all' : (rawPageOption ? parseInt(rawPageOption) : undefined);
         const result = await generateChannelList(pageOption);
 
         if (!result.success) {
