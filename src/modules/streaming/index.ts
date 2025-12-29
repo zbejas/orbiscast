@@ -193,6 +193,9 @@ export async function startStreaming(channelEntry: ChannelEntry) {
         logger.info(`Stopping any possible existing stream.`);
         await stopStreaming();
 
+        // Detect HLS stream and adjust settings accordingly
+        const isHLS = channelEntry.url.includes('streamMode=hls') || channelEntry.url.includes('.m3u8');
+
         const { command, output } = prepareStream(channelEntry.url, {
             noTranscoding: false,
             minimizeLatency: config.MINIMIZE_LATENCY,
@@ -200,6 +203,11 @@ export async function startStreaming(channelEntry: ChannelEntry) {
             bitrateVideoMax: config.BITRATE_VIDEO_MAX,
             videoCodec: Utils.normalizeVideoCodec("H264"),
             h26xPreset: "veryfast",
+            customFfmpegFlags: isHLS ? [
+                '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
+                '-fflags', '+genpts',
+                '-re'
+            ] : [],
         }, abortController.signal);
 
         currentChannelEntry = channelEntry;
