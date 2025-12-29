@@ -85,12 +85,32 @@ export async function populateDatabaseFromXMLTV(force = false): Promise<void> {
         await clearChannels();
         await addChannels(parsedData.channels);
         logger.info(`Added ${parsedData.channels.length} channels from XMLTV`);
+
+        // Log channel IDs for debugging
+        const channelIds = parsedData.channels.map(ch => ch.tvg_id).join(', ');
+        logger.debug(`XMLTV channel IDs: [${channelIds}]`);
     }
 
     // Add programmes from XMLTV if available
     if (parsedData.programmes.length > 0) {
+        // Validate that programmes reference known channels
+        const channelIds = new Set(parsedData.channels.map(ch => ch.tvg_id));
+        const programmeChannels = new Set(parsedData.programmes.map(p => p.channel));
+        const unmatchedChannels = Array.from(programmeChannels).filter(id => !channelIds.has(id));
+
+        if (unmatchedChannels.length > 0) {
+            logger.warn(`Found programmes for channels not in XMLTV channel list: [${unmatchedChannels.join(', ')}]`);
+        }
+
         await clearProgrammes();
         await addProgrammes(parsedData.programmes);
+
+        // Log programme distribution per channel
+        const progsByChannel = parsedData.programmes.reduce((acc, p) => {
+            acc[p.channel] = (acc[p.channel] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+        logger.info(`Added programmes per channel: ${JSON.stringify(progsByChannel)}`);
     }
 
     // Release parsed data references
@@ -161,6 +181,10 @@ export async function syncPlaylistChannels(force = false): Promise<void> {
 
     logger.info(`Extracted ${playlistChannels.length} channels from playlist`);
 
+    // Log playlist channel IDs for debugging
+    const playlistIds = playlistChannels.map(ch => `${ch.tvg_name}(${ch.tvg_id})`).join(', ');
+    logger.debug(`Playlist channel IDs: [${playlistIds}]`);
+
     // Retrieve and merge with existing database channels
     const existingChannels = await getChannelEntries();
     const channelMap = new Map(existingChannels.map(ch => [ch.tvg_id, ch]));
@@ -188,6 +212,10 @@ export async function syncPlaylistChannels(force = false): Promise<void> {
         await clearChannels();
         await addChannels(mergedChannels);
         logger.info(`Synchronized ${mergedChannels.length} channels to database`);
+
+        // Verify final channel list
+        const finalChannelIds = mergedChannels.map(ch => `${ch.tvg_name}(${ch.tvg_id})`).join(', ');
+        logger.debug(`Final database channels: [${finalChannelIds}]`);
     }
 }
 
