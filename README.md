@@ -116,19 +116,20 @@ The application uses the following environment variables, which should be define
 
 ### System and IPTV Configuration
 
-| Variable           | Description                                      | Example/Default                          | Required |
-|--------------------|--------------------------------------------------|------------------------------------------|----------|
-| `PLAYLIST`         | URL to the M3U playlist.                         | `http://example.com/m3u/playlist.m3u`    | ✔        |
-| `XMLTV`            | URL to the XMLTV guide.                   | `http://example.com/xmltv/guide.xml`     | ✘        |
-| `REFRESH_IPTV`     | Interval in minutes to refresh the IPTV data.    | `1440`                                   | ✘        |
-| `RAM_CACHE`        | Whether to use RAM for caching.                  | `true`                                  | ✘        |
-| `CACHE_DIR`        | Directory for cache storage.                     | `../cache`                               | ✘        |
-| `DEBUG`            | Enable debug mode.                               | `false`                                  | ✘        |
-| `DEFAULT_STREAM_TIMEOUT` | Default stream timeout (when alone in channel) in minutes.            | `10`                                     | ✘        |
-| `TZ`               | Timezone for the container. Example: `Europe/Ljubljana`                      | `UTC`                                    | ✘        |
-| `MINIMIZE_LATENCY` | Minimize latency for the stream.                 | `true`                                   | ✘        |
-| `BITRATE_VIDEO`    | Video bitrate in Kbps.                           | `5000`                                   | ✘        |
-| `BITRATE_VIDEO_MAX`| Maximum video bitrate in Kbps.                   | `7500`                                   | ✘        |
+| Variable                 | Description                                                           | Example/Default                       | Required |
+|--------------------------|-----------------------------------------------------------------------|---------------------------------------|----------|
+| `PLAYLIST`               | URL to the M3U playlist.                                              | `http://example.com/m3u/playlist.m3u` | ✔        |
+| `XMLTV`                  | URL to the XMLTV guide.                                               | `http://example.com/xmltv/guide.xml`  | ✘        |
+| `REFRESH_IPTV`           | Interval in minutes to refresh the IPTV data.                         | `1440`                                | ✘        |
+| `RAM_CACHE`              | Whether to use RAM for caching.                                       | `true`                                | ✘        |
+| `CACHE_DIR`              | Directory for cache storage.                                          | `../cache`                            | ✘        |
+| `DEBUG`                  | Enable debug mode.                                                    | `false`                               | ✘        |
+| `DEFAULT_STREAM_TIMEOUT` | Default stream timeout (when alone in channel) in minutes.            | `10`                                  | ✘        |
+| `TZ`                     | Timezone for the container. Example: `Europe/Ljubljana`               | `UTC`                                 | ✘        |
+| `MINIMIZE_LATENCY`       | Minimize latency for the stream.                                      | `true`                                | ✘        |
+| `BITRATE_VIDEO`          | Video bitrate in Kbps.                                                | `5000`                                | ✘        |
+| `BITRATE_VIDEO_MAX`      | Maximum video bitrate in Kbps.                                        | `7500`                                | ✘        |
+| `DISABLE_TRANSCODE`      | Disable transcoding and pass stream through directly.                 | `false`                               | ✘        |
 
 > [!TIP]
 > There is a bunch of IPTV providers online. I recommend using a tool like [Threadfin](https://github.com/Threadfin/Threadfin) or [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) to sort out your IPTV channels. You can find public M3U playlists [here](https://github.com/iptv-org/iptv). More info on IPTV can be found [here](https://github.com/iptv-org/awesome-iptv).

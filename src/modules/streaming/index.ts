@@ -197,7 +197,7 @@ export async function startStreaming(channelEntry: ChannelEntry) {
         const isHLS = channelEntry.url.includes('streamMode=hls') || channelEntry.url.includes('.m3u8');
 
         const { command, output } = prepareStream(channelEntry.url, {
-            noTranscoding: false,
+            noTranscoding: config.DISABLE_TRANSCODE,
             minimizeLatency: config.MINIMIZE_LATENCY,
             bitrateVideo: config.BITRATE_VIDEO,
             bitrateVideoMax: config.BITRATE_VIDEO_MAX,

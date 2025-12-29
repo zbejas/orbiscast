@@ -16,6 +16,7 @@ class Config {
     MINIMIZE_LATENCY: boolean;
     BITRATE_VIDEO: number;
     BITRATE_VIDEO_MAX: number;
+    DISABLE_TRANSCODE: boolean;
 
     constructor() {
         logger.info('Loading environment variables');
@@ -41,6 +42,7 @@ class Config {
         this.MINIMIZE_LATENCY = env.MINIMIZE_LATENCY?.trim().toLowerCase() !== 'false';
         this.BITRATE_VIDEO = parseInt(env.BITRATE_VIDEO?.trim() || '5000');
         this.BITRATE_VIDEO_MAX = parseInt(env.BITRATE_VIDEO_MAX?.trim() || '7500');
+        this.DISABLE_TRANSCODE = env.DISABLE_TRANSCODE?.trim().toLowerCase() === 'true';
 
         // Debug configuration
         this.DEBUG = env.DEBUG?.trim().toLowerCase() === 'true';
