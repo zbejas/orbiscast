@@ -1,4 +1,4 @@
-FROM oven-sh/bun:1 AS runtime
+FROM oven/bun:1 AS runtime
 
 # Add labels
 LABEL maintainer="Zbejas <info@zbejas.io>"
