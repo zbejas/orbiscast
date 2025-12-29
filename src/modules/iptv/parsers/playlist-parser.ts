@@ -59,6 +59,7 @@ function parseAlternativeFormat(line: string): ChannelEntry | null {
     // Extract attributes flexibly without requiring specific order
     const tvgIdMatch = line.match(/tvg-id="([^"]+)"/);
     const tvgNameMatch = line.match(/tvg-name="([^"]+)"/);
+    const tvgChnoMatch = line.match(/tvg-chno="([^"]+)"/);
     const tvgLogoMatch = line.match(/tvg-logo="([^"]+)"/);
     const groupTitleMatch = line.match(/group-title="([^"]+)"/);
 
@@ -70,6 +71,7 @@ function parseAlternativeFormat(line: string): ChannelEntry | null {
     }
 
     const tvg_id = tvgIdMatch ? tvgIdMatch[1] : '';
+    const tvg_chno = tvgChnoMatch ? tvgChnoMatch[1] : '';
     const tvg_name = tvgNameMatch ? tvgNameMatch[1] : (channelName || tvg_id);
     const tvg_logo = tvgLogoMatch ? tvgLogoMatch[1] : '';
     const group_title = groupTitleMatch ? groupTitleMatch[1] : '';
@@ -110,6 +112,7 @@ function parseFlexibleFormat(line: string): ChannelEntry | null {
 
     // Extract available attributes
     const tvgIdMatch = line.match(/tvg-id="([^"]+)"/);
+    const tvgChnoMatch = line.match(/tvg-chno="([^"]+)"/);
     const tvgLogoMatch = line.match(/tvg-logo="([^"]+)"/);
     const groupTitleMatch = line.match(/group-title="([^"]+)"/);
 
