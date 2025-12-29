@@ -1,3 +1,18 @@
+# Build stage
+FROM node:lts-alpine3.23 AS builder
+
+RUN apk update && \
+    apk add --no-cache python3 make g++
+
+WORKDIR /app
+COPY package.json ./
+RUN npm install
+
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build
+
+# Runtime stage
 FROM node:lts-alpine3.23 AS runtime
 # Had to switch from bun to node due to zeromq not being supported in bun yet.
 
@@ -14,9 +29,9 @@ RUN apk update && \
 
 WORKDIR /app
 COPY package.json ./
-RUN npm install
+RUN npm install --omit=dev && \
+    apk del python3 make g++
 
-COPY . .
-RUN npm run build
+COPY --from=builder /app/dist ./dist
 
 CMD ["npm", "run", "start:prod"]
