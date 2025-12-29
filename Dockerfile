@@ -1,7 +1,21 @@
-# Use the official Alpine base image
-FROM alpine:3.21
+# Build stage
+FROM node:lts-alpine3.23 AS builder
 
-# Add labels
+RUN apk update && \
+    apk add --no-cache python3 make g++
+
+WORKDIR /app
+COPY package.json ./
+RUN npm install
+
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build
+
+# Runtime stage
+FROM node:lts-alpine3.23 AS runtime
+# Had to switch from bun to node due to zeromq not being supported in bun yet.
+
 LABEL maintainer="Zbejas <info@zbejas.io>"
 LABEL description="A Discord IPTV streaming bot."
 LABEL org.opencontainers.image.source="https://github.com/zbejas/orbiscast"
@@ -10,24 +24,14 @@ LABEL org.opencontainers.image.authors="Zbejas"
 LABEL org.opencontainers.image.licenses="GPL-3.0"
 LABEL org.opencontainers.image.title="Orbiscast"
 
-# Install dependencies
 RUN apk update && \
-    apk add --no-cache curl git unzip ffmpeg bash
+    apk add --no-cache ffmpeg python3 make g++
 
-# Install Bun
-RUN curl -fsSL https://bun.sh/install | bash
-
-# Add Bun to PATH
-ENV PATH="/root/.bun/bin:$PATH"
-
-# Set the working directory
 WORKDIR /app
+COPY package.json ./
+RUN npm install --omit=dev && \
+    apk del python3 make g++
 
-# Copy the project files into the container
-COPY . .
+COPY --from=builder /app/dist ./dist
 
-# Install project dependencies
-RUN bun install
-
-# Command to run the application
-CMD ["bun", "run", "start"]
+CMD ["npm", "run", "start:prod"]

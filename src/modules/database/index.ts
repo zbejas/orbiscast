@@ -1,14 +1,12 @@
 import { promises as fs } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import { getLogger } from '../../utils/logger';
 import type { ChannelEntry, ProgrammeEntry } from '../../interfaces/iptv';
 
 const logger = getLogger();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// __dirname is available in CommonJS
 const dataDir = join(__dirname, '../../../data');
 
 fs.mkdir(dataDir, { recursive: true }).catch(err => logger.error(`Error creating data directory: ${err}`));

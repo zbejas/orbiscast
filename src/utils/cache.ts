@@ -6,6 +6,7 @@ import { config } from './config';
 const logger = getLogger();
 const cacheDir = config.CACHE_DIR;
 
+// Initialize cache directory on module load
 fs.mkdir(cacheDir, { recursive: true })
     .then(() => logger.debug(`Cache directory set to: ${cacheDir}`))
     .catch(err => logger.error(`Error creating cache directory: ${err}`));
@@ -65,7 +66,7 @@ export async function getCachedFilePath(filePath: string): Promise<string | null
 export async function clearCache(): Promise<void> {
     logger.debug(`Clearing cache directory: ${cacheDir}`);
     try {
-        await fs.rmdir(cacheDir, { recursive: true });
+        await fs.rm(cacheDir, { recursive: true, force: true });
         await fs.mkdir(cacheDir, { recursive: true });
         logger.debug("Cache directory cleared.");
     } catch (err) {

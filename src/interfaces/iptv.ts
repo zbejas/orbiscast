@@ -25,4 +25,12 @@ export interface ProgrammeEntry {
     description: string;
     category: string;
     created_at: string;
+    subtitle?: string;
+    episode_num?: string;
+    season?: number;
+    episode?: number;
+    icon?: string;
+    image?: string;
+    date?: string;
+    previously_shown?: boolean;
 }

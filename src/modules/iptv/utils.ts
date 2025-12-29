@@ -6,10 +6,11 @@ const logger = getLogger();
 
 /**
  * Parses a date string in the XMLTV format.
+ * Format: YYYYMMDDHHMMSS with optional timezone offset (+/-HHMM)
  * 
- * @param {string} dateString - Date string in YYYYMMDDHHMMSS format with optional timezone
- * @returns {Date} - Parsed date object
- * @throws {Error} - If the date string format is invalid
+ * @param dateString - Date string in XMLTV format
+ * @returns Parsed date object
+ * @throws Error if the date string format is invalid
  */
 export function parseDate(dateString: string): Date {
     // Split by space to separate timestamp from timezone offset
@@ -47,21 +48,48 @@ export function parseDate(dateString: string): Date {
 }
 
 /**
- * Checks if the programme data in the database is stale.
+ * Checks if the programme data in the database is stale and needs refreshing.
+ * Considers both the age of the data and whether it contains any future programmes.
  * 
- * @returns {Promise<boolean>} - True if data is stale, false otherwise
+ * @returns True if data is stale, missing, or all programmes are in the past
  */
 export async function isProgrammeDataStale(): Promise<boolean> {
     const programmes = await getProgrammeEntries();
-    const createdAt = programmes?.[0]?.created_at;
-    return !createdAt || isOlderThanSetRefreshTime(createdAt);
+
+    // No programmes means data is stale
+    if (!programmes || programmes.length === 0) {
+        logger.debug('No programmes in database, data is stale');
+        return true;
+    }
+
+    const createdAt = programmes[0]?.created_at;
+
+    // Check if data was fetched too long ago
+    if (!createdAt || isOlderThanSetRefreshTime(createdAt)) {
+        logger.debug('Programme data is older than refresh interval');
+        return true;
+    }
+
+    // Check if all programmes are in the past (data is outdated even if recently fetched)
+    const now = Math.floor(Date.now() / 1000);
+    const hasFutureProgrammes = programmes.some(p =>
+        typeof p.stop_timestamp === 'number' && p.stop_timestamp >= now
+    );
+
+    if (!hasFutureProgrammes) {
+        logger.warn('All programme data is in the past, forcing refresh');
+        return true;
+    }
+
+    return false;
 }
 
 /**
  * Checks if a date is older than the configured refresh time.
+ * Includes a 3-minute grace period to prevent premature refreshes.
  * 
- * @param {string} dateString - ISO date string to check
- * @returns {boolean} - True if the date is older than the refresh interval
+ * @param dateString - ISO date string to check
+ * @returns True if the date is older than the refresh interval
  */
 export function isOlderThanSetRefreshTime(dateString: string): boolean {
     const date = new Date(dateString);

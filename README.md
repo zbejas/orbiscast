@@ -81,20 +81,33 @@ You can check the available tags on the [Docker Hub page](https://hub.docker.com
 ### Manual
 
 > [!IMPORTANT]
-> The following instructions are for running the bot manually. If you are using Docker, you can skip this section. [Bun](https://bun.sh/) is required, so make sure to install it before proceeding.
+> The following instructions are for running the bot manually. If you are using Docker, you can skip this section. [Node.js](https://nodejs.org/) v22 or higher is required.
 
 The project can also be run manually. To do so, first download the project and install the dependencies:
 
 ```bash
 git clone https://github.com/zbejas/orbiscast
 cd orbiscast
-bun install
+npm install
 ```
 
-Setup the enviroment variables and start the bot by running:
+For development with auto-reload:
 
 ```bash
-bun run start
+npm run dev
+```
+
+For production, build and run:
+
+```bash
+npm run build
+npm run start:prod
+```
+
+Or run directly with TypeScript:
+
+```bash
+npm start
 ```
 
 ## Environment Variables

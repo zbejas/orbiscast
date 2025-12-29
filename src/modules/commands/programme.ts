@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, CommandInteraction, ComponentType, EmbedBuilder, MessageFlags, type Channel } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ChatInputCommandInteraction, ComponentType, EmbedBuilder, MessageFlags, type Channel } from 'discord.js';
 import { getLogger } from '../../utils/logger';
 import { getChannelEntries, getProgrammeEntries } from '../../modules/database';
 import type { ChannelEntry, ProgrammeEntry } from '../../interfaces/iptv';
@@ -256,10 +256,10 @@ export async function handleProgrammeListButtonInteraction(interaction: ButtonIn
  * Handles the programme command interaction, showing TV guide for a channel
  * @param interaction - The Discord command interaction
  */
-export async function handleProgrammeCommand(interaction: CommandInteraction) {
+export async function handleProgrammeCommand(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    const channelName = interaction.options.get('channel')?.value as string | undefined;
+    const channelName = interaction.options.getString('channel');
 
     // If no channel is specified, show the channel list for selection
     if (!channelName) {

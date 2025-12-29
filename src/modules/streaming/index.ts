@@ -25,23 +25,9 @@ export async function initializeStreamer() {
 }
 
 /**
- * Re-authenticates the user client by logging out and back in
- * Useful for refreshing authentication tokens
- */
-export async function relogUser() {
-    try {
-        await logoutStreamer();
-        await loginStreamer();
-    }
-    catch (error) {
-        logger.error(`Error relogging user: ${error}`);
-    }
-}
-
-/**
  * Logs out the streamer client if currently logged in
  */
-export async function logoutStreamer() {
+async function logoutStreamer() {
     if (!streamer.client.isReady()) {
         logger.debug('Streamer client is not logged in');
         return;
@@ -53,7 +39,7 @@ export async function logoutStreamer() {
 /**
  * Logs in the streamer client using the user token
  */
-export async function loginStreamer() {
+async function loginStreamer() {
     if (streamer.client.isReady()) {
         logger.debug('Streamer client is already logged in');
         return;
@@ -63,9 +49,10 @@ export async function loginStreamer() {
 }
 
 /**
- * Get the current streaming channel entry
+ * Gets the current streaming channel entry.
+ * 
  * @returns Channel entry object or null if not streaming
-    */
+ */
 export function getCurrentChannelEntry(): ChannelEntry | null {
     return currentChannelEntry;
 }
@@ -130,16 +117,19 @@ export async function leaveVoiceChannel() {
 }
 
 /**
- * Starts monitoring spectators in the voice channel
- * Automatically stops the stream if there are no viewers for a specified time
+ * Starts monitoring spectators in the voice channel.
+ * Automatically stops the stream if there are no viewers for a specified time.
+ * 
  * @returns Cleanup function to stop monitoring
  */
 function startSpectatorMonitoring(): () => void {
     streamAloneTime = 0;
+
     if (streamSpectatorMonitor) {
         clearInterval(streamSpectatorMonitor);
         streamSpectatorMonitor = null;
     }
+
     logger.debug('Starting spectator monitoring');
 
     streamSpectatorMonitor = setInterval(() => {
@@ -238,12 +228,9 @@ export async function startStreaming(channelEntry: ChannelEntry) {
                 type: "go-live",
                 //readrateInitialBurst: 1000000,
             }, abortController.signal);
-
-            // Ensure cleanup happens after stream ends normally
+        } finally {
+            // Always cleanup monitoring regardless of success or failure
             cleanupMonitoring();
-        } catch (error) {
-            cleanupMonitoring();
-            throw error;
         }
     } catch (error) {
         logger.error(`Error starting stream: ${error}`);

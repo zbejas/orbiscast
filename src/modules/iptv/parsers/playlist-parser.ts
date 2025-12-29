@@ -52,19 +52,35 @@ function parseOriginalFormat(line: string): ChannelEntry | null {
  * @returns {ChannelEntry | null} - Channel entry or null if parsing fails
  */
 function parseAlternativeFormat(line: string): ChannelEntry | null {
-    const ALT_PATTERN = /#EXTINF:(?<duration>.*?)\s+tvg-id="(?<tvg_id>.*?)"\s+tvg-logo="(?<tvg_logo>.*?)"\s+group-title="(?<group_title>.*?)"(?:,\s*(?<channel_name>.*?)(?:\s+\(.*?\))?)?$/;
-    const matches = line.match(ALT_PATTERN);
+    if (!line.startsWith('#EXTINF:')) {
+        return null;
+    }
 
-    if (matches?.groups) {
-        const { tvg_id, tvg_logo, group_title, channel_name } = matches.groups;
-        // Use the channel name as tvg_name if available
-        const tvg_name = channel_name || tvg_id;
-        const [prefix] = (group_title || '').split(': |');
+    // Extract attributes flexibly without requiring specific order
+    const tvgIdMatch = line.match(/tvg-id="([^"]+)"/);
+    const tvgNameMatch = line.match(/tvg-name="([^"]+)"/);
+    const tvgLogoMatch = line.match(/tvg-logo="([^"]+)"/);
+    const groupTitleMatch = line.match(/group-title="([^"]+)"/);
 
+    // Extract channel name from after the last comma if not in tvg-name
+    const lastCommaIndex = line.lastIndexOf(',');
+    let channelName = '';
+    if (lastCommaIndex !== -1) {
+        channelName = line.substring(lastCommaIndex + 1).trim();
+    }
+
+    const tvg_id = tvgIdMatch ? tvgIdMatch[1] : '';
+    const tvg_name = tvgNameMatch ? tvgNameMatch[1] : (channelName || tvg_id);
+    const tvg_logo = tvgLogoMatch ? tvgLogoMatch[1] : '';
+    const group_title = groupTitleMatch ? groupTitleMatch[1] : '';
+    const [prefix] = (group_title || '').split(': |');
+
+    // Only return if we have at least a tvg_id or tvg_name
+    if (tvg_id || tvg_name) {
         logger.debug(`Parsed alternative format channel: ${tvg_name}`);
 
         return {
-            xui_id: 0, // No xui_id in this format
+            xui_id: 0,
             tvg_id,
             tvg_name,
             tvg_logo,

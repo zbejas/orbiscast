@@ -2,10 +2,10 @@ import { promises as fs } from 'fs';
 import { getLogger } from '../../utils/logger';
 import { config } from '../../utils/config';
 import { clearCache, getCachedFile, getCachedFilePath } from '../../utils/cache';
-import { clearChannels, addChannels, clearProgrammes, addProgrammes } from '../database';
+import { clearChannels, addChannels, clearProgrammes, addProgrammes, getChannelEntries } from '../database';
 import { fetchWithRetry } from './downloaders';
 import { fromPlaylistLine } from './parsers/playlist-parser';
-import { parseXMLTV } from './parsers/xmltv-parser';
+import { extractXMLTVData } from './parsers/xmltv-parser';
 import { isProgrammeDataStale } from './utils';
 import { scheduleIPTVRefresh } from './schedulers';
 import type { ChannelEntry } from '../../interfaces/iptv';
@@ -13,117 +13,214 @@ import type { ChannelEntry } from '../../interfaces/iptv';
 const logger = getLogger();
 
 /**
- * Downloads IPTV data, caches it, and fills the database with channels and programmes.
- * Should only be called at startup to initialize data and scheduling.
+ * Downloads IPTV data, caches it, and populates the database with channels and programmes.
+ * This is the main entry point for IPTV data initialization.
  * 
- * @param {boolean} force - Whether to force download even if cache exists
- * @returns {Promise<void>}
+ * @param force - Whether to force download even if cache exists
  */
 export async function downloadCacheAndFillDb(force = false): Promise<void> {
-    logger.debug('Cache download started and parsing with force: ' + force);
-    await fillDbChannels(force);
-    await fillDbProgrammes(force);
-    logger.debug('Finished parsing');
+    logger.debug(`Initiating IPTV data download and database population (force: ${force})`);
+
+    // Try XMLTV first for comprehensive data
+    if (config.XMLTV) {
+        await populateDatabaseFromXMLTV(force);
+
+        // Sync with playlist if available to get stream URLs
+        if (config.PLAYLIST) {
+            await syncPlaylistChannels(force);
+        }
+    } else if (config.PLAYLIST) {
+        // Fallback to playlist-only mode
+        await syncPlaylistChannels(force);
+    }
+
+    logger.debug('Database population completed');
     await clearCache();
 
-    // Only schedule refresh if this is initial startup, not a scheduled refresh
+    // Schedule automatic refresh for subsequent updates
     if (!force) {
         scheduleIPTVRefresh();
     }
 }
 
 /**
- * Clears and fills the channels database with data from the playlist file.
+ * Populates the database with channels and programmes extracted from XMLTV source.
  * 
- * @param {boolean} force - Whether to force download even if cache exists
- * @returns {Promise<void>}
+ * @param force - Force download even if cache exists
  */
-export async function fillDbChannels(force = true): Promise<void> {
-    logger.debug('Starting to fill the channels database');
+export async function populateDatabaseFromXMLTV(force = false): Promise<void> {
+    logger.debug('Initiating database population from XMLTV source');
 
-    await clearChannels();
-    logger.info('Fetching playlist...');
+    const isStale = await isProgrammeDataStale();
 
-    let playlistContent = null;
+    if (!isStale && !force) {
+        logger.info('TV Schedule and channels are up to date');
+        return;
+    }
+
+    logger.info('Fetching XMLTV...');
+    let xmltvContent: Buffer | null = await getCachedFile('xmltv.xml');
+
+    if (!xmltvContent || force) {
+        xmltvContent = await fetchWithRetry(config.XMLTV, 'xmltv.xml');
+        if (!xmltvContent) {
+            logger.error('Failed to fetch XMLTV content');
+            return;
+        }
+    }
+
+    const xmltvPath = await getCachedFilePath('xmltv.xml');
+    if (!xmltvPath) {
+        logger.error('Failed to get XMLTV cache path');
+        return;
+    }
+
+    await fs.writeFile(xmltvPath, xmltvContent);
+    xmltvContent = null; // Release buffer from memory
+
+    const parsedData = await extractXMLTVData(xmltvPath);
+
+    // Add channels from XMLTV if available
+    if (parsedData.channels.length > 0) {
+        await clearChannels();
+        await addChannels(parsedData.channels);
+        logger.info(`Added ${parsedData.channels.length} channels from XMLTV`);
+
+        // Log channel IDs for debugging
+        const channelIds = parsedData.channels.map(ch => ch.tvg_id).join(', ');
+        logger.debug(`XMLTV channel IDs: [${channelIds}]`);
+    }
+
+    // Add programmes from XMLTV if available
+    if (parsedData.programmes.length > 0) {
+        // Validate that programmes reference known channels
+        const channelIds = new Set(parsedData.channels.map(ch => ch.tvg_id));
+        const programmeChannels = new Set(parsedData.programmes.map(p => p.channel));
+        const unmatchedChannels = Array.from(programmeChannels).filter(id => !channelIds.has(id));
+
+        if (unmatchedChannels.length > 0) {
+            logger.warn(`Found programmes for channels not in XMLTV channel list: [${unmatchedChannels.join(', ')}]`);
+        }
+
+        await clearProgrammes();
+        await addProgrammes(parsedData.programmes);
+
+        // Log programme distribution per channel
+        const progsByChannel = parsedData.programmes.reduce((acc, p) => {
+            acc[p.channel] = (acc[p.channel] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+        logger.info(`Added programmes per channel: ${JSON.stringify(progsByChannel)}`);
+    }
+
+    // Release parsed data references
+    parsedData.channels.length = 0;
+    parsedData.programmes.length = 0;
+}
+
+/**
+ * Synchronizes playlist channels with database, merging with existing XMLTV data.
+ * 
+ * @param force - Force download even if cache exists
+ */
+export async function syncPlaylistChannels(force = false): Promise<void> {
+    logger.debug('Initiating playlist channel synchronization');
+    logger.info('Retrieving playlist data...');
+
+    let playlistContent: Buffer | null = null;
+
     try {
         playlistContent = await getCachedFile('playlist.m3u');
         if (playlistContent) {
-            logger.debug(`Retrieved cached playlist, size: ${playlistContent.length} bytes`);
+            logger.debug(`Loaded cached playlist: ${playlistContent.length} bytes`);
         }
     } catch (error) {
-        logger.warn(`Error retrieving cached playlist: ${error}`);
+        logger.warn(`Cache retrieval failed: ${error}`);
     }
 
     if (!playlistContent || force) {
-        logger.info(`${force ? 'Force flag set, downloading' : 'No cached content available'}, fetching from source...`);
+        const reason = force ? 'Force refresh requested' : 'No cached data available';
+        logger.info(`${reason}, fetching playlist from remote source...`);
+
         try {
             playlistContent = await fetchWithRetry(config.PLAYLIST, 'playlist.m3u');
             if (playlistContent) {
                 logger.debug(`Successfully downloaded playlist, size: ${playlistContent.length} bytes`);
             } else {
-                logger.error('Failed to download playlist: empty response');
+                logger.warn('No playlist content received');
+                return;
             }
         } catch (error) {
             logger.error(`Error downloading playlist: ${error}`);
+            return;
         }
     }
 
-    if (playlistContent) {
-        logger.info('Adding channels to database...');
-        const channels: ChannelEntry[] = [];
-        let channel: ChannelEntry | null = null;
-        for (const line of playlistContent.toString().split('\n')) {
-            if (line.startsWith('#EXTINF:')) {
-                channel = fromPlaylistLine(line);
-            } else if (channel && !line.startsWith('#') && line.trim()) {
-                channel.url = line.trim();
-                channel.created_at = new Date().toISOString();
-                channels.push(channel);
-                channel = null;
-            }
-        }
-        await addChannels(channels);
-    } else {
-        logger.error('Failed to fetch playlist content from both cache and source');
+    if (!playlistContent) {
+        return;
     }
-}
 
-/**
- * Clears and fills the programme database with data from the XMLTV file.
- * Only refreshes if data is stale or forced.
- * 
- * @param {boolean} force - Whether to force download even if cache exists
- * @returns {Promise<void>}
- */
-export async function fillDbProgrammes(force = false): Promise<void> {
-    logger.debug('Starting to fill the programmes database');
+    // Extract channels from playlist
+    const playlistChannels: ChannelEntry[] = [];
+    let currentChannel: ChannelEntry | null = null;
 
-    const isStale = await isProgrammeDataStale();
+    // Process playlist line by line, releasing buffer
+    const lines = playlistContent.toString().split('\n');
+    playlistContent = null;
 
-    if (isStale || force) {
-        await clearProgrammes();
-        logger.info('Fetching XMLTV...');
-
-        let xmltvContent = await getCachedFile('xmltv.xml');
-        if (!xmltvContent || force) {
-            xmltvContent = await fetchWithRetry(config.XMLTV, 'xmltv.xml');
+    for (const line of lines) {
+        if (line.startsWith('#EXTINF:')) {
+            currentChannel = fromPlaylistLine(line);
+        } else if (currentChannel && !line.startsWith('#') && line.trim()) {
+            currentChannel.url = line.trim();
+            currentChannel.created_at = new Date().toISOString();
+            playlistChannels.push(currentChannel);
+            currentChannel = null;
         }
+    }
 
-        if (xmltvContent) {
-            logger.info('Adding programmes to database...');
-            const xmltvPath = await getCachedFilePath('xmltv.xml');
-            if (xmltvPath) {
-                await fs.writeFile(xmltvPath, xmltvContent);
-                const programmes = await parseXMLTV(xmltvPath);
-                await addProgrammes(programmes);
-            } else {
-                logger.error('XMLTV path is null. Cannot read file.');
-            }
+    logger.info(`Extracted ${playlistChannels.length} channels from playlist`);
+
+    // Log playlist channel IDs for debugging
+    const playlistIds = playlistChannels.map(ch => `${ch.tvg_name}(${ch.tvg_id})`).join(', ');
+    logger.debug(`Playlist channel IDs: [${playlistIds}]`);
+
+    // Retrieve and merge with existing database channels
+    const existingChannels = await getChannelEntries();
+
+    // Use tvg_name as the unique key instead of tvg_id to prevent duplicates
+    const channelMap = new Map(existingChannels.map(ch => [ch.tvg_name || ch.tvg_id, ch]));
+
+    logger.debug(`Located ${existingChannels.length} existing channels in database`);
+
+    // Integrate playlist channels with existing data
+    for (const playlistCh of playlistChannels) {
+        // Use tvg_name as the primary key for uniqueness
+        const channelKey = playlistCh.tvg_name || playlistCh.tvg_id || `playlist_${playlistChannels.indexOf(playlistCh)}`;
+        const existingCh = channelMap.get(channelKey);
+
+        if (existingCh) {
+            // Update existing channel with playlist URL
+            existingCh.url = playlistCh.url;
+            if (playlistCh.group_title) existingCh.group_title = playlistCh.group_title;
+            if (playlistCh.tvg_logo) existingCh.tvg_logo = playlistCh.tvg_logo;
+            if (playlistCh.tvg_id) existingCh.tvg_id = playlistCh.tvg_id;
         } else {
-            logger.error('No XMLTV content available. Cannot process.');
+            // Add new channel from playlist
+            channelMap.set(channelKey, playlistCh);
         }
-    } else {
-        logger.info('TV Schedule up to date');
+    }
+
+    // Persist merged channels to database
+    const mergedChannels = Array.from(channelMap.values());
+    if (mergedChannels.length > 0) {
+        await clearChannels();
+        await addChannels(mergedChannels);
+        logger.info(`Synchronized ${mergedChannels.length} channels to database`);
+
+        // Verify final channel list
+        const finalChannelIds = mergedChannels.map(ch => `${ch.tvg_name}(${ch.tvg_id})`).join(', ');
+        logger.debug(`Final database channels: [${finalChannelIds}]`);
     }
 }
 

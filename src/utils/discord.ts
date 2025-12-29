@@ -57,9 +57,9 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-    if (interaction.isCommand()) {
+    if (interaction.isChatInputCommand()) {
         const { commandName } = interaction;
-        const options = interaction.options.data.map(option => ({
+        const options = interaction.options.data.map((option: any) => ({
             name: option.name,
             value: option.value
         }));

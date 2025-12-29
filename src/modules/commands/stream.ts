@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, CommandInteraction, ButtonInteraction, ComponentType, EmbedBuilder, GuildMember, Message, InteractionResponse, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ButtonInteraction, ComponentType, EmbedBuilder, GuildMember, Message, InteractionResponse, MessageFlags } from 'discord.js';
 import { getLogger } from '../../utils/logger';
 import { config } from '../../utils/config';
 import { getChannelEntries, getProgrammeEntries } from '../../modules/database';
@@ -190,9 +190,9 @@ export async function executeStreamChannel(
  * Handles the stream command interaction
  * @param interaction - The Discord command interaction
  */
-export async function handleStreamCommand(interaction: CommandInteraction) {
+export async function handleStreamCommand(interaction: ChatInputCommandInteraction) {
     try {
-        const channelName = interaction.options.get('channel')?.value as string;
+        const channelName = interaction.options.getString('channel');
         if (!channelName) {
             await interaction.reply({
                 content: 'Please specify a channel name.',

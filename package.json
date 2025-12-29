@@ -1,30 +1,33 @@
 {
   "name": "orbiscast",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Orbiscast project",
   "main": "index.js",
   "module": "index.ts",
-  "type": "module",
   "scripts": {
-    "start": "bun run src/index.ts"
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start:prod": "node dist/index.js"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "@types/xml2js": "^0.4.14"
-  },
-  "peerDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/xml2js": "^0.4.14",
+    "tsx": "^4.19.2",
     "typescript": "^5.8.2"
   },
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  },
   "dependencies": {
-    "@dank074/discord-video-stream": "^5.0.1",
+    "@dank074/discord-video-stream": "^5.0.2",
     "@discordjs/voice": "^0.18.0",
-    "@types/fluent-ffmpeg": "^2.1.27",
-    "axios": "^1.9.0",
-    "discord.js": "^14.19.3",
-    "discord.js-selfbot-v13": "^3.6.1",
-    "dotenv": "^16.5.0",
+    "axios": "^1.13.2",
+    "discord.js": "^14.25.1",
+    "discord.js-selfbot-v13": "^3.7.1",
+    "dotenv": "^16.6.1",
     "lowdb": "^7.0.1",
-    "winston": "^3.17.0",
+    "winston": "^3.19.0",
     "xml2js": "^0.6.2"
   }
 }

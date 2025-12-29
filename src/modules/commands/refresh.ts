@@ -1,6 +1,6 @@
-import { CommandInteraction, MessageFlags } from 'discord.js';
+import { ChatInputCommandInteraction, MessageFlags } from 'discord.js';
 import { getLogger } from '../../utils/logger';
-import { downloadCacheAndFillDb, fillDbChannels, fillDbProgrammes } from '../../modules/iptv';
+import { downloadCacheAndFillDb, syncPlaylistChannels, populateDatabaseFromXMLTV } from '../../modules/iptv';
 
 const logger = getLogger();
 
@@ -16,10 +16,10 @@ export async function executeRefresh(type: string): Promise<{ success: boolean, 
             await downloadCacheAndFillDb(true);
         } else if (type === 'channels') {
             logger.info('Refreshing channels...');
-            await fillDbChannels(true);
+            await syncPlaylistChannels(true);
         } else if (type === 'programme') {
             logger.info('Refreshing programme...');
-            await fillDbProgrammes(true);
+            await populateDatabaseFromXMLTV(true);
         } else {
             return { success: false, message: `Unknown refresh type: ${type}` };
         }
@@ -36,8 +36,8 @@ export async function executeRefresh(type: string): Promise<{ success: boolean, 
  * Handles the /refresh slash command interaction
  * @param interaction - The Discord command interaction
  */
-export async function handleRefreshCommand(interaction: CommandInteraction) {
-    const type = interaction.options.get('type', true).value as string;
+export async function handleRefreshCommand(interaction: ChatInputCommandInteraction) {
+    const type = interaction.options.getString('type', true);
     const result = await executeRefresh(type);
     await interaction.reply({ content: result.message, flags: MessageFlags.Ephemeral });
 }
