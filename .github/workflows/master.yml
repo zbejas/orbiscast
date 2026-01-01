@@ -1,4 +1,4 @@
-name: Main Branch Release
+name: Master Branch Release
 
 on:
     release:
