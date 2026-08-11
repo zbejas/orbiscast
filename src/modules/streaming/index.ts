@@ -81,9 +81,20 @@ export async function joinVoiceChannel(guildId: string, channelId: string) {
         logger.debug(`Already connected to voice channel: ${channel.name} in guild: ${guild.name}`);
         return;
     }
+
+    if (connection) {
+        logger.debug('Leaving existing voice channel before switching.');
+        streamer.leaveVoice();
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
     try {
-        let response = await streamer.joinVoice(guildId, channelId);
-        if (response.ready) {
+        const response = await Promise.race([
+            streamer.joinVoice(guildId, channelId),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Join voice timed out')), 15000))
+        ]);
+
+        if (response && (response as any).ready) {
             logger.info(`Connected to voice channel: ${channel.name} in guild: ${guild.name}`);
         } else {
             logger.error(`Failed to connect to voice channel: ${channel.name} in guild: ${guild.name}`);
