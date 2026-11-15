@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1794704778256,
+      "tag": "0000_overrated_cable",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794705080757,
+      "tag": "0001_stale_weapon_omega",
+      "breakpoints": true
+    }
+  ]
+}

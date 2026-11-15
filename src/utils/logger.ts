@@ -1,37 +1,71 @@
-// Load .env before anything else reads process.env. This module is imported
-// by config.ts and every other module, so it is the earliest safe hook.
-import 'dotenv/config';
-import { join } from 'path';
-import { promises as fs } from 'fs';
-import { createLogger, format, transports } from 'winston';
+import { join } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { createLogger, format, transports, type Logger } from 'winston';
+import Transport from 'winston-transport';
+import { pushLog } from './log-bus';
 
-// __dirname is available in CommonJS
-const logsDir = join(__dirname, '../../data/logs');
+class MemoryTransport extends Transport {
+    log(info: { level: string; message: unknown }, callback: () => void): void {
+        pushLog(info.level, String(info.message));
+        callback();
+    }
+}
 
-fs.mkdir(logsDir, { recursive: true }).catch(err => console.error(`Error creating logs directory: ${err}`));
+const memoryTransport = new MemoryTransport();
 
-const logLevel = process.env.DEBUG?.toLowerCase() === 'true' ? 'debug' : 'info';
-const logFile = join(logsDir, 'app.log');
+const initialLogsDir = join(process.cwd(), 'data', 'logs');
+mkdirSync(initialLogsDir, { recursive: true });
 
-const logger = createLogger({
-    level: logLevel,
+const logger: Logger = createLogger({
+    level: 'info',
     format: format.combine(
-        format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        format.timestamp(),
+        format.errors({ stack: true }),
         format.printf(({ timestamp, level, message }) => `${timestamp} [${level.toUpperCase()}] ${message}`)
     ),
     transports: [
-        new transports.File({ filename: logFile, maxsize: 10485760, maxFiles: 5 }),
-        new transports.Console()
-    ]
+        new transports.Console(),
+        new transports.File({
+            filename: join(initialLogsDir, 'app.log'),
+            maxsize: 10 * 1024 * 1024,
+            maxFiles: 5,
+        }),
+        memoryTransport,
+    ],
 });
 
-// Cache the logger instance
-const appLogger = logger.child({ label: "app" });
+/**
+ * Applies the persisted log level and log directory after settings load.
+ *
+ * @param options - Log level and data directory
+ */
+export function configureLogger(options: { level?: string; dataDir: string }): void {
+    if (options.level) {
+        logger.level = options.level;
+    }
+
+    const logsDir = join(options.dataDir, 'logs');
+    mkdirSync(logsDir, { recursive: true });
+
+    logger.clear();
+    logger.add(new transports.Console());
+    logger.add(
+        new transports.File({
+            filename: join(logsDir, 'app.log'),
+            maxsize: 10 * 1024 * 1024,
+            maxFiles: 5,
+        })
+    );
+    logger.add(memoryTransport);
+}
+
+const appLogger = logger.child({ label: 'app' });
 
 /**
- * Returns a configured logger instance for application use
- * @returns Logger instance with "app" label
+ * Returns the shared application logger.
+ *
+ * @returns Winston logger
  */
-export function getLogger() {
+export function getLogger(): Logger {
     return appLogger;
 }
