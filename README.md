@@ -6,191 +6,175 @@
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/zbejas/orbiscast)](https://github.com/zbejas/orbiscast/pulls)
 [![GitHub license](https://img.shields.io/github/license/zbejas/orbiscast)](https://github.com/zbejas/orbiscast/blob/master/LICENSE.md)
 [![Release](https://img.shields.io/github/v/release/zbejas/orbiscast)](https://github.com/zbejas/orbiscast/releases)
-[![Repo size](https://img.shields.io/github/repo-size/zbejas/orbiscast)](https://github.com/zbejas/orbiscast/)
 [![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/zbejas/orbiscast?sort=date)](https://hub.docker.com/r/zbejas/orbiscast)
 [![Docker Pulls](https://img.shields.io/docker/pulls/zbejas/orbiscast)](https://hub.docker.com/r/zbejas/orbiscast)
-[![CodeFactor](https://www.codefactor.io/repository/github/zbejas/orbiscast/badge)](https://www.codefactor.io/repository/github/zbejas/orbiscast)
 
-**OrbisCast** is a Discord bot that streams IPTV channels. It can be controlled by users with [commands](#commands) specified at the end of this document.
+OrbisCast streams IPTV channels and on-demand Plex media into Discord voice channels. A browser-based WebUI manages the bot, IPTV sources, channel visibility, the EPG, Plex, Discord permissions, streaming settings, and logs. Configuration lives in SQLite, not in environment variables.
 
-The bot was made to simplify watch parties with friends. It is also useful for testing IPTV channels without the need for a dedicated IPTV player.
-
-This project is still in development, so expect bugs and missing features. If you find any issues, please report them in the [Issues](https://github.com/zbejas/orbiscast/issues) section.
+The Plex integration adds a virtual on-demand channel. When selected in Discord it joins the voice channel and loops a branded placeholder. Playback starts only when someone picks a movie or episode in the WebUI. The queue is managed in the WebUI, with play, pause, resume, stop, skip, reorder, shuffle, and clear.
 
 > [!CAUTION]
-> I am not responsible for any misuse of this tool. Ensure to comply with all applicable copyright laws and obtain necessary permissions for the IPTV content being streamed.
->
-> _Using self-bots is against [Discord's terms of service](https://discord.com/guidelines) and may result in account termination. Use at your own risk._
+> Self-bots violate Discord's Terms of Service and can get an account banned. Use a secondary account and accept the risk. Never commit real tokens. The WebUI encrypts Discord and Plex tokens at rest, but the host and the `data/` volume still need protection.
 
-## Installation
+> [!NOTE]
+> This project streams content you are allowed to access. You are responsible for complying with copyright law and your IPTV or Plex provider's terms.
 
-### Before you start
+## Requirements
 
-You will need to set a few things up before you can run the bot:
+| Requirement | Notes |
+|---|---|
+| Node.js 22.12 or newer | Better Auth is ESM-only and needs `require(esm)` support. |
+| FFmpeg on `PATH` | Must include `libzmq` for the `azmq` audio filter used by the streaming library. Debian's `ffmpeg` package includes it. Static builds bundled with `node-av` do not. |
+| A Discord bot token and a Discord user token | The bot exposes slash commands. The user token performs the actual voice stream. |
+| An IPTV M3U playlist | One or more sources. XMLTV is optional. |
+| A Plex server and token | Optional. Required only for Plex on-demand playback. |
+| A recent glibc for Docker | `node-datachannel` needs GLIBC 2.38+. The provided image uses `node:22-trixie-slim`. |
 
-- Create a bot on the [Discord Developer Portal](https://discord.com/developers/applications) and get the bot token, and invite the bot to your server.
-  - You can follow the instructions [here](https://discordpy.readthedocs.io/en/stable/discord.html) to create a bot and get the token and invite link. Make sure to give the bot the necessary permissions:
-    - `bot`
-    - `applications.commands`
-    - In the [Developer Portal](https://discord.com/developers/applications), go to your bot's settings and enable the `Message Content Intent`.
-- Get the user token from the Discord web client.
-  - The user token is required to join the voice channel and stream video. It is recommended to use a secondary account for this purpose.
-    - The user has to manually join the server.
-  - You can get the token by checking this [gist](https://gist.github.com/MarvNC/e601f3603df22f36ebd3102c501116c6#file-get-discord-token-from-browser-md) I found, or by using a tool like [Discord Get User Token](https://chromewebstore.google.com/detail/discord-get-user-token/accgjfooejbpdchkfpngkjjdekkcbnfd).
-  - **Note**: Be careful when using any third-party tools to get your user token, as they may be malicious. I recommend using the method in the gist.
-- Create a `.env` file in the project directory and fill in the required environment variables (see below). You can use the provided `.env.example` file as a template.
-
-> [!WARNING]
-> Do not share any of the tokens mentioned above with anyone. If you do, regenerate them immediately by:
->
-> - Regenerating the bot token in the [Discord Developer Portal](https://discord.com/developers/applications).
-> - Regenerating the user token by logging out and back in to Discord.
->   - If you used incognito mode to get the token, you can go to Discord Settings > Devices > Log out of all known devices (or just log out of the specific session).
-
-### Docker
-
-In the repo is a provided `compose.yml` file that can be used to run the bot.
-Copy the file and fill in the required environment variables or create a `.env` file in the same directory as the `compose.yml` file.
-
-Then, run the following command to start the bot:
-
-```bash
-docker compose up
-```
-
-or to run it in the background:
-
-```bash
-docker compose up -d
-```
-
-> [!TIP]
-> You can check the logs using:
->
-> ```bash
-> docker compose logs -f
-> ```
->
-> _The `-f` flag is optional and is used to follow the logs._
-
-All of the app data is stored in `/app/data`. The cache is stored in `/app/cache` or RAM, depending on the `RAM_CACHE` and `CACHE_DIR` environment variables.
-
-You can check the available tags on the [Docker Hub page](https://hub.docker.com/r/zbejas/orbiscast/tags?ordering=name).
-
-### Manual
-
-> [!IMPORTANT]
-> The following instructions are for running the bot manually. If you are using Docker, you can skip this section. [Node.js](https://nodejs.org/) v22.4 or higher is required, together with a working [FFmpeg](https://ffmpeg.org/) installation on your `PATH`.
-
-The project can also be run manually. To do so, first download the project and install the dependencies:
+## Quick start with Docker
 
 ```bash
 git clone https://github.com/zbejas/orbiscast
 cd orbiscast
-npm install
+docker compose up -d
 ```
 
-For development with auto-reload:
+Open `http://localhost:3000` or `http://<host-ip>:3000` and follow the setup checklist:
+
+1. Save your Discord bot token and user token. The bot and streamer status turn green when both log in.
+2. Add an IPTV source. Paste the M3U URL and, optionally, an XMLTV URL.
+3. Pick which channels are visible. New sources start with every channel hidden.
+4. Configure Plex if you want on-demand playback. Enter the server URL and token, then enable the libraries you want to browse.
+5. Optionally enable WebUI auth in Settings.
+
+All data lives in `./data` on the host, mounted at `/app/data` in the container. The SQLite database, encryption keys, logs, cache, and generated placeholder clip live there.
+
+### Upgrading from an env-based install
+
+Older versions read `.env`. The new version imports that file once and then ignores it:
+
+- Docker: place the old `.env` at `./data/.env` before the first start. Remove it after the import is logged.
+- Manual: keep `.env` in the project root for the first start, then delete it.
+
+The import maps `PLAYLIST`, `XMLTV`, `REFRESH_IPTV`, the Discord tokens, streaming settings, `DEBUG`, and `TZ`. `GUILD` is ignored because commands are registered in every guild the bot joins. `RAM_CACHE`, `CACHE_DIR`, and `OPENVPN_*` are ignored. The Discord and Plex tokens are encrypted immediately.
+
+## Manual install
+
+```bash
+git clone https://github.com/zbejas/orbiscast
+cd orbiscast
+npm ci
+npm run build
+npm run start:prod
+```
+
+The WebUI and API listen on port `3000`. `PORT` is an optional override; everything else is configured in the browser.
+
+For development:
 
 ```bash
 npm run dev
 ```
 
-For production, build and run:
+This starts the API on `3000` and Vite on `5173`. Open `http://localhost:5173`. Vite proxies `/api` to the API process.
 
-```bash
-npm run build
-npm run start:prod
-```
+## Discord commands
 
-Or run directly with TypeScript:
-
-```bash
-npm start
-```
-
-### Development
-
-Run the type checker and the test suite before opening a pull request:
-
-```bash
-npm run typecheck
-npm test
-```
-
-Other useful scripts:
-
-```bash
-npm run test:watch    # re-run tests on change
-npm run test:coverage # tests with coverage
-```
-
-See [AGENTS.md](AGENTS.md) for more detail on the project architecture.
-
-## Environment Variables
-
-The application uses the following environment variables, which should be defined in a `.env` file (see `.env.example`):
-
-### System and IPTV Configuration
-
-| Variable                 | Description                                                           | Example/Default                       | Required |
-|--------------------------|-----------------------------------------------------------------------|---------------------------------------|----------|
-| `PLAYLIST`               | URL to the M3U playlist.                                              | `http://example.com/m3u/playlist.m3u` | ✔        |
-| `XMLTV`                  | URL to the XMLTV guide.                                               | `http://example.com/xmltv/guide.xml`  | ✘        |
-| `REFRESH_IPTV`           | Interval in minutes to refresh the IPTV data.                         | `1440`                                | ✘        |
-| `RAM_CACHE`              | Whether to use RAM for caching.                                       | `true`                                | ✘        |
-| `CACHE_DIR`              | Directory for cache storage.                                          | `../cache`                            | ✘        |
-| `DEBUG`                  | Enable debug mode.                                                    | `false`                               | ✘        |
-| `DEFAULT_STREAM_TIMEOUT` | Default stream timeout (when alone in channel) in minutes.            | `10`                                  | ✘        |
-| `TZ`                     | Timezone for the container. Example: `Europe/Ljubljana`               | `UTC`                                 | ✘        |
-| `MINIMIZE_LATENCY`       | Minimize latency for the stream.                                      | `true`                                | ✘        |
-| `BITRATE_VIDEO`          | Video bitrate in Kbps.                                                | `5000`                                | ✘        |
-| `BITRATE_VIDEO_MAX`      | Maximum video bitrate in Kbps.                                        | `7500`                                | ✘        |
-| `DISABLE_TRANSCODE`      | Disable transcoding and pass stream through directly.                 | `false`                               | ✘        |
-
-> [!TIP]
-> There is a bunch of IPTV providers online. I recommend using a tool like [Threadfin](https://github.com/Threadfin/Threadfin) or [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) to sort out your IPTV channels. You can find public M3U playlists [here](https://github.com/iptv-org/iptv). More info on IPTV can be found [here](https://github.com/iptv-org/awesome-iptv).
-
-### Discord Configuration
-
-The reason we have a `bot` and a `user` token is because the current Discord API does not allow bots to stream video. The bot is used to control the user, which is the one that actually streams the video.
-
-| Variable              | Description                                      | Example/Default                          | Required |
-|-----------------------|--------------------------------------------------|------------------------------------------|----------|
-| `DISCORD_BOT_TOKEN`           | Token for the Discord bot.                       | `YOUR_BOT_TOKEN_HERE`                    | ✔        |
-| `DISCORD_USER_TOKEN`  | Token for the Discord user.                      | `YOUR_USER_TOKEN_HERE`                   | ✔        |
-| `GUILD`               | Discord guild (server) ID.                       | `000000000000000000`                     | ✔        |
-
-## Commands
-
-The bot can be controlled using the following commands:
+Commands are registered in every guild the bot joins. The per-guild role allowlist protects all commands. An empty allowlist means only members with Manage Server or Administrator can use commands. Members with Manage Server always bypass the allowlist.
 
 | Command | Description |
-|---------|-------------|
-| `/stream <channel>` | Start streaming the specified channel. |
-| `/programme <channel>` | Show the current programme for the specified channel. |
-| `/channels <page>` | List all available channels. Page is optional. |
+|---|---|
+| `/stream <channel>` | Stream a visible IPTV channel, or select the Plex on-demand channel to show its placeholder. |
 | `/stop` | Stop the current stream. |
-| `/refresh <type>` | Refresh the specified data. Type can be "all", "channels", or "programme". |
+| `/channels [page]` | List visible channels and the Plex channel. |
+| `/programme <channel>` | Show the programme guide for a channel. |
+| `/refresh <type>` | Refresh every IPTV source. |
 
-> [!TIP]
-> Both `/channels` and `/programme` commands support autocompletion for channel names. However, Discord limits the number of options shown at once to 25. Use the `/channels` or `/programme` command to see all available channels. The bot will show the first 25 channels, and you can use the `page` argument to see more.
+The Plex channel is not a separate command. It appears in `/channels` and in the `/stream` autocomplete using the name set in Plex settings.
+
+## IPTV sources and channels
+
+- A source pairs one M3U playlist with an optional XMLTV guide and refreshes both together.
+- New sources start with every channel hidden. Use the Channels page to search, filter by group, and select what should appear in Discord.
+- Visibility survives source refreshes. A failed refresh keeps the last good channels and guide.
+- The Guide page renders a scrollable timeline for visible channels. The timezone is configured in Settings.
+
+## Plex on demand
+
+1. Set the Plex server URL and token in the Plex page or Settings. OrbisCast validates the connection and lists libraries.
+2. Enable the libraries you want to browse.
+3. Select the Plex channel in Discord. The streamer joins your voice channel and loops the placeholder.
+4. In the WebUI Plex page, browse or search, choose a movie or episode, set the quality and subtitle track, and add it to the queue.
+5. Press Play and choose the guild and voice channel. The placeholder is replaced by the Plex stream.
+
+Behavior details:
+
+- One self-bot means one stream. Starting a new real playback while IPTV or Plex is active is rejected. Stop the current stream first.
+- The placeholder is an idle state, not a stream. Starting real playback replaces it.
+- The placeholder leaves after the configured idle timeout (default 5 minutes), or after the configured grace period when the voice channel is empty (default 30 seconds).
+- Plex transcodes on the server. Quality presets are 720p 4 Mbps, 1080p 8 Mbps (default), 1080p 12 Mbps, and 4K 20 Mbps. The quality is chosen per play in the WebUI.
+- Subtitles are burned in. Auto picks the Plex default track, then a forced track, then the first track that Plex can burn. The WebUI dropdown lets you choose Off or a specific burnable track. Image subtitle tracks without a stream index cannot be burned and are shown as unavailable.
+- Pause and resume restart the Plex transcode at the current offset. Stop and skip do not.
+- When the queue ends, OrbisCast stops playback and leaves the voice channel.
+- Thumbnails are proxied through the WebUI so the Plex token never reaches the browser.
+
+## Configuration
+
+There are no required environment variables. The only optional variable is:
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | Override the HTTP port. Default `3000`. |
+
+Application settings live in SQLite:
+
+```
+data/
+  orbiscast.db
+  keys.json          # AES-GCM key and Better Auth secret, mode 0600
+  logs/app.log
+  cache/
+```
+
+`data/keys.json` is required to decrypt saved provider tokens. Back it up with the database. Losing it means re-entering the Discord and Plex tokens. Treat the whole directory as secret.
+
+### WebUI auth
+
+Auth is off by default. To enable it, open Settings, choose a username and password, and save. Auth uses Better Auth with a single admin account and a seven-day session cookie.
+
+- If auth is enabled and you lose the password, run `npm run admin -- auth reset <username> <password>` on the host.
+- To turn auth off from the host, run `npm run admin -- auth disable`.
+- Behind a reverse proxy, set the public URL in Settings before enabling auth. Changing it requires a restart.
+- Auth is not a substitute for network isolation. If the WebUI is reachable from the internet, put it behind HTTPS and enable auth.
+
+## Updating
+
+Pull the new image or code, keep the `data/` volume, and restart. Database migrations run automatically on boot. Back up `data/` before a major version change.
 
 ## Troubleshooting
 
-If you encounter any issues, here are some common problems and their solutions:
+| Symptom | Check |
+|---|---|
+| The bot is online but the streamer is not | The user token is invalid or the account is logged out. Generate a fresh token and save it in Discord settings. |
+| The bot joins voice but no video | FFmpeg is missing `libzmq`, or another process on the same host uses port `42069`. Only one OrbisCast stream can run on a host. In Docker, do not expose `42069`. |
+| The streamer cannot join the voice channel | The self-bot account must be a member of the guild and have permission to join that voice channel. |
+| A Plex item fails with a 400 | The Plex server rejected the transcode. Check that the Plex transcoder is enabled, the file is readable, and the chosen subtitle track is burnable. Try another quality or turn subtitles off. |
+| Plex metadata works but playback fails | Plex transcoding can fail on unsupported files or under load. Check the Plex server logs and try a lower quality. |
+| No channels in Discord | Channels are hidden by default. Open Channels and select the ones you want. |
+| Source refresh fails | Check the source URL and credentials. The last good channels and guide stay available. |
+| Auth lockout | Use the admin CLI commands above. |
+| Port 3000 is taken | Set `PORT` or change the Docker port mapping. |
 
-- **Stream freezes or hangs**: If the stream source gets disconnected or the stream is killed from the source side, the bot may hang indefinitely. Currently, there's no automatic detection for this issue, so you'll need to restart the bot.
+## Development
 
-- **Stream quality issues**: If you're experiencing quality problems, try adjusting the `BITRATE_VIDEO` and `BITRATE_VIDEO_MAX` environment variables to values that work better with your network conditions.
+```bash
+npm run typecheck       # server and WebUI
+npm test                # unit and API tests
+npm run build           # server and WebUI
+npm run test:e2e        # Playwright
+```
 
-- **High latency**: Enable the `MINIMIZE_LATENCY` option in your environment variables to reduce streaming delay.
+The server is TypeScript compiled to CommonJS. The WebUI is a React SPA built with Vite. The API is Express. See [AGENTS.md](AGENTS.md) for the architecture and [docs/](docs/README.md) for subsystem docs.
 
-- **Missing channels**: Make sure your M3U playlist URL is correct and accessible. You can use the `/refresh channels` command to reload the channel list.
+## License
 
-- **Authorization errors**: If the bot can't join voice channels or execute commands, verify that both the bot and user tokens are correct and have the necessary permissions.
-
-If you encounter issues not listed here, please open a new [issue](https://github.com/zbejas/orbiscast/issues) with details about your problem.
-  
-> [!NOTE]
-> In my testing, I've been using tools mentioned in the [System and IPTV Configuration](#system-and-iptv-configuration) tip to sort out the channels. It should work with any M3U or HDHR playlist, but I cannot guarantee it. This tool was not built or tested with a large number of channels, so it may not work as expected if you overload it with data. For any issues, please open a new [issue](https://github.com/zbejas/orbiscast/issues).
+GPL-3.0. See [LICENSE.md](LICENSE.md).

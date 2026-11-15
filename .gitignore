@@ -41,3 +41,11 @@ build
 # Data and cache folder
 data
 cache
+# WebUI local data and test output
+.tmp
+test-results
+playwright-report
+.playwright-mcp
+.impeccable/mocks
+.impeccable/review
+.impeccable/live

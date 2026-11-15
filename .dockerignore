@@ -41,3 +41,12 @@ data
 cache
 build
 
+
+# Workspace installs and build output
+**/node_modules
+**/dist
+.tmp
+test-results
+playwright-report
+web/node_modules
+web/dist
