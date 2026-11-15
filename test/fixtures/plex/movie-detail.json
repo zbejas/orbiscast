@@ -1,0 +1,160 @@
+{
+    "MediaContainer": {
+        "size": 1,
+        "totalSize": 1,
+        "offset": 0,
+        "librarySectionID": 10,
+        "librarySectionTitle": "Films",
+        "Metadata": [
+            {
+                "ratingKey": "1001",
+                "key": "/library/metadata/1001",
+                "type": "movie",
+                "title": "Aurora Relay",
+                "titleSort": "Aurora Relay",
+                "librarySectionTitle": "Films",
+                "librarySectionID": 10,
+                "librarySectionKey": "/library/sections/10",
+                "studio": "Fixture Studio",
+                "contentRating": "PG-13",
+                "summary": "A synthetic fixture movie about a relay station at the edge of a quiet system.",
+                "year": 2024,
+                "duration": 6543210,
+                "thumb": "/library/metadata/1001/thumb/1700000000",
+                "art": "/library/metadata/1001/art/1700000000",
+                "audienceRating": 7.4,
+                "rating": 7.1,
+                "originallyAvailableAt": "2024-03-15",
+                "addedAt": 1700000000,
+                "updatedAt": 1700000100,
+                "Media": [
+                    {
+                        "id": 2001,
+                        "duration": 6543210,
+                        "bitrate": 6200,
+                        "width": 1920,
+                        "height": 1080,
+                        "aspectRatio": 1.78,
+                        "audioChannels": 6,
+                        "audioCodec": "eac3",
+                        "videoCodec": "hevc",
+                        "videoResolution": "1080",
+                        "container": "mkv",
+                        "videoFrameRate": "24p",
+                        "videoProfile": "main 10",
+                        "Part": [
+                            {
+                                "id": 3001,
+                                "key": "/library/parts/3001/1700000000/file.mkv",
+                                "duration": 6543210,
+                                "file": "/fixtures/movies/Aurora Relay/Aurora Relay.mkv",
+                                "size": 5234567890,
+                                "container": "mkv",
+                                "videoProfile": "main 10",
+                                "Stream": [
+                                    {
+                                        "id": 4001,
+                                        "streamType": 1,
+                                        "default": true,
+                                        "selected": true,
+                                        "codec": "hevc",
+                                        "index": 0,
+                                        "bitrate": 5800,
+                                        "language": "English",
+                                        "languageTag": "en",
+                                        "languageCode": "eng",
+                                        "width": 1920,
+                                        "height": 1080,
+                                        "frameRate": 23.976,
+                                        "profile": "main 10",
+                                        "displayTitle": "1080p HEVC",
+                                        "extendedDisplayTitle": "1080p HEVC (HEVC)"
+                                    },
+                                    {
+                                        "id": 4002,
+                                        "streamType": 2,
+                                        "default": true,
+                                        "selected": true,
+                                        "codec": "eac3",
+                                        "index": 1,
+                                        "channels": 6,
+                                        "bitrate": 640,
+                                        "language": "English",
+                                        "languageTag": "en",
+                                        "languageCode": "eng",
+                                        "samplingRate": 48000,
+                                        "displayTitle": "English (EAC3 5.1)",
+                                        "extendedDisplayTitle": "English (EAC3 5.1)"
+                                    },
+                                    {
+                                        "id": 4003,
+                                        "streamType": 3,
+                                        "default": true,
+                                        "forced": false,
+                                        "selected": true,
+                                        "codec": "srt",
+                                        "index": 2,
+                                        "language": "English",
+                                        "languageTag": "en",
+                                        "languageCode": "eng",
+                                        "title": "English",
+                                        "displayTitle": "English (SRT)",
+                                        "extendedDisplayTitle": "English (SRT)"
+                                    },
+                                    {
+                                        "id": 4004,
+                                        "streamType": 3,
+                                        "default": false,
+                                        "forced": false,
+                                        "selected": false,
+                                        "codec": "pgs",
+                                        "index": 3,
+                                        "language": "Japanese",
+                                        "languageTag": "ja",
+                                        "languageCode": "jpn",
+                                        "title": "Japanese",
+                                        "displayTitle": "Japanese (PGS)",
+                                        "extendedDisplayTitle": "Japanese (PGS)"
+                                    },
+                                    {
+                                        "id": 4005,
+                                        "streamType": 3,
+                                        "default": false,
+                                        "forced": true,
+                                        "selected": false,
+                                        "codec": "ass",
+                                        "index": 4,
+                                        "language": "Spanish",
+                                        "languageTag": "es",
+                                        "languageCode": "spa",
+                                        "title": "Spanish",
+                                        "displayTitle": "Spanish (ASS)",
+                                        "extendedDisplayTitle": "Spanish (ASS)"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Genre": [
+                    {
+                        "tag": "Science Fiction"
+                    },
+                    {
+                        "tag": "Drama"
+                    }
+                ],
+                "Director": [
+                    {
+                        "tag": "Fixture Director"
+                    }
+                ],
+                "Writer": [
+                    {
+                        "tag": "Fixture Writer"
+                    }
+                ]
+            }
+        ]
+    }
+}

@@ -1,0 +1,322 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { EventEmitter } from 'node:events';
+import request from 'supertest';
+import { openDatabase, runMigrations, type DatabaseConnection } from '../../src/modules/database/client';
+import { loadOrCreateKeys } from '../../src/utils/crypto';
+import { SettingsService } from '../../src/modules/settings';
+import { IptvService } from '../../src/modules/iptv/service';
+import { PlaybackEngine } from '../../src/modules/playback/engine';
+import { DiscordService } from '../../src/modules/discord/service';
+import { PlexService } from '../../src/modules/plex/service';
+import { createAuthAdapter } from '../../src/web/auth';
+import { createApp } from '../../src/web/app';
+import { addQueueItem, replaceSourceChannels, replaceSourceProgrammes } from '../../src/modules/database/repo';
+
+let dir: string;
+let connection: DatabaseConnection;
+let settings: SettingsService;
+let app: ReturnType<typeof createApp>;
+
+beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'orbiscast-api-'));
+    connection = openDatabase(dir);
+    runMigrations(connection.db);
+    const keys = loadOrCreateKeys(dir);
+    const events = new EventEmitter();
+    settings = new SettingsService(connection.db, keys, events);
+    settings.init();
+
+    const iptv = new IptvService(connection.db, settings, events);
+    const playback = new PlaybackEngine(connection.db, settings, events);
+    const plex = new PlexService(connection.db, settings, playback, events, dir);
+    playback.setPlexProvider(plex);
+    const discord = new DiscordService(connection.db, settings, playback, iptv, events);
+    const auth = createAuthAdapter({ db: connection.db, settings });
+
+    app = createApp({
+        dataDir: dir,
+        db: connection.db,
+        settings,
+        iptv,
+        playback,
+        plex,
+        discord,
+        events,
+        auth,
+    });
+});
+
+afterEach(() => {
+    connection.close();
+    rmSync(dir, { recursive: true, force: true });
+});
+
+describe('API', () => {
+    it('serves health and setup status', async () => {
+        const health = await request(app).get('/api/health').expect(200);
+        expect(health.body.ok).toBe(true);
+
+        const setup = await request(app).get('/api/setup/status').expect(200);
+        expect(setup.body.discordConfigured).toBe(false);
+        expect(setup.body.authEnabled).toBe(false);
+    });
+
+    it('validates and stores sources', async () => {
+        await request(app)
+            .post('/api/sources')
+            .send({ name: 'Bad', playlistUrl: 'not-a-url' })
+            .expect(400);
+
+        const created = await request(app)
+            .post('/api/sources')
+            .send({
+                name: 'Test source',
+                playlistUrl: 'http://example.com/playlist.m3u',
+                xmltvUrl: 'http://example.com/guide.xml',
+                refreshMinutes: 60,
+            })
+            .expect(201);
+
+        expect(created.body.name).toBe('Test source');
+
+        const list = await request(app).get('/api/sources').expect(200);
+        expect(list.body).toHaveLength(1);
+        expect(list.body[0].channelCount).toBe(0);
+    });
+
+    it('filters channels and updates visibility in bulk', async () => {
+        const source = await request(app)
+            .post('/api/sources')
+            .send({ name: 'Source', playlistUrl: 'http://example.com/playlist.m3u' })
+            .expect(201);
+
+        replaceSourceChannels(connection.db, source.body.id, [
+            {
+                stableKey: 'one',
+                tvgId: 'one',
+                name: 'Alpha',
+                streamUrl: 'http://example.com/alpha',
+                groupTitle: 'News',
+            },
+            {
+                stableKey: 'two',
+                tvgId: 'two',
+                name: 'Beta',
+                streamUrl: 'http://example.com/beta',
+                groupTitle: 'Sports',
+            },
+        ]);
+
+        const all = await request(app).get('/api/channels').expect(200);
+        expect(all.body.total).toBe(2);
+        expect(all.body.page).toBe(1);
+        expect(all.body.visibleTotal).toBe(0);
+        expect(all.body.totalAll).toBe(2);
+        expect(all.body.groups).toEqual(['News', 'Sports']);
+
+        const news = await request(app).get('/api/channels?group=News').expect(200);
+        expect(news.body.total).toBe(1);
+        expect(news.body.items[0].name).toBe('Alpha');
+
+        const ids = all.body.items.map((item: { id: number }) => item.id);
+        await request(app)
+            .patch('/api/channels/visibility')
+            .send({ ids, visible: true })
+            .expect(200);
+
+        const visible = await request(app).get('/api/channels?visible=true').expect(200);
+        expect(visible.body.total).toBe(2);
+
+        const hidden = await request(app).get('/api/channels?visibility=hidden').expect(200);
+        expect(hidden.body.total).toBe(0);
+
+        const searched = await request(app).get('/api/channels?search=Alpha').expect(200);
+        expect(searched.body.total).toBe(1);
+        expect(searched.body.items[0].name).toBe('Alpha');
+
+        const single = await request(app)
+            .patch(`/api/channels/${ids[0]}/visibility`)
+            .send({ visible: false })
+            .expect(200);
+        expect(single.body.visible).toBe(false);
+
+        const groups = await request(app).get('/api/channels/groups').expect(200);
+        expect(groups.body.groups).toEqual(['News', 'Sports']);
+    });
+
+    it('serves a day of guide data in milliseconds', async () => {
+        const source = await request(app)
+            .post('/api/sources')
+            .send({ name: 'Guide', playlistUrl: 'http://example.com/playlist.m3u' })
+            .expect(201);
+
+        replaceSourceChannels(connection.db, source.body.id, [
+            {
+                stableKey: 'alpha',
+                tvgId: 'alpha',
+                name: 'Alpha',
+                streamUrl: 'http://example.com/alpha',
+                groupTitle: 'News',
+            },
+        ]);
+        const channels = await request(app).get('/api/channels').expect(200);
+        await request(app)
+            .patch('/api/channels/visibility')
+            .send({ ids: [channels.body.items[0].id], visible: true })
+            .expect(200);
+
+        const day = '2026-02-03';
+        const start = Math.floor(new Date(`${day}T12:00:00`).getTime() / 1000);
+        replaceSourceProgrammes(connection.db, source.body.id, [
+            {
+                channelTvgId: 'alpha',
+                start: '20260203120000 +0000',
+                stop: '20260203130000 +0000',
+                startTimestamp: start,
+                stopTimestamp: start + 3600,
+                title: 'Midday News',
+                description: 'A test programme',
+                category: 'News',
+            },
+        ]);
+
+        const guide = await request(app).get(`/api/guide?day=${day}`).expect(200);
+        expect(guide.body.dayStart).toBe(new Date(`${day}T00:00:00`).getTime());
+        expect(guide.body.channels).toHaveLength(1);
+        expect(guide.body.channels[0].name).toBe('Alpha');
+        expect(guide.body.programmes).toHaveLength(1);
+        expect(guide.body.programmes[0]).toMatchObject({
+            channelTvgId: 'alpha',
+            title: 'Midday News',
+            start: start * 1000,
+            stop: (start + 3600) * 1000,
+        });
+    });
+
+    it('persists settings updates', async () => {
+        const updated = await request(app)
+            .patch('/api/settings')
+            .send({ stream: { bitrateVideo: 9000 }, ui: { logLevel: 'debug' } })
+            .expect(200);
+
+        expect(updated.body.stream.bitrateVideo).toBe(9000);
+        expect(updated.body.logLevel).toBe('debug');
+    });
+
+    it('enables auth, requires a session, and disables again', async () => {
+        const agent = request.agent(app);
+
+        await request(app)
+            .post('/api/auth/enable')
+            .send({ username: 'admin', password: 'testpass123' })
+            .expect(201);
+
+        await request(app).get('/api/settings').expect(401);
+
+        await agent
+            .post('/api/auth/sign-in/username')
+            .send({ username: 'admin', password: 'testpass123' })
+            .expect(200);
+
+        const session = await agent.get('/api/auth/session').expect(200);
+        expect(session.body.user).toMatchObject({ name: 'admin' });
+
+        const settingsResponse = await agent.get('/api/settings').expect(200);
+        expect(settingsResponse.body.auth.enabled).toBe(true);
+
+        await agent.post('/api/auth/logout').expect(204);
+        const signedOut = await agent.get('/api/auth/session').expect(200);
+        expect(signedOut.body.user).toBeNull();
+
+        const login = await agent
+            .post('/api/auth/login')
+            .send({ username: 'admin', password: 'testpass123' })
+            .expect(200);
+        expect(login.body.user.name).toBe('admin');
+
+        const signedIn = await agent.get('/api/auth/session').expect(200);
+        expect(signedIn.body.user.name).toBe('admin');
+
+        const invalid = await request(app)
+            .post('/api/auth/login')
+            .send({ username: 'admin', password: 'wrongpass' })
+            .expect(401);
+        expect(invalid.body.error.message).toBe('Invalid username or password');
+
+        await agent.post('/api/auth/disable').expect(200);
+        await request(app).get('/api/settings').expect(200);
+    });
+
+    it('manages the queue', async () => {
+        const created = await request(app)
+            .post('/api/queue')
+            .send({
+                ratingKey: '123',
+                type: 'movie',
+                title: 'Test movie',
+                quality: '1080p-8',
+                subtitleMode: 'auto',
+            })
+            .expect(201);
+
+        expect(created.body.title).toBe('Test movie');
+
+        const list = await request(app).get('/api/queue').expect(200);
+        expect(list.body).toHaveLength(1);
+
+        await request(app).delete(`/api/queue/${created.body.id}`).expect(204);
+        const empty = await request(app).get('/api/queue').expect(200);
+        expect(empty.body).toHaveLength(0);
+    });
+
+    it('serves the WebUI queue aliases', async () => {
+        addQueueItem(connection.db, {
+            ratingKey: '456',
+            type: 'episode',
+            title: 'Pilot',
+            showTitle: 'Test show',
+            seasonNumber: 1,
+            episodeNumber: 1,
+            quality: '720p-4',
+            subtitleMode: 'auto',
+        });
+
+        const list = await request(app).get('/api/plex/queue').expect(200);
+        expect(list.body).toHaveLength(1);
+        expect(list.body[0].title).toBe('Pilot');
+
+        const moved = await request(app)
+            .post(`/api/plex/queue/${list.body[0].id}/move`)
+            .send({ direction: 'down' })
+            .expect(200);
+        expect(moved.body).toHaveLength(1);
+
+        const shuffled = await request(app).post('/api/plex/queue/shuffle').expect(200);
+        expect(shuffled.body).toHaveLength(1);
+
+        await request(app).delete(`/api/plex/queue/${list.body[0].id}`).expect(204);
+        await request(app).get('/api/plex/queue').expect(200).expect([]);
+    });
+
+    it('reports Discord token state without secrets', async () => {
+        settings.update({
+            discord: {
+                botToken: 'bot-token-1234',
+                userToken: 'user-token-5678',
+            },
+        });
+
+        const state = await request(app).get('/api/discord/tokens').expect(200);
+        expect(state.body).toEqual({
+            botTokenSet: true,
+            userTokenSet: true,
+            botLast4: '1234',
+            userLast4: '5678',
+        });
+        expect(JSON.stringify(state.body)).not.toContain('bot-token');
+        expect(JSON.stringify(state.body)).not.toContain('user-token');
+    });
+});

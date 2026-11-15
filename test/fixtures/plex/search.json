@@ -1,0 +1,43 @@
+{
+    "MediaContainer": {
+        "size": 3,
+        "totalSize": 3,
+        "offset": 0,
+        "Metadata": [
+            {
+                "ratingKey": "1001",
+                "key": "/library/metadata/1001",
+                "librarySectionID": 10,
+                "librarySectionTitle": "Films",
+                "type": "movie",
+                "title": "Aurora Relay",
+                "summary": "A synthetic fixture movie about a relay station at the edge of a quiet system.",
+                "year": 2024,
+                "duration": 6543210,
+                "thumb": "/library/metadata/1001/thumb/1700000000"
+            },
+            {
+                "ratingKey": "5001",
+                "key": "/library/metadata/5001",
+                "librarySectionID": 20,
+                "librarySectionTitle": "Series",
+                "type": "show",
+                "title": "Signal Garden",
+                "summary": "A synthetic fixture show about a garden made of signals.",
+                "year": 2023,
+                "thumb": "/library/metadata/5001/thumb/1700000800",
+                "leafCount": 5,
+                "childCount": 2
+            },
+            {
+                "ratingKey": "9001",
+                "key": "/library/metadata/9001",
+                "librarySectionID": 30,
+                "librarySectionTitle": "Music",
+                "type": "artist",
+                "title": "Fixture Artist",
+                "summary": "A synthetic fixture artist."
+            }
+        ]
+    }
+}

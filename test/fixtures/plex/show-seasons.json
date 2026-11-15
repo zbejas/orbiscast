@@ -1,0 +1,47 @@
+{
+    "MediaContainer": {
+        "size": 2,
+        "totalSize": 2,
+        "offset": 0,
+        "librarySectionID": 20,
+        "librarySectionTitle": "Series",
+        "parentTitle": "Signal Garden",
+        "parentIndex": 1,
+        "Metadata": [
+            {
+                "ratingKey": "5101",
+                "key": "/library/metadata/5101/children",
+                "parentRatingKey": "5001",
+                "type": "season",
+                "title": "Season 1",
+                "parentTitle": "Signal Garden",
+                "summary": "The first synthetic season of Signal Garden.",
+                "index": 1,
+                "parentIndex": 1,
+                "parentYear": 2023,
+                "thumb": "/library/metadata/5101/thumb/1700001000",
+                "addedAt": 1700001000,
+                "updatedAt": 1700001100,
+                "leafCount": 3,
+                "viewedLeafCount": 1
+            },
+            {
+                "ratingKey": "5201",
+                "key": "/library/metadata/5201/children",
+                "parentRatingKey": "5001",
+                "type": "season",
+                "title": "Season 2",
+                "parentTitle": "Signal Garden",
+                "summary": "The second synthetic season of Signal Garden.",
+                "index": 2,
+                "parentIndex": 1,
+                "parentYear": 2023,
+                "thumb": "/library/metadata/5201/thumb/1700001200",
+                "addedAt": 1700001200,
+                "updatedAt": 1700001300,
+                "leafCount": 2,
+                "viewedLeafCount": 0
+            }
+        ]
+    }
+}
