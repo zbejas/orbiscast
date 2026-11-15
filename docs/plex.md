@@ -96,11 +96,11 @@ X-Plex-Device-Name, X-Plex-Model, X-Plex-Language, X-Plex-Token
 
 The URL handed to FFmpeg points at the proxy and carries no token. The proxy forwards segment requests, rewrites absolute Plex URLs in HLS manifests to the proxy origin, and drops the stale `content-length` after rewriting. It listens on loopback only; do not expose the port or run untrusted processes beside a host-run instance.
 
-`buildStopSessionUrl` calls `/video/:/transcode/universal/stop?session=`. It is called on stop, skip, natural end, error, pause, and app shutdown.
+`buildStopSessionUrl` calls `/video/:/transcode/universal/stop?session=`. It is called on stop, skip, natural end, error, and app shutdown.
 
 ### Pause and resume
 
-Pause records the current offset, stops FFmpeg, and stops the Plex transcode session. Resume creates a new session and starts a new transcode at that offset. Stop and skip do not resume from an offset.
+Pause freezes the live Discord stream without ending it. OrbisCast sends a `STREAM_SET_PAUSED` gateway opcode and suspends the FFmpeg process with `SIGSTOP`, so the voice connection and Plex transcode session stay open and viewers see a still image instead of the stream ending. Resume sends `SIGCONT` and unpauses the Discord stream. The same transcode and stream continue; nothing is restarted. Stop and skip still stop the transcode.
 
 ### Placeholder
 
@@ -139,7 +139,8 @@ idle -> plex -> idle
 - **The token must never reach the browser.** Use the thumbnail proxy and never return `thumbnailUrl()` directly.
 - **Plex `start.m3u8` can return 400 for a specific file.** Test another item, quality, or subtitles off before changing URL construction. Some files are rejected by the server's transcoder.
 - **Image subtitles are not universally burnable.** A missing stream index means the track cannot be burned.
-- **Session cleanup is required.** Abandoned transcode sessions consume Plex CPU until they time out.
+- **Session cleanup is required.** Abandoned transcode sessions consume Plex CPU until they time out. Pause keeps the session alive on purpose; stop or skip to release it.
+- **A paused stream is a stopped FFmpeg process.** `stopStreaming` sends `SIGCONT` before aborting. Do not kill a paused process without resuming it, or the stop path can hang.
 - **The placeholder clip is cached.** Delete `data/cache/plex-placeholder.mp4` after changing the source image.
 - **Proxy lifetime follows settings.** Changing the server URL or token rebuilds the client and stops the old proxy.
 

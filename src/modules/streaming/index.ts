@@ -1,5 +1,12 @@
 import { Client } from '@lng2004/discord.js-selfbot-v13';
-import { Streamer, prepareStream, playStream, Utils, Encoders } from '@dank074/discord-video-stream';
+import {
+    Encoders,
+    GatewayOpCodes,
+    prepareStream,
+    playStream,
+    Streamer,
+    Utils,
+} from '@dank074/discord-video-stream';
 import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
 import type { ChannelEntry } from '../../interfaces/iptv';
@@ -22,6 +29,8 @@ export interface StreamResult {
 let streamer = new Streamer(new Client());
 let abortController = new AbortController();
 let currentChannelEntry: ChannelEntry | null = null;
+let streamProcess: (Promise<unknown> & { kill: (signal?: NodeJS.Signals | number) => boolean }) | null = null;
+let streamPaused = false;
 let streamSpectatorMonitor: ReturnType<typeof setInterval> | null = null;
 let streamAloneTime = 0;
 let settings: StreamSettings = {
@@ -106,6 +115,65 @@ export function getViewerCount(): number {
  */
 export function getCurrentChannelEntry(): ChannelEntry | null {
     return currentChannelEntry;
+}
+
+function signalStreamPaused(paused: boolean): boolean {
+    const connection = streamer.voiceConnection;
+    const user = streamer.client.user;
+    if (!connection || !user) {
+        return false;
+    }
+    const streamKey = Utils.generateStreamKey(
+        connection.type,
+        connection.guildId,
+        connection.channelId,
+        user.id
+    );
+    streamer.sendOpcode(GatewayOpCodes.STREAM_SET_PAUSED, {
+        stream_key: streamKey,
+        paused,
+    });
+    return true;
+}
+
+/**
+ * Freezes the active Discord stream without ending it. The Plex session and
+ * voice connection stay open, so viewers remain connected to a still image.
+ *
+ * @returns True when the stream was paused
+ */
+export function pauseStreaming(): boolean {
+    if (!currentChannelEntry || !streamProcess || streamPaused) {
+        return false;
+    }
+    if (!signalStreamPaused(true)) {
+        return false;
+    }
+    if (!streamProcess.kill('SIGSTOP')) {
+        signalStreamPaused(false);
+        return false;
+    }
+    streamPaused = true;
+    logger.info('Paused video stream and kept the voice connection open');
+    return true;
+}
+
+/**
+ * Resumes a stream frozen by {@link pauseStreaming}.
+ *
+ * @returns True when the stream was resumed
+ */
+export function resumeStreaming(): boolean {
+    if (!currentChannelEntry || !streamProcess || !streamPaused) {
+        return false;
+    }
+    if (!streamProcess.kill('SIGCONT')) {
+        return false;
+    }
+    signalStreamPaused(false);
+    streamPaused = false;
+    logger.info('Resumed video stream');
+    return true;
 }
 
 /**
@@ -294,6 +362,10 @@ export async function startStreaming(
         );
 
         currentChannelEntry = channelEntry;
+        streamProcess = promise as Promise<unknown> & {
+            kill: (signal?: NodeJS.Signals | number) => boolean;
+        };
+        streamPaused = false;
 
         promise.catch((err: unknown) => {
             if (!signal.aborted) {
@@ -338,6 +410,9 @@ export async function startStreaming(
  */
 export async function stopStreaming(): Promise<void> {
     try {
+        if (streamProcess && streamPaused) {
+            streamProcess.kill('SIGCONT');
+        }
         abortController.abort();
         await new Promise(resolve => setTimeout(resolve, 1000));
         abortController = new AbortController();
@@ -348,6 +423,8 @@ export async function stopStreaming(): Promise<void> {
             streamSpectatorMonitor = null;
         }
         streamAloneTime = 0;
+        streamProcess = null;
+        streamPaused = false;
 
         if (!currentChannelEntry) {
             logger.debug('No channel currently playing');

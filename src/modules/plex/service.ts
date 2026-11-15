@@ -36,7 +36,15 @@ import {
 import { PlexProxy } from './proxy';
 import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
-import { getViewerCount, joinVoiceChannel, leaveVoiceChannel, startStreaming, stopStreaming } from '../streaming';
+import {
+    getViewerCount,
+    joinVoiceChannel,
+    leaveVoiceChannel,
+    pauseStreaming,
+    resumeStreaming,
+    startStreaming,
+    stopStreaming,
+} from '../streaming';
 import type {
     PlexConfigDto,
     PlexItemDetailDto,
@@ -56,8 +64,6 @@ interface CurrentPlayback {
     detail: PlexItemDetail;
     sessionId: string;
     url: string;
-    startedAt: number;
-    offsetBase: number;
     subtitleStreamIndex: number | null;
     quality: PlexQuality;
     target: PlaybackTarget;
@@ -570,13 +576,9 @@ export class PlexService implements PlexPlaybackProvider {
         if (!current || this.paused) {
             return { ok: false, message: 'Plex playback is not active.' };
         }
-        const offset = current.offsetBase + (Date.now() - current.startedAt) / 1000;
-        this.runToken++;
-        await stopStreaming();
-        await this.stopSession(current.sessionId);
-        current.offsetBase = offset;
-        current.startedAt = 0;
-        current.sessionId = '';
+        if (!pauseStreaming()) {
+            return { ok: false, message: 'Plex playback is not active.' };
+        }
         this.paused = true;
         this.playback.setPlexPaused(true);
         return { ok: true, message: 'Playback paused.' };
@@ -587,26 +589,11 @@ export class PlexService implements PlexPlaybackProvider {
         if (!current || !this.paused) {
             return { ok: false, message: 'Plex playback is not paused.' };
         }
-        const sessionId = createSessionId();
-        current.sessionId = sessionId;
-        const proxyBase = await this.ensureProxy();
-        current.url = buildTranscodeUrl({
-            baseUrl: proxyBase,
-            token: null,
-            clientIdentifier: this.settings.getPlexClientIdentifier(),
-            ratingKey: current.detail.ratingKey,
-            mediaIndex: 0,
-            partIndex: 0,
-            quality: current.quality,
-            subtitleStreamIndex: current.subtitleStreamIndex,
-            offsetSeconds: Math.max(0, current.offsetBase),
-            sessionId,
-        });
-        current.startedAt = Date.now();
+        if (!resumeStreaming()) {
+            return { ok: false, message: 'Plex playback is not active.' };
+        }
         this.paused = false;
         this.playback.setPlexPaused(false);
-        const token = ++this.runToken;
-        void this.runCurrent(token);
         return { ok: true, message: 'Playback resumed.' };
     }
 
@@ -736,8 +723,6 @@ export class PlexService implements PlexPlaybackProvider {
             detail,
             sessionId,
             url,
-            startedAt: Date.now(),
-            offsetBase: 0,
             subtitleStreamIndex,
             quality,
             target,
