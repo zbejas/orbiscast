@@ -1,0 +1,792 @@
+@import "tailwindcss";
+
+@theme {
+    --color-bg: #0b0d12;
+    --color-bg-deep: #07090d;
+    --color-surface: #11141b;
+    --color-raised: #161a22;
+    --color-raised-2: #1b2029;
+    --color-border: #242a36;
+    --color-border-strong: #333b4a;
+    --color-text: #e6e9ef;
+    --color-text-muted: #9aa3b2;
+    --color-text-faint: #8a94a6;
+    --color-blurple: #5865f2;
+    --color-blurple-hover: #4752c4;
+    --color-blurple-text: #8791ff;
+    --color-plex: #e5a00d;
+    --color-live: #3ba55d;
+    --color-danger: #ed4245;
+    --color-danger-strong: #c93b3e;
+    --color-warn: #f0b232;
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
+}
+
+:root {
+    color-scheme: dark;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+}
+
+html {
+    background: var(--color-bg);
+    scrollbar-gutter: stable;
+}
+
+body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100dvh;
+    background: var(--color-bg);
+    color: var(--color-text);
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+button {
+    color: inherit;
+}
+
+::selection {
+    background: color-mix(in srgb, var(--color-blurple) 62%, transparent);
+    color: #ffffff;
+}
+
+::placeholder {
+    color: var(--color-text-faint);
+    opacity: 1;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #2f3643 transparent;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #2f3643;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #3c4555;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+:focus-visible {
+    outline: 2px solid var(--color-blurple);
+    outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline-offset: 1px;
+}
+
+dialog {
+    color: inherit;
+}
+
+dialog:modal {
+    overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+    overflow: hidden;
+    overscroll-behavior: contain;
+    background: rgb(4 6 10 / 0.74);
+}
+
+/* Skip link */
+.skip-link {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 120;
+    transform: translateY(-200%);
+    border-radius: 8px;
+    background: var(--color-blurple);
+    color: #ffffff;
+    padding: 0.55rem 0.9rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+
+.skip-link:focus-visible {
+    transform: translateY(0);
+    outline-color: #ffffff;
+}
+
+/* Dialog surfaces */
+dialog.oc-dialog {
+    width: min(calc(100vw - 1.5rem), var(--oc-dialog-width, 34rem));
+    max-width: none;
+    max-height: min(88dvh, 52rem);
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 14px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    box-shadow: 0 24px 64px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.4);
+    overflow: hidden;
+}
+
+dialog.oc-dialog[open] {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+dialog.oc-dialog::backdrop {
+    background: rgb(4 6 10 / 0.74);
+}
+
+dialog.oc-dialog-sm {
+    --oc-dialog-width: 26rem;
+}
+
+dialog.oc-dialog-lg {
+    --oc-dialog-width: 42rem;
+}
+
+/* Navigation drawer */
+dialog.oc-drawer {
+    position: fixed;
+    inset: 0;
+    width: auto;
+    max-width: none;
+    height: auto;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    overflow: hidden;
+}
+
+dialog.oc-drawer[open] {
+    display: block;
+}
+
+dialog.oc-drawer::backdrop {
+    background: rgb(4 6 10 / 0.7);
+}
+
+.oc-drawer-sheet {
+    height: 100dvh;
+    width: min(86vw, 20rem);
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    box-shadow: 16px 0 48px rgb(0 0 0 / 0.45);
+    animation: oc-slide-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Page motion */
+.oc-page-enter {
+    animation: oc-fade-up 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.oc-live-dot {
+    animation: oc-live-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes oc-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes oc-slide-in {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+@keyframes oc-slide-in-right {
+    from {
+        opacity: 0;
+        transform: translateX(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.oc-panel-enter {
+    animation: oc-slide-in-right 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes oc-live-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.45;
+    }
+}
+
+@keyframes oc-indeterminate {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(300%);
+    }
+}
+
+.oc-progress-indeterminate {
+    width: 38%;
+    animation: oc-indeterminate 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+/* Switch */
+.oc-switch {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    cursor: pointer;
+    min-height: 1.5rem;
+}
+
+.oc-switch-track {
+    position: relative;
+    display: inline-block;
+    flex: none;
+    width: 2.5rem;
+    height: 1.5rem;
+    margin-top: 0.0625rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-raised-2);
+    transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.oc-switch-knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 999px;
+    background: var(--color-text-muted);
+    transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), background-color 160ms ease;
+}
+
+.oc-switch input:checked + .oc-switch-track {
+    background: var(--color-blurple);
+    border-color: var(--color-blurple);
+}
+
+.oc-switch input:checked + .oc-switch-track .oc-switch-knob {
+    transform: translateX(1rem);
+    background: #ffffff;
+}
+
+.oc-switch input:focus-visible + .oc-switch-track {
+    outline: 2px solid var(--color-blurple);
+    outline-offset: 2px;
+}
+
+.oc-switch input:disabled + .oc-switch-track {
+    opacity: 0.45;
+}
+
+.oc-switch:has(input:disabled) {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Native checkbox */
+.oc-checkbox {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    padding-block: 0.3125rem;
+    line-height: 1.35;
+    cursor: pointer;
+    min-height: 1.75rem;
+}
+
+.oc-checkbox input {
+    margin-top: 0.1875rem;
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+    accent-color: var(--color-blurple);
+}
+
+/* Tables */
+.oc-table-wrapper {
+    position: relative;
+    container-type: inline-size;
+    overflow: auto;
+    max-block-size: min(70dvh, 48rem);
+    border-radius: 0;
+}
+
+.oc-table-wrapper:focus-visible {
+    outline: 2px solid var(--color-blurple);
+    outline-offset: -2px;
+}
+
+.oc-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+.oc-table caption {
+    text-align: left;
+}
+
+.oc-table thead {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 3;
+    background: var(--color-raised);
+}
+
+.oc-table thead th {
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.055em;
+    text-transform: uppercase;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.oc-table tbody th {
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+    font-weight: 500;
+    vertical-align: middle;
+    background: transparent;
+}
+
+.oc-table tbody td {
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+}
+
+.oc-table tbody tr:last-child th,
+.oc-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.oc-table tbody tr {
+    transition: background-color 120ms ease;
+}
+
+.oc-table tbody tr:hover {
+    background: rgb(255 255 255 / 0.018);
+}
+
+.oc-table tbody tr[data-selected="true"] {
+    background: color-mix(in srgb, var(--color-blurple) 7%, transparent);
+}
+
+.oc-table .oc-table-actions {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.oc-table .oc-table-num {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@container (width < 600px) {
+    .oc-table-wrapper {
+        max-block-size: none;
+        overflow: visible;
+    }
+
+    .oc-table,
+    .oc-table thead,
+    .oc-table tbody,
+    .oc-table tr,
+    .oc-table th,
+    .oc-table td {
+        display: block;
+    }
+
+    .oc-table thead {
+        display: none;
+    }
+
+    .oc-table tbody tr {
+        margin: 0 0 0.75rem;
+        padding: 0.25rem 0.875rem;
+        border: 1px solid var(--color-border);
+        border-radius: 10px;
+        background: var(--color-raised);
+    }
+
+    .oc-table tbody tr:last-child {
+        margin-bottom: 0;
+    }
+
+    .oc-table tbody th {
+        position: static;
+        padding: 0.75rem 0 0.625rem;
+        border-bottom: 1px solid var(--color-border);
+    }
+
+    .oc-table tbody td {
+        display: grid;
+        grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgb(255 255 255 / 0.045);
+        text-align: end;
+    }
+
+    .oc-table tbody td::before {
+        content: attr(data-label);
+        color: var(--color-text-muted);
+        font-size: 0.6875rem;
+        letter-spacing: 0.045em;
+        text-transform: uppercase;
+        text-align: start;
+    }
+
+    .oc-table tbody td:last-child {
+        border-bottom: 0;
+    }
+
+    .oc-table tbody td > * {
+        min-width: 0;
+    }
+
+    .oc-table .oc-table-actions {
+        text-align: end;
+    }
+
+    .oc-table .oc-table-actions > * {
+        margin-inline-start: auto;
+    }
+
+    .oc-table tbody td[data-label=""]::before,
+    .oc-table tbody td:not([data-label])::before {
+        content: none;
+    }
+
+    .oc-table tbody td:not([data-label]) {
+        display: block;
+        padding-block: 0.5rem;
+    }
+}
+
+/* EPG */
+.oc-epg-scroll {
+    overflow: auto;
+    max-block-size: min(70dvh, 46rem);
+    overscroll-behavior: contain;
+}
+
+.oc-epg-scroller {
+    min-width: 160rem;
+}
+
+.oc-epg-channel {
+    position: sticky;
+    inset-inline-start: 0;
+    z-index: 4;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+}
+
+.oc-epg-head {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 6;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.oc-epg-head .oc-epg-channel {
+    z-index: 7;
+}
+
+.oc-epg-now {
+    pointer-events: none;
+    position: absolute;
+    inset-block: 0;
+    z-index: 5;
+    width: 2px;
+    background: var(--color-blurple);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--color-blurple) 55%, transparent);
+}
+
+.oc-epg-programme {
+    position: absolute;
+    inset-block: 5px;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: 5px;
+    background: var(--color-raised);
+    color: var(--color-text);
+    text-align: left;
+    padding: 0.3125rem 0.4375rem;
+    font-size: 0.6875rem;
+    line-height: 1.25;
+    transition: background-color 120ms ease, border-color 120ms ease;
+    cursor: pointer;
+    min-height: 2.25rem;
+}
+
+.oc-epg-programme:hover {
+    background: var(--color-raised-2);
+    border-color: var(--color-border-strong);
+}
+
+.oc-epg-programme[data-current="true"] {
+    border-color: color-mix(in srgb, var(--color-blurple) 55%, var(--color-border));
+    background: color-mix(in srgb, var(--color-blurple) 14%, var(--color-raised));
+}
+
+/* Posters */
+.oc-poster {
+    position: relative;
+    overflow: hidden;
+    background: var(--oc-poster-bg, #191d25);
+    isolation: isolate;
+    aspect-ratio: 2 / 3;
+    border-radius: inherit;
+}
+
+.oc-poster-art {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.oc-poster-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
+.oc-poster-scrim {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgb(4 6 10 / 0) 42%, rgb(4 6 10 / 0.82) 100%);
+}
+
+.oc-poster-meta {
+    position: absolute;
+    inset-inline: 0.5rem;
+    inset-block-end: 0.5rem;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.375rem;
+}
+
+.oc-poster-title {
+    font-size: 0.625rem;
+    font-weight: 650;
+    line-height: 1.15;
+    letter-spacing: 0.01em;
+    color: #f4f1e8;
+    text-wrap: balance;
+    text-shadow: 0 1px 6px rgb(0 0 0 / 0.6);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.oc-poster-mark {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 0.5rem;
+    letter-spacing: 0.08em;
+    color: rgb(244 241 232 / 0.62);
+}
+
+.oc-channel-mark {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--oc-mark-ink) 25%, var(--color-border));
+    background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--oc-mark-accent) 34%, var(--color-raised)),
+        var(--color-raised)
+    );
+    color: var(--oc-mark-ink, var(--color-text));
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1;
+}
+
+/* Log console */
+.oc-log-console {
+    background:
+        linear-gradient(rgb(255 255 255 / 0.012) 1px, transparent 1px) 0 0 / 100% 1.75rem,
+        var(--color-bg-deep);
+}
+
+.oc-log-line {
+    display: grid;
+    grid-template-columns: 4.75rem 3.25rem minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: baseline;
+}
+
+/* Toast region */
+.oc-toast-region {
+    position: fixed;
+    inset: auto 1rem 1rem auto;
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    width: min(calc(100vw - 2rem), 22.5rem);
+    max-height: min(70dvh, 34rem);
+    overflow: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.oc-toast-region:not(:popover-open) {
+    display: none;
+}
+
+.oc-toast-region:popover-open {
+    display: flex;
+}
+
+.oc-toast {
+    border: 1px solid var(--color-border-strong);
+    border-radius: 10px;
+    background: var(--color-raised);
+    color: var(--color-text);
+    box-shadow: 0 16px 40px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.35);
+    padding: 0.75rem 0.875rem;
+}
+
+/* Tooltip-like title affordances are native. Coarse pointer targets. */
+@media (any-pointer: coarse) {
+    .oc-control {
+        min-height: 48px;
+    }
+
+    .oc-icon-control {
+        min-width: 48px;
+        min-height: 48px;
+    }
+
+    .oc-switch {
+        min-height: 48px;
+        align-items: center;
+    }
+
+    .oc-switch-track {
+        margin-top: 0;
+    }
+
+    .oc-checkbox {
+        min-height: 48px;
+        align-items: center;
+    }
+
+    .oc-checkbox input {
+        margin-top: 0;
+    }
+
+    .oc-checkbox-target {
+        min-width: 48px;
+        min-height: 48px;
+    }
+
+    .oc-nav-link {
+        min-height: 48px;
+    }
+
+    .oc-button-sm {
+        min-height: 40px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .oc-page-enter {
+        animation: none;
+    }
+}
+
+@media (forced-colors: active) {
+    .oc-switch-track,
+    .oc-poster,
+    .oc-toast {
+        border: 1px solid CanvasText;
+    }
+}
+
+/* The skip-link target is a container, not a control. Do not paint a ring
+   around the whole page after route focus moves to it. */
+main:focus-visible {
+    outline: none;
+}
