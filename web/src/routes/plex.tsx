@@ -1571,7 +1571,7 @@ function PlexCard({ item, onOpen }: { item: PlexItemDto; onOpen: () => void }) {
                     </span>
                 ) : null}
             </div>
-            <p className="mt-2 line-clamp-2 text-sm font-medium leading-5 text-text">{item.title}</p>
+            <p className="mt-2 truncate text-sm font-medium leading-5 text-text">{item.title}</p>
             <p className="mt-0.5 text-[11px] text-text-muted">
                 {item.year ?? 'Unknown'} · {item.type === 'show' ? 'Series' : formatDuration(item.durationMs)}
             </p>

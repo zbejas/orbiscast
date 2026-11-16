@@ -56,6 +56,7 @@ Only playlist entries with a stream URL become rows. XMLTV-only channels are met
 - Programmes are stored per source and XMLTV channel id.
 - `start_timestamp` and `stop_timestamp` are epoch seconds for range queries; the original XMLTV strings are kept in `start` and `stop`.
 - `GET /api/epg?start=&end=&channelIds=` returns rows that overlap the window.
+- `GET /api/channels` attaches the current and next programme title to each row for the Channels table.
 - The WebUI timeline renders visible channels only.
 - Rows older than seven days are pruned after a successful guide refresh.
 

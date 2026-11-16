@@ -8,6 +8,7 @@ import { z, ZodError } from 'zod';
 import type { Db } from '../modules/database/client';
 import {
     addQueueItem,
+    attachChannelGuide,
     clearQueue,
     createSource,
     deleteSource,
@@ -401,7 +402,7 @@ export function createApp(services: AppServices) {
             q: typeof req.query.q === 'string' ? req.query.q : undefined,
             search: typeof req.query.search === 'string' ? req.query.search : undefined,
         });
-        res.json(result);
+        res.json({ ...result, items: attachChannelGuide(services.db, result.items) });
     });
 
     app.get('/api/channels/plex', (_req, res) => {

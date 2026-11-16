@@ -196,6 +196,58 @@ describe('API', () => {
         });
     });
 
+    it('includes the current and next programme on channel rows', async () => {
+        const source = await request(app)
+            .post('/api/sources')
+            .send({ name: 'Guide rows', playlistUrl: 'http://example.com/playlist.m3u' })
+            .expect(201);
+
+        replaceSourceChannels(connection.db, source.body.id, [
+            {
+                stableKey: 'alpha',
+                tvgId: 'alpha',
+                name: 'Alpha',
+                streamUrl: 'http://example.com/alpha',
+                groupTitle: 'News',
+            },
+        ]);
+        const channels = await request(app).get('/api/channels').expect(200);
+        await request(app)
+            .patch('/api/channels/visibility')
+            .send({ ids: [channels.body.items[0].id], visible: true })
+            .expect(200);
+
+        const now = Math.floor(Date.now() / 1000);
+        replaceSourceProgrammes(connection.db, source.body.id, [
+            {
+                channelTvgId: 'alpha',
+                start: '20260101120000 +0000',
+                stop: '20260101130000 +0000',
+                startTimestamp: now - 300,
+                stopTimestamp: now + 300,
+                title: 'Current show',
+                description: '',
+                category: 'News',
+            },
+            {
+                channelTvgId: 'alpha',
+                start: '20260101130000 +0000',
+                stop: '20260101140000 +0000',
+                startTimestamp: now + 300,
+                stopTimestamp: now + 900,
+                title: 'Next show',
+                description: '',
+                category: 'News',
+            },
+        ]);
+
+        const rows = await request(app).get('/api/channels?visible=true').expect(200);
+        expect(rows.body.items[0]).toMatchObject({
+            nowPlaying: 'Current show',
+            next: 'Next show',
+        });
+    });
+
     it('persists settings updates', async () => {
         const updated = await request(app)
             .patch('/api/settings')

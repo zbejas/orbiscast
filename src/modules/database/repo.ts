@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte, ne, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, lte, ne, notInArray, sql } from 'drizzle-orm';
 import type { Db } from './client';
 import { channels, discordGuildSettings, iptvSources, plexLibraries, plexQueueItems, programmes } from './schema';
 import type {
@@ -374,6 +374,64 @@ export function queryChannels(
         totalAll: totalAllRow?.count ?? 0,
         groups: listChannelGroups(db),
     };
+}
+
+/**
+ * Adds the current and next programme titles to channel rows.
+ *
+ * @param db - Drizzle client
+ * @param items - Channel DTOs from {@link queryChannels}
+ * @returns Channel DTOs with nowPlaying and next filled
+ */
+export function attachChannelGuide(db: Db, items: ChannelDto[]): ChannelDto[] {
+    const tvgIds = [
+        ...new Set(items.map(item => item.tvgId).filter((tvgId): tvgId is string => Boolean(tvgId))),
+    ];
+    if (tvgIds.length === 0) {
+        return items;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const rows = db
+        .select({
+            sourceId: programmes.sourceId,
+            channelTvgId: programmes.channelTvgId,
+            startTimestamp: programmes.startTimestamp,
+            stopTimestamp: programmes.stopTimestamp,
+            title: programmes.title,
+        })
+        .from(programmes)
+        .where(
+            and(
+                inArray(programmes.channelTvgId, tvgIds),
+                gt(programmes.stopTimestamp, now),
+                lte(programmes.startTimestamp, now + 86_400)
+            )
+        )
+        .orderBy(asc(programmes.channelTvgId), asc(programmes.startTimestamp))
+        .all();
+
+    const guide = new Map<string, { current: string | null; next: string | null }>();
+    for (const row of rows) {
+        const key = `${row.sourceId}:${row.channelTvgId}`;
+        const entry = guide.get(key) ?? { current: null, next: null };
+        if (row.startTimestamp <= now && row.stopTimestamp > now) {
+            entry.current = row.title;
+        } else if (row.startTimestamp > now && entry.next === null) {
+            entry.next = row.title;
+        }
+        guide.set(key, entry);
+    }
+
+    return items.map(item => {
+        const entry =
+            item.sourceId !== null && item.tvgId ? guide.get(`${item.sourceId}:${item.tvgId}`) : undefined;
+        return {
+            ...item,
+            nowPlaying: entry?.current ?? null,
+            next: entry?.next ?? null,
+        };
+    });
 }
 
 /**
