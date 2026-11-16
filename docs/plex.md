@@ -106,7 +106,7 @@ Plex input is read with `-re` so FFmpeg does not buffer far ahead. That keeps th
 
 ### Seek
 
-The WebUI progress bar is also a seek control. A seek stops the current FFmpeg process and Plex session, builds a new transcode at the requested offset, and starts it on the existing voice connection. The Discord stream is recreated for the new source, so viewers can see a brief interruption before playback resumes at the new position. Seeking also resumes a paused item.
+The WebUI progress bar is also a seek control. A seek stops the current FFmpeg process and Plex session, builds a new transcode at the requested offset, and swaps it into the existing Discord stream connection. The stream is not deleted or recreated, so viewers keep the last frame during the short rebuffer and stay in the stream. Seeking also resumes a paused item.
 
 ### Placeholder
 

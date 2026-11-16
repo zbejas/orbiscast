@@ -3,6 +3,7 @@ import { Encoders, prepareStream, playStream, Streamer, Utils } from '@dank074/d
 import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
 import type { ChannelEntry } from '../../interfaces/iptv';
+import { PersistentStream } from './persistent-session';
 
 const logger = getLogger();
 
@@ -22,6 +23,7 @@ export interface StreamResult {
 let streamer = new Streamer(new Client());
 let abortController = new AbortController();
 let currentChannelEntry: ChannelEntry | null = null;
+let persistentStream: PersistentStream | null = null;
 let streamProcess: (Promise<unknown> & { kill: (signal?: NodeJS.Signals | number) => boolean }) | null = null;
 let streamPaused = false;
 let streamSpectatorMonitor: ReturnType<typeof setInterval> | null = null;
@@ -118,6 +120,13 @@ export function getCurrentChannelEntry(): ChannelEntry | null {
  * @returns True when the stream was paused
  */
 export function pauseStreaming(): boolean {
+    if (persistentStream?.active) {
+        const paused = persistentStream.pause();
+        if (paused) {
+            logger.info('Froze video stream and kept the voice connection open');
+        }
+        return paused;
+    }
     if (!currentChannelEntry || !streamProcess || streamPaused) {
         return false;
     }
@@ -135,6 +144,13 @@ export function pauseStreaming(): boolean {
  * @returns True when the stream was resumed
  */
 export function resumeStreaming(): boolean {
+    if (persistentStream?.active) {
+        const resumed = persistentStream.resume();
+        if (resumed) {
+            logger.info('Resumed video stream');
+        }
+        return resumed;
+    }
     if (!currentChannelEntry || !streamProcess || !streamPaused) {
         return false;
     }
@@ -376,10 +392,85 @@ export async function startStreaming(
 }
 
 /**
+ * Starts a Plex stream on one persistent Discord stream connection. The
+ * connection survives source swaps so seeking does not delete and recreate the
+ * stream.
+ *
+ * @param channelEntry - Channel metadata and source URL
+ * @param options - Input options and headers
+ * @returns Playback result
+ */
+export async function startPlexStreaming(
+    channelEntry: ChannelEntry,
+    options: { inputOptions?: string[]; headers?: Record<string, string> } = {}
+): Promise<StreamResult> {
+    if (!streamer.client.isReady()) {
+        logger.error('Streamer client is not logged in');
+        return { aborted: false, error: 'Streamer client is not logged in' };
+    }
+
+    logger.info('Stopping any possible existing stream');
+    await stopStreaming();
+
+    const encoder = Encoders.software({
+        x264: { preset: 'veryfast' },
+        x265: { preset: 'veryfast' },
+    });
+    const session = new PersistentStream(streamer);
+    persistentStream = session;
+    currentChannelEntry = channelEntry;
+    const cleanupMonitoring = startSpectatorMonitoring();
+    logger.info(`Attempting to stream: ${channelEntry.tvg_name ?? 'unknown'}`);
+
+    try {
+        return await session.start(channelEntry.url, {
+            noTranscoding: settings.disableTranscode,
+            minimizeLatency: settings.minimizeLatency,
+            bitrateVideo: settings.bitrateVideo,
+            bitrateVideoMax: settings.bitrateVideoMax,
+            encoder,
+            inputOptions: options.inputOptions ?? [],
+            headers: options.headers ?? {},
+        });
+    } catch (error) {
+        const message = String(error);
+        logger.error(`Error starting Plex stream: ${redactSecrets(message)}`);
+        return { aborted: false, error: message };
+    } finally {
+        if (persistentStream === session) {
+            cleanupMonitoring();
+            persistentStream = null;
+        }
+        if (currentChannelEntry === channelEntry) {
+            currentChannelEntry = null;
+        }
+    }
+}
+
+/**
+ * Replaces the Plex source while keeping the current Discord stream alive.
+ *
+ * @param url - New Plex transcode URL
+ * @returns True when the source was replaced
+ */
+export async function replacePlexStreamingSource(url: string): Promise<boolean> {
+    if (!persistentStream?.active) {
+        return false;
+    }
+    await persistentStream.replace(url);
+    return true;
+}
+
+/**
  * Stops the current stream without disconnecting from voice.
  */
 export async function stopStreaming(): Promise<void> {
     try {
+        if (persistentStream) {
+            const session = persistentStream;
+            persistentStream = null;
+            await session.stop();
+        }
         if (streamProcess && streamPaused) {
             streamProcess.kill('SIGCONT');
         }

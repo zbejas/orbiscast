@@ -41,7 +41,9 @@ import {
     joinVoiceChannel,
     leaveVoiceChannel,
     pauseStreaming,
+    replacePlexStreamingSource,
     resumeStreaming,
+    startPlexStreaming,
     startStreaming,
     stopStreaming,
 } from '../streaming';
@@ -627,15 +629,10 @@ export class PlexService implements PlexPlaybackProvider {
         const duration = current.queueItem.durationMs ?? current.detail.durationMs ?? 0;
         const upper = duration > 0 ? Math.max(0, duration / 1000 - 1) : seconds;
         const target = Math.max(0, Math.min(seconds, upper));
-
-        this.runToken++;
-        await stopStreaming();
-        await this.stopSession(current.sessionId);
-
+        const oldSessionId = current.sessionId;
         const sessionId = createSessionId();
         const proxyBase = await this.ensureProxy();
-        current.sessionId = sessionId;
-        current.url = buildTranscodeUrl({
+        const url = buildTranscodeUrl({
             baseUrl: proxyBase,
             token: null,
             clientIdentifier: this.settings.getPlexClientIdentifier(),
@@ -647,6 +644,22 @@ export class PlexService implements PlexPlaybackProvider {
             offsetSeconds: target,
             sessionId,
         });
+
+        try {
+            const replaced = await replacePlexStreamingSource(url);
+            if (!replaced) {
+                return { ok: false, message: 'Plex stream is not active.' };
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.error(`Plex seek failed: ${redactSecrets(message)}`);
+            return { ok: false, message: 'Plex could not seek to that position.' };
+        } finally {
+            await this.stopSession(oldSessionId);
+        }
+
+        current.sessionId = sessionId;
+        current.url = url;
         current.positionSeconds = target;
         current.startedAt = Date.now();
         this.paused = false;
@@ -655,9 +668,6 @@ export class PlexService implements PlexPlaybackProvider {
             Math.round(target * 1000),
             this.currentDuration(current)
         );
-
-        const token = ++this.runToken;
-        void this.runCurrent(token);
         return { ok: true, message: 'Playback seeked.' };
     }
 
@@ -696,7 +706,7 @@ export class PlexService implements PlexPlaybackProvider {
         const current = this.current;
         if (!current) return;
 
-        const result = await startStreaming(
+        const result = await startPlexStreaming(
             {
                 xui_id: 0,
                 tvg_name: current.detail.title,
