@@ -1,12 +1,5 @@
 import { Client } from '@lng2004/discord.js-selfbot-v13';
-import {
-    Encoders,
-    GatewayOpCodes,
-    prepareStream,
-    playStream,
-    Streamer,
-    Utils,
-} from '@dank074/discord-video-stream';
+import { Encoders, prepareStream, playStream, Streamer, Utils } from '@dank074/discord-video-stream';
 import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
 import type { ChannelEntry } from '../../interfaces/iptv';
@@ -117,28 +110,10 @@ export function getCurrentChannelEntry(): ChannelEntry | null {
     return currentChannelEntry;
 }
 
-function signalStreamPaused(paused: boolean): boolean {
-    const connection = streamer.voiceConnection;
-    const user = streamer.client.user;
-    if (!connection || !user) {
-        return false;
-    }
-    const streamKey = Utils.generateStreamKey(
-        connection.type,
-        connection.guildId,
-        connection.channelId,
-        user.id
-    );
-    streamer.sendOpcode(GatewayOpCodes.STREAM_SET_PAUSED, {
-        stream_key: streamKey,
-        paused,
-    });
-    return true;
-}
-
 /**
- * Freezes the active Discord stream without ending it. The Plex session and
- * voice connection stay open, so viewers remain connected to a still image.
+ * Freezes the active Discord stream without ending it. The Discord stream
+ * stays live and the last frame stays on screen; the Plex session and voice
+ * connection remain open.
  *
  * @returns True when the stream was paused
  */
@@ -146,15 +121,11 @@ export function pauseStreaming(): boolean {
     if (!currentChannelEntry || !streamProcess || streamPaused) {
         return false;
     }
-    if (!signalStreamPaused(true)) {
-        return false;
-    }
     if (!streamProcess.kill('SIGSTOP')) {
-        signalStreamPaused(false);
         return false;
     }
     streamPaused = true;
-    logger.info('Paused video stream and kept the voice connection open');
+    logger.info('Froze video stream and kept the voice connection open');
     return true;
 }
 
@@ -170,7 +141,6 @@ export function resumeStreaming(): boolean {
     if (!streamProcess.kill('SIGCONT')) {
         return false;
     }
-    signalStreamPaused(false);
     streamPaused = false;
     logger.info('Resumed video stream');
     return true;

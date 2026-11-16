@@ -100,7 +100,7 @@ The URL handed to FFmpeg points at the proxy and carries no token. The proxy for
 
 ### Pause and resume
 
-Pause freezes the live Discord stream without ending it. OrbisCast sends a `STREAM_SET_PAUSED` gateway opcode and suspends the FFmpeg process with `SIGSTOP`, so the voice connection and Plex transcode session stay open and viewers see a still image instead of the stream ending. Resume sends `SIGCONT` and unpauses the Discord stream. The same transcode and stream continue; nothing is restarted. Stop and skip still stop the transcode.
+Pause freezes the live Discord stream without ending it. OrbisCast suspends the FFmpeg process with `SIGSTOP` and deliberately does not send Discord's stream-pause opcode. The stream stays live, viewers keep the last frame, and the voice connection and Plex transcode session stay open. Resume sends `SIGCONT`; the same transcode and stream continue and nothing is restarted. Stop and skip still stop the transcode.
 
 ### Placeholder
 
@@ -140,6 +140,7 @@ idle -> plex -> idle
 - **Plex `start.m3u8` can return 400 for a specific file.** Test another item, quality, or subtitles off before changing URL construction. Some files are rejected by the server's transcoder.
 - **Image subtitles are not universally burnable.** A missing stream index means the track cannot be burned.
 - **Session cleanup is required.** Abandoned transcode sessions consume Plex CPU until they time out. Pause keeps the session alive on purpose; stop or skip to release it.
+- **Do not send `STREAM_SET_PAUSED`.** Discord replaces the video with its own "Stream Paused" screen. Suspending FFmpeg keeps the last frame on screen without that overlay.
 - **A paused stream is a stopped FFmpeg process.** `stopStreaming` sends `SIGCONT` before aborting. Do not kill a paused process without resuming it, or the stop path can hang.
 - **The placeholder clip is cached.** Delete `data/cache/plex-placeholder.mp4` after changing the source image.
 - **Proxy lifetime follows settings.** Changing the server URL or token rebuilds the client and stops the old proxy.
