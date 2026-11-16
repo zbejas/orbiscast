@@ -353,6 +353,14 @@ describe('API', () => {
         await request(app).get('/api/plex/queue').expect(200).expect([]);
     });
 
+    it('rejects seek when nothing is playing', async () => {
+        const response = await request(app)
+            .post('/api/playback/seek')
+            .send({ seconds: 30 })
+            .expect(409);
+        expect(response.body.error.code).toBe('seek_failed');
+    });
+
     it('reports Discord token state without secrets', async () => {
         settings.update({
             discord: {

@@ -10,6 +10,9 @@ export interface PlaybackStateDto {
     voiceChannelId: string | null;
     voiceChannelName: string | null;
     startedAt: number | null;
+    positionMs: number | null;
+    durationMs: number | null;
+    positionUpdatedAt: number | null;
     viewers: number;
     paused: boolean;
     queueItemId: number | null;

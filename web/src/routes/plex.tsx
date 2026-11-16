@@ -39,7 +39,7 @@ import {
     Notice,
     PageHeader,
     Poster,
-    ProgressBar,
+    SeekBar,
     Select,
     Skeleton,
     StatusPill,
@@ -64,6 +64,7 @@ import {
     usePlexQueue,
     useRemoveQueueItem,
     useResumePlayback,
+    useSeekPlayback,
     useSetPlexLibrary,
     useShuffleQueue,
     useSkipPlayback,
@@ -75,6 +76,7 @@ import {
 import type { SubtitleMode } from '@/lib/types';
 import { cn } from '@/lib/cn';
 import { formatDuration, formatElapsed } from '@/lib/format';
+import { playbackPositionMs } from '@/lib/playback';
 
 const QUALITY_OPTIONS: Array<{ value: PlexQuality; label: string }> = [
     { value: '720p-4', label: '720p · 4 Mbps' },
@@ -150,6 +152,7 @@ function QueuePanel({
     const clear = useClearQueue();
     const pause = usePausePlayback();
     const resume = useResumePlayback();
+    const seek = useSeekPlayback();
     const skip = useSkipPlayback();
     const stop = useStopPlayback();
     const toast = useToast();
@@ -160,8 +163,8 @@ function QueuePanel({
         .sort((a, b) => a.position - b.position);
     const failed = (queue.data ?? []).filter((item) => item.status === 'failed');
     const currentQueueItem = queue.data?.find((item) => item.id === playback.data?.queueItemId);
-    const elapsed = playback.data?.startedAt ? now - playback.data.startedAt : 0;
-    const duration = currentQueueItem?.durationMs ?? 0;
+    const elapsed = playbackPositionMs(playback.data, now);
+    const duration = playback.data?.durationMs ?? currentQueueItem?.durationMs ?? 0;
 
     if (!open) return null;
 
@@ -170,6 +173,12 @@ function QueuePanel({
             title: 'Queue action failed',
             description: errorMessage(error),
             tone: 'error',
+        });
+
+    const seekTo = (seconds: number) =>
+        seek.mutate(seconds, {
+            onError: reportError,
+            onSuccess: () => toast({ title: 'Playback seeked', tone: 'success' }),
         });
 
     return (
@@ -218,11 +227,12 @@ function QueuePanel({
                     </div>
                     {duration > 0 ? (
                         <div className="mt-3">
-                            <ProgressBar
-                                value={Math.min(elapsed, duration)}
-                                max={duration}
-                                tone="plex"
-                                label="Current Plex item progress"
+                            <SeekBar
+                                positionMs={Math.min(elapsed, duration)}
+                                durationMs={duration}
+                                onSeek={seekTo}
+                                disabled={seek.isPending}
+                                label="Seek current Plex item"
                             />
                             <div className="mt-1 flex justify-between font-mono text-[10px] tabular-nums text-text-muted">
                                 <span>{formatElapsed(Math.min(elapsed, duration))}</span>

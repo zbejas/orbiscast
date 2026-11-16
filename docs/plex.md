@@ -96,11 +96,17 @@ X-Plex-Device-Name, X-Plex-Model, X-Plex-Language, X-Plex-Token
 
 The URL handed to FFmpeg points at the proxy and carries no token. The proxy forwards segment requests, rewrites absolute Plex URLs in HLS manifests to the proxy origin, and drops the stale `content-length` after rewriting. It listens on loopback only; do not expose the port or run untrusted processes beside a host-run instance.
 
-`buildStopSessionUrl` calls `/video/:/transcode/universal/stop?session=`. It is called on stop, skip, natural end, error, and app shutdown.
+`buildStopSessionUrl` calls `/video/:/transcode/universal/stop?session=`. It is called on stop, skip, seek, natural end, error, and app shutdown.
 
 ### Pause and resume
 
 Pause freezes the live Discord stream without ending it. OrbisCast suspends the FFmpeg process with `SIGSTOP` and deliberately does not send Discord's stream-pause opcode. The stream stays live, viewers keep the last frame, and the voice connection and Plex transcode session stay open. Resume sends `SIGCONT`; the same transcode and stream continue and nothing is restarted. Stop and skip still stop the transcode.
+
+Plex input is read with `-re` so FFmpeg does not buffer far ahead. That keeps the pause freeze close to immediate instead of showing several seconds of already-buffered frames.
+
+### Seek
+
+The WebUI progress bar is also a seek control. A seek stops the current FFmpeg process and Plex session, builds a new transcode at the requested offset, and starts it on the existing voice connection. The Discord stream is recreated for the new source, so viewers can see a brief interruption before playback resumes at the new position. Seeking also resumes a paused item.
 
 ### Placeholder
 

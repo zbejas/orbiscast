@@ -1056,6 +1056,9 @@ const PLAYBACK: PlaybackStateDto = {
     voiceChannelId: 'voice-1',
     voiceChannelName: 'The Screening Room',
     startedAt: BOOT - 102 * MINUTE,
+    positionMs: null,
+    durationMs: null,
+    positionUpdatedAt: null,
     viewers: 9,
     paused: false,
     queueItemId: null,
@@ -1178,6 +1181,9 @@ function startPlaybackFromQueue(
         voiceChannelId,
         voiceChannelName: voiceName,
         startedAt: Date.now(),
+        positionMs: 0,
+        durationMs: item.durationMs,
+        positionUpdatedAt: Date.now(),
         viewers: 4,
         paused: false,
         queueItemId: item.id,
@@ -1199,6 +1205,9 @@ function stopPlaybackState(): PlaybackStateDto {
         voiceChannelId: null,
         voiceChannelName: null,
         startedAt: null,
+        positionMs: null,
+        durationMs: null,
+        positionUpdatedAt: null,
         viewers: 0,
         paused: false,
         queueItemId: null,
@@ -1323,6 +1332,11 @@ export const mockApi = {
         if (database.playback.mode !== 'plex') {
             return fail(409, 'not_plex', 'Only Plex playback can be paused.');
         }
+        if (!database.playback.paused && database.playback.positionMs !== null) {
+            const updatedAt = database.playback.positionUpdatedAt ?? Date.now();
+            database.playback.positionMs += Math.max(0, Date.now() - updatedAt);
+        }
+        database.playback.positionUpdatedAt = Date.now();
         database.playback.paused = true;
         return delay(database.playback, 120);
     },
@@ -1331,8 +1345,21 @@ export const mockApi = {
         if (database.playback.mode !== 'plex') {
             return fail(409, 'not_plex', 'Only Plex playback can be paused.');
         }
+        database.playback.positionUpdatedAt = Date.now();
         database.playback.paused = false;
         return delay(database.playback, 120);
+    },
+
+    seekPlayback: (seconds: number) => {
+        if (database.playback.mode !== 'plex') {
+            return fail(409, 'not_plex', 'Only Plex playback can be seeked.');
+        }
+        const duration = database.playback.durationMs ?? 0;
+        const max = duration > 0 ? Math.max(0, duration - 1000) : seconds * 1000;
+        database.playback.positionMs = Math.max(0, Math.min(seconds * 1000, max));
+        database.playback.positionUpdatedAt = Date.now();
+        database.playback.paused = false;
+        return delay(database.playback, 180);
     },
 
     skipPlayback: () => {
@@ -1634,6 +1661,9 @@ export const mockApi = {
             voiceChannelId: input.voiceChannelId,
             voiceChannelName: voiceName,
             startedAt: Date.now(),
+            positionMs: null,
+            durationMs: null,
+            positionUpdatedAt: null,
             viewers: 1,
             paused: false,
             queueItemId: null,

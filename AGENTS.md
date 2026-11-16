@@ -160,7 +160,7 @@ iptv | plex -> idle on stop, natural end, or queue end
 - Real playback is exclusive. `isBusy()` covers IPTV and Plex only.
 - The placeholder uses a generated 6-second MP4 loop from `assets/plex-placeholder.png`. The FFmpeg pipeline loops it with `-stream_loop -1`.
 - The spectator monitor applies to IPTV and Plex playback, not the placeholder.
-- Plex pause freezes the Discord stream without ending it: the voice connection and Plex session stay open, and FFmpeg is suspended with SIGSTOP. Resume continues the same stream. Stop and skip stop the transcode.
+- Plex pause freezes the Discord stream without ending it: the voice connection and Plex session stay open, and FFmpeg is suspended with SIGSTOP. Resume continues the same stream. Seek restarts the transcode at the chosen offset. Stop and skip stop the transcode.
 - The queue is persisted in SQLite and managed only in the WebUI.
 
 ## Plex

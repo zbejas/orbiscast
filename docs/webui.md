@@ -76,6 +76,7 @@ Mutations check the `Origin` header. Same-origin requests pass. In non-productio
 - Confirmation dialogs use native `<dialog>` with `showModal()`. There is no manual focus trap and no `role="dialog"`.
 - Toasts use `popover="manual"` and remain until dismissed. Inline errors are used for forms.
 - The queue uses move up and move down buttons for keyboard access; drag is an enhancement.
+- The Plex progress bar is a seek control. Dragging it restarts the Plex transcode at the chosen offset through `POST /api/playback/seek`.
 - Every page has one `<h1>`, a skip link, landmarks, visible focus, and labeled controls.
 
 ## Gotchas and invariants

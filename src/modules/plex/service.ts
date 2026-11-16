@@ -64,6 +64,8 @@ interface CurrentPlayback {
     detail: PlexItemDetail;
     sessionId: string;
     url: string;
+    positionSeconds: number;
+    startedAt: number;
     subtitleStreamIndex: number | null;
     quality: PlexQuality;
     target: PlaybackTarget;
@@ -571,6 +573,17 @@ export class PlexService implements PlexPlaybackProvider {
         this.playback.endPlaceholderState();
     }
 
+    private currentPosition(current: CurrentPlayback): number {
+        if (this.paused) {
+            return current.positionSeconds;
+        }
+        return current.positionSeconds + Math.max(0, Date.now() - current.startedAt) / 1000;
+    }
+
+    private currentDuration(current: CurrentPlayback): number | null {
+        return current.queueItem.durationMs ?? current.detail.durationMs;
+    }
+
     async pause(): Promise<PlaybackResult> {
         const current = this.current;
         if (!current || this.paused) {
@@ -579,8 +592,12 @@ export class PlexService implements PlexPlaybackProvider {
         if (!pauseStreaming()) {
             return { ok: false, message: 'Plex playback is not active.' };
         }
+        const position = this.currentPosition(current);
+        current.positionSeconds = position;
+        current.startedAt = 0;
         this.paused = true;
         this.playback.setPlexPaused(true);
+        this.playback.setPlexProgress(Math.round(position * 1000), this.currentDuration(current));
         return { ok: true, message: 'Playback paused.' };
     }
 
@@ -592,9 +609,56 @@ export class PlexService implements PlexPlaybackProvider {
         if (!resumeStreaming()) {
             return { ok: false, message: 'Plex playback is not active.' };
         }
+        current.startedAt = Date.now();
         this.paused = false;
         this.playback.setPlexPaused(false);
+        this.playback.setPlexProgress(
+            Math.round(current.positionSeconds * 1000),
+            this.currentDuration(current)
+        );
         return { ok: true, message: 'Playback resumed.' };
+    }
+
+    async seek(seconds: number): Promise<PlaybackResult> {
+        const current = this.current;
+        if (!current) {
+            return { ok: false, message: 'Plex playback is not active.' };
+        }
+        const duration = current.queueItem.durationMs ?? current.detail.durationMs ?? 0;
+        const upper = duration > 0 ? Math.max(0, duration / 1000 - 1) : seconds;
+        const target = Math.max(0, Math.min(seconds, upper));
+
+        this.runToken++;
+        await stopStreaming();
+        await this.stopSession(current.sessionId);
+
+        const sessionId = createSessionId();
+        const proxyBase = await this.ensureProxy();
+        current.sessionId = sessionId;
+        current.url = buildTranscodeUrl({
+            baseUrl: proxyBase,
+            token: null,
+            clientIdentifier: this.settings.getPlexClientIdentifier(),
+            ratingKey: current.detail.ratingKey,
+            mediaIndex: 0,
+            partIndex: 0,
+            quality: current.quality,
+            subtitleStreamIndex: current.subtitleStreamIndex,
+            offsetSeconds: target,
+            sessionId,
+        });
+        current.positionSeconds = target;
+        current.startedAt = Date.now();
+        this.paused = false;
+        this.playback.setPlexPaused(false);
+        this.playback.setPlexProgress(
+            Math.round(target * 1000),
+            this.currentDuration(current)
+        );
+
+        const token = ++this.runToken;
+        void this.runCurrent(token);
+        return { ok: true, message: 'Playback seeked.' };
     }
 
     async skip(): Promise<PlaybackResult> {
@@ -632,11 +696,14 @@ export class PlexService implements PlexPlaybackProvider {
         const current = this.current;
         if (!current) return;
 
-        const result = await startStreaming({
-            xui_id: 0,
-            tvg_name: current.detail.title,
-            url: current.url,
-        });
+        const result = await startStreaming(
+            {
+                xui_id: 0,
+                tvg_name: current.detail.title,
+                url: current.url,
+            },
+            { inputOptions: ['-re'] }
+        );
         if (token !== this.runToken) {
             return;
         }
@@ -723,6 +790,8 @@ export class PlexService implements PlexPlaybackProvider {
             detail,
             sessionId,
             url,
+            positionSeconds: 0,
+            startedAt: Date.now(),
             subtitleStreamIndex,
             quality,
             target,
@@ -735,6 +804,7 @@ export class PlexService implements PlexPlaybackProvider {
             subtitle: detail.showTitle ?? null,
             posterUrl: this.proxyThumb(detail.ratingKey),
             queueItemId: queueItem.id,
+            durationMs: detail.durationMs,
         });
         this.emitQueue();
 

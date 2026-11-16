@@ -298,6 +298,36 @@ export function useResumePlayback() {
     });
 }
 
+export function useSeekPlayback() {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: (seconds: number) =>
+            USE_MOCK ? mockApi.seekPlayback(seconds) : api.playback.seek(seconds),
+        onMutate: async (seconds) => {
+            await client.cancelQueries({ queryKey: qk.playback });
+            const previous = client.getQueryData<PlaybackStateDto>(qk.playback);
+            if (previous) {
+                client.setQueryData<PlaybackStateDto>(qk.playback, {
+                    ...previous,
+                    positionMs: seconds * 1000,
+                    positionUpdatedAt: Date.now(),
+                    paused: false,
+                });
+            }
+            return { previous };
+        },
+        onError: (_error, _seconds, context) => {
+            if (context?.previous) {
+                client.setQueryData(qk.playback, context.previous);
+            }
+        },
+        onSuccess: (playback) => {
+            client.setQueryData(qk.playback, playback);
+            client.invalidateQueries({ queryKey: qk.plexQueue });
+        },
+    });
+}
+
 export function useSetChannelVisibility() {
     const client = useQueryClient();
     return useMutation({

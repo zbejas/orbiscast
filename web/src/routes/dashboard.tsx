@@ -24,7 +24,7 @@ import {
     ErrorState,
     PageHeader,
     Poster,
-    ProgressBar,
+    SeekBar,
     Skeleton,
     StatusPill,
     buttonStyles,
@@ -39,6 +39,7 @@ import {
     usePlexConfig,
     usePlexQueue,
     useResumePlayback,
+    useSeekPlayback,
     useSkipPlayback,
     useSources,
     useStopPlayback,
@@ -52,6 +53,7 @@ import {
     formatRelative,
     formatUptime,
 } from '@/lib/format';
+import { playbackPositionMs } from '@/lib/playback';
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'The request did not complete. Try again.';
@@ -111,6 +113,7 @@ function LivePlaybackCard() {
     const stop = useStopPlayback();
     const pause = usePausePlayback();
     const resume = useResumePlayback();
+    const seek = useSeekPlayback();
     const skip = useSkipPlayback();
     const toast = useToast();
     const now = useNow(1_000);
@@ -147,8 +150,8 @@ function LivePlaybackCard() {
     const queueItem: QueueItemDto | undefined = queue.data?.find(
         (item) => item.id === state.queueItemId
     );
-    const elapsed = state.startedAt ? now - state.startedAt : 0;
-    const duration = queueItem?.durationMs ?? 0;
+    const elapsed = playbackPositionMs(state, now);
+    const duration = state.durationMs ?? queueItem?.durationMs ?? 0;
     const shownElapsed = duration > 0 ? Math.min(elapsed, duration) : elapsed;
     const tone = state.mode === 'iptv' ? 'live' : state.mode === 'plex' ? 'plex' : 'neutral';
 
@@ -158,6 +161,18 @@ function LivePlaybackCard() {
             onError: (error) =>
                 toast({
                     title: 'Playback did not change',
+                    description: errorMessage(error),
+                    tone: 'error',
+                }),
+        });
+    };
+
+    const seekTo = (seconds: number) => {
+        seek.mutate(seconds, {
+            onSuccess: () => toast({ title: 'Playback seeked', tone: 'success' }),
+            onError: (error) =>
+                toast({
+                    title: 'Seek failed',
                     description: errorMessage(error),
                     tone: 'error',
                 }),
@@ -251,11 +266,12 @@ function LivePlaybackCard() {
 
                                 {state.mode === 'plex' && duration > 0 ? (
                                     <div className="mt-4 max-w-xl">
-                                        <ProgressBar
-                                            value={shownElapsed}
-                                            max={duration}
-                                            tone="plex"
-                                            label="Playback progress"
+                                        <SeekBar
+                                            positionMs={shownElapsed}
+                                            durationMs={duration}
+                                            onSeek={seekTo}
+                                            disabled={seek.isPending}
+                                            label="Seek playback"
                                         />
                                         <div className="mt-1.5 flex justify-between font-mono text-[11px] tabular-nums text-text-muted">
                                             <span>{formatElapsed(shownElapsed)}</span>

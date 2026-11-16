@@ -16,6 +16,7 @@ export {
 export type { StatusTone } from './feedback';
 export { Checkbox, Field, Input, Select, Switch, Textarea } from './form';
 export { Poster, ChannelMark } from './poster';
+export { SeekBar } from './seek-bar';
 export { Table, TableSkeleton } from './table';
 export type { TableColumn } from './table';
 export { Tabs } from './tabs';

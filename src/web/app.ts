@@ -631,6 +631,16 @@ export function createApp(services: AppServices) {
         res.json(await services.playback.resume());
     });
 
+    app.post('/api/playback/seek', async (req, res) => {
+        const input = z.object({ seconds: z.number().min(0).max(86_400) }).parse(req.body);
+        const result = await services.playback.seek(input.seconds);
+        if (!result.ok) {
+            res.status(409).json({ error: { code: 'seek_failed', message: result.message } });
+            return;
+        }
+        res.json(result);
+    });
+
     app.post('/api/playback/iptv', async (req, res) => {
         const input = iptvPlaybackSchema.parse(req.body);
         const channel = getChannelById(services.db, input.channelId);

@@ -113,7 +113,7 @@ Behavior details:
 - The placeholder leaves after the configured idle timeout (default 5 minutes), or after the configured grace period when the voice channel is empty (default 30 seconds).
 - Plex transcodes on the server. Quality presets are 720p 4 Mbps, 1080p 8 Mbps (default), 1080p 12 Mbps, and 4K 20 Mbps. The quality is chosen per play in the WebUI.
 - Subtitles are burned in. Auto picks the Plex default track, then a forced track, then the first track that Plex can burn. The WebUI dropdown lets you choose Off or a specific burnable track. Image subtitle tracks without a stream index cannot be burned and are shown as unavailable.
-- Pause freezes the Discord stream without ending it. The voice connection and Plex session stay open, so viewers stay connected to a still image. Resume continues the same stream. Stop and skip stop the transcode.
+- Pause freezes the Discord stream without ending it. The voice connection and Plex session stay open, so viewers stay connected to a still image. Resume continues the same stream. Seek restarts the transcode at the chosen offset, which can cause a short rebuffer. Stop and skip stop the transcode.
 - When the queue ends, OrbisCast stops playback and leaves the voice channel.
 - Thumbnails are proxied through the WebUI so the Plex token never reaches the browser.
 

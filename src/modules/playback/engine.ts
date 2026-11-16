@@ -44,6 +44,7 @@ export interface PlexPlaybackProvider {
     startPlaceholder(target: PlaybackTarget): Promise<PlaybackResult>;
     pause(): Promise<PlaybackResult>;
     resume(): Promise<PlaybackResult>;
+    seek(seconds: number): Promise<PlaybackResult>;
     skip(): Promise<PlaybackResult>;
     stop(): Promise<void>;
 }
@@ -60,6 +61,9 @@ export class PlaybackEngine {
     private subtitle: string | null = null;
     private posterUrl: string | null = null;
     private startedAt: number | null = null;
+    private positionMs: number | null = null;
+    private durationMs: number | null = null;
+    private positionUpdatedAt: number | null = null;
     private paused = false;
     private queueItemId: number | null = null;
     private runId = 0;
@@ -95,14 +99,36 @@ export class PlaybackEngine {
      *
      * @param input - Current item metadata
      */
-    beginPlexState(input: { title: string; subtitle: string | null; posterUrl: string | null; queueItemId: number }): void {
+    beginPlexState(input: {
+        title: string;
+        subtitle: string | null;
+        posterUrl: string | null;
+        queueItemId: number;
+        durationMs: number | null;
+    }): void {
         this.mode = 'plex';
         this.title = input.title;
         this.subtitle = input.subtitle;
         this.posterUrl = input.posterUrl;
         this.startedAt = Date.now();
+        this.positionMs = 0;
+        this.durationMs = input.durationMs;
+        this.positionUpdatedAt = this.startedAt;
         this.paused = false;
         this.queueItemId = input.queueItemId;
+        this.emit();
+    }
+
+    /**
+     * Updates the Plex playback position and duration.
+     *
+     * @param positionMs - Position at the time of the update
+     * @param durationMs - Item duration, or null when unknown
+     */
+    setPlexProgress(positionMs: number, durationMs: number | null): void {
+        this.positionMs = Math.max(0, positionMs);
+        this.durationMs = durationMs;
+        this.positionUpdatedAt = Date.now();
         this.emit();
     }
 
@@ -137,6 +163,9 @@ export class PlaybackEngine {
         this.subtitle = 'On demand';
         this.posterUrl = null;
         this.startedAt = Date.now();
+        this.positionMs = null;
+        this.durationMs = null;
+        this.positionUpdatedAt = null;
         this.paused = false;
         this.queueItemId = null;
         this.emit();
@@ -174,6 +203,9 @@ export class PlaybackEngine {
             voiceChannelId: voice?.channelId ?? null,
             voiceChannelName: voice?.channelName ?? null,
             startedAt: this.startedAt,
+            positionMs: this.positionMs,
+            durationMs: this.durationMs,
+            positionUpdatedAt: this.positionUpdatedAt,
             viewers: getViewerCount(),
             paused: this.paused,
             queueItemId: this.queueItemId,
@@ -314,6 +346,18 @@ export class PlaybackEngine {
         return result;
     }
 
+    /**
+     * Seeks Plex playback to an absolute offset.
+     *
+     * @param seconds - Target offset in seconds
+     */
+    async seek(seconds: number): Promise<PlaybackResult> {
+        if (this.mode !== 'plex' || !this.plex) {
+            return { ok: false, message: 'Only Plex playback can be seeked.' };
+        }
+        return this.plex.seek(seconds);
+    }
+
     private async runIptv(entry: ChannelEntry, run: number): Promise<void> {
         const result = await startStreaming(entry);
         if (run !== this.runId) {
@@ -335,6 +379,9 @@ export class PlaybackEngine {
         this.subtitle = null;
         this.posterUrl = null;
         this.startedAt = null;
+        this.positionMs = null;
+        this.durationMs = null;
+        this.positionUpdatedAt = null;
         this.paused = false;
         this.queueItemId = null;
     }

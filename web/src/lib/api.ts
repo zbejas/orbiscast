@@ -134,6 +134,13 @@ export const api = {
             await request<{ ok: boolean; message: string }>('/playback/resume', { method: 'POST' });
             return request<PlaybackStateDto>('/playback');
         },
+        seek: async (seconds: number) => {
+            await request<{ ok: boolean; message: string }>('/playback/seek', {
+                method: 'POST',
+                body: JSON.stringify({ seconds }),
+            });
+            return request<PlaybackStateDto>('/playback');
+        },
     },
 
     channels: {
