@@ -28,6 +28,7 @@ export abstract class BaseMediaStream extends Writable {
     private generation = 0;
     private pendingWrites = 0;
     private idleWaiters: Array<() => void> = [];
+    private paused = false;
 
     constructor() {
         super({ objectMode: true, highWaterMark: 0 });
@@ -46,6 +47,25 @@ export abstract class BaseMediaStream extends Writable {
         this.ptsValue = undefined;
         this.startTime = undefined;
         this.startPts = undefined;
+    }
+
+    /**
+     * Marks the stream as paused so the sync loop stops spinning. Actual
+     * pacing is rebased when {@link resumePacing} runs.
+     */
+    pausePacing(): void {
+        this.paused = true;
+    }
+
+    /**
+     * Rebases pacing after a pause. Media timestamps may jump while FFmpeg is
+     * suspended, so the next frame starts a fresh wall-clock window instead of
+     * trying to catch up and playing audio ahead of video.
+     */
+    resumePacing(): void {
+        if (!this.paused) return;
+        this.paused = false;
+        this.resetTiming();
     }
 
     /**
@@ -144,6 +164,7 @@ export abstract class BaseMediaStream extends Writable {
                     await sleep(frametime);
                 } while (
                     this.syncEnabled &&
+                    !this.paused &&
                     this.isAhead &&
                     generation === this.generation
                 );

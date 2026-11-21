@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getLogger } from '../../utils/logger';
+import { redactSecrets } from '../../utils/redact';
 import { cacheFile, getCachedFile } from '../../utils/cache';
 
 const logger = getLogger();
@@ -74,9 +75,9 @@ export async function fetchWithRetry(url: string, cacheFileName: string): Promis
                 axios.isAxiosError(error) &&
                 (error.code === 'ECONNABORTED' || (error.response?.status ?? 0) >= 500)
             ) {
-                logger.warn(`Connection error on attempt ${attempt}: ${error.message}`);
+                logger.warn(`Connection error on attempt ${attempt}: ${redactSecrets(error.message)}`);
             } else {
-                logger.error(`Request error on attempt ${attempt}: ${(error as Error).message}`);
+                logger.error(`Request error on attempt ${attempt}: ${redactSecrets((error as Error).message)}`);
             }
 
             if (attempt < maxRetries) {

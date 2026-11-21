@@ -27,3 +27,21 @@ export function findChannelBySanitizedId(channels: ChannelEntry[], sanitizedId: 
         channel.tvg_name !== undefined && sanitizeChannelId(channel.tvg_name) === sanitizedId
     );
 }
+
+/**
+ * Formats a channel label as "Channel | Category" within Discord's
+ * 100-character limit, shortening the channel name first so the category stays
+ * readable. Same-named channels from different categories remain distinct.
+ *
+ * @param name - Channel name
+ * @param category - Optional category or group title
+ * @returns Label safe for a Discord option or button
+ */
+export function formatChannelLabel(name: string, category?: string | null): string {
+    const group = category?.trim();
+    if (!group) return name.slice(0, 100);
+    const suffix = ` | ${group}`.slice(0, 50);
+    const room = Math.max(1, 100 - suffix.length);
+    const shown = name.length > room ? `${name.slice(0, room - 1)}…` : name;
+    return `${shown}${suffix}`;
+}

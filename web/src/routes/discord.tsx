@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import {
+    Check,
     ChevronDown,
+    Copy,
     Eye,
     EyeOff,
     MessagesSquare,
+    Plus,
     RefreshCw,
     ShieldCheck,
     TriangleExclamationPoint,
@@ -22,11 +25,13 @@ import {
     PageHeader,
     Skeleton,
     StatusPill,
+    buttonStyles,
     useToast,
 } from '@/components';
 import {
     useDiscordStatus,
     useDiscordTokens,
+    useJoinStreamer,
     useReconnectDiscord,
     useSaveDiscordTokens,
     useSetGuildRoles,
@@ -250,12 +255,229 @@ function ConnectionCard({ status }: { status: DiscordStatusDto }) {
     );
 }
 
+function InviteCard({
+    status,
+    retrying,
+    onRetry,
+}: {
+    status: DiscordStatusDto;
+    retrying: boolean;
+    onRetry: (guildId?: string) => void;
+}) {
+    const toast = useToast();
+    const [copied, setCopied] = useState<string | null>(null);
+    const invite = status.botInviteUrl;
+    const joined = new Set(status.streamerGuildIds);
+    const missing = status.guilds.filter((guild) => !joined.has(guild.id));
+    const join = status.streamerJoin;
+    const allJoined = status.guilds.length > 0 && missing.length === 0;
+
+    const copy = async (value: string, key: string) => {
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(value);
+            } else {
+                // Clipboard access needs a secure context. Plain-HTTP LAN
+                // installs fall back to the legacy copy path.
+                const area = document.createElement('textarea');
+                area.value = value;
+                area.style.position = 'fixed';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(area);
+                if (!ok) throw new Error('Copy was rejected');
+            }
+            setCopied(key);
+            window.setTimeout(() => setCopied(null), 2_000);
+            toast({ title: 'Link copied', tone: 'success' });
+        } catch {
+            toast({
+                title: 'Could not copy the link',
+                description: 'Open the link and copy it from the address bar.',
+                tone: 'error',
+            });
+        }
+    };
+
+    const pillTone = allJoined
+        ? 'live'
+        : join.state === 'error'
+          ? 'danger'
+          : status.guilds.length === 0 || join.state === 'joining'
+            ? 'warn'
+            : 'neutral';
+
+    const pillLabel = allJoined
+        ? 'Ready'
+        : status.guilds.length === 0
+          ? 'No servers'
+          : join.state === 'joining'
+            ? 'Adding streamer'
+            : missing.length === status.guilds.length
+              ? 'Streamer missing'
+              : 'Partially ready';
+
+    return (
+        <section id="servers" className="rounded-xl border border-border bg-surface">
+            <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border px-4 py-3">
+                <div>
+                    <h2 className="text-sm font-semibold text-text">Servers</h2>
+                    <p className="mt-0.5 text-[11px] text-text-muted">
+                        Add the bot once. It invites the streaming account to the same servers with your saved
+                        token.
+                    </p>
+                </div>
+                <StatusPill tone={pillTone} pulse={join.state === 'joining'}>
+                    {pillLabel}
+                </StatusPill>
+            </div>
+
+            <div className="space-y-4 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                    {invite ? (
+                        <a
+                            href={invite}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={buttonStyles({ variant: 'primary' })}
+                        >
+                            <Plus size={14} aria-hidden="true" />
+                            Add bot to a server
+                        </a>
+                    ) : (
+                        <p className="text-xs text-text-muted">
+                            Save both tokens and reconnect to generate the bot invite link.
+                        </p>
+                    )}
+                    {invite ? (
+                        <Button
+                            variant="secondary"
+                            icon={
+                                copied === 'invite' ? (
+                                    <Check size={14} aria-hidden="true" />
+                                ) : (
+                                    <Copy size={14} aria-hidden="true" />
+                                )
+                            }
+                            onClick={() => void copy(invite, 'invite')}
+                        >
+                            {copied === 'invite' ? 'Copied' : 'Copy invite link'}
+                        </Button>
+                    ) : null}
+                </div>
+
+                {status.guilds.length === 0 ? (
+                    <ol className="space-y-2 text-xs leading-relaxed text-text-muted">
+                        {[
+                            'Pick your server and approve the requested permissions.',
+                            'The bot creates a one-time invite and the streaming account accepts it with your saved token.',
+                            'Join a voice channel and run /stream.',
+                        ].map((text, index) => (
+                            <li key={text} className="flex gap-2">
+                                <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-raised text-[10px] font-medium text-text">
+                                    {index + 1}
+                                </span>
+                                <span>{text}</span>
+                            </li>
+                        ))}
+                    </ol>
+                ) : (
+                    <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                        {status.guilds.map((guild) => {
+                            const inGuild = joined.has(guild.id);
+                            return (
+                                <li key={guild.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+                                    <ChannelMark name={guild.name} size="sm" />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-xs font-medium text-text">{guild.name}</p>
+                                        <p className="truncate text-[10px] text-text-faint">
+                                            {inGuild
+                                                ? 'The streaming account can join voice here.'
+                                                : 'The streaming account is not in this server yet.'}
+                                        </p>
+                                    </div>
+                                    <StatusPill tone={inGuild ? 'live' : 'warn'}>
+                                        {inGuild ? 'Streamer joined' : 'Streamer missing'}
+                                    </StatusPill>
+                                    {!inGuild ? (
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            loading={retrying && join.guildId === guild.id}
+                                            onClick={() => onRetry(guild.id)}
+                                        >
+                                            Add streamer
+                                        </Button>
+                                    ) : null}
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+
+                {join.state === 'joining' ? (
+                    <Notice tone="info" title="Adding the streaming account">
+                        {join.guildName ? `Working on ${join.guildName}. ` : ''}
+                        This usually takes a few seconds. The page updates on its own.
+                    </Notice>
+                ) : null}
+
+                {join.state === 'error' && join.error ? (
+                    <Notice tone="danger" title="The streaming account was not added">
+                        {join.error}
+                    </Notice>
+                ) : null}
+
+                {status.guilds.length > 0 &&
+                !allJoined &&
+                join.state !== 'joining' &&
+                join.state !== 'error' ? (
+                    <Notice tone="warn" title="The streamer is missing in some servers">
+                        Use <span className="font-medium text-text">Add streamer</span> to retry, or leave the
+                        servers you do not stream in.
+                    </Notice>
+                ) : null}
+
+                {join.fallbackInviteUrl ? (
+                    <div className="rounded-lg border border-border bg-raised px-3 py-2.5">
+                        <p className="text-[11px] font-medium text-text">Fallback invite</p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-text-muted">
+                            If Discord blocks the automatic join, open this link while logged in as the streaming
+                            account. The page updates when it joins.
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <a
+                                href={join.fallbackInviteUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="min-w-0 flex-1 truncate text-[11px] text-blurple-text underline decoration-blurple/40 underline-offset-2"
+                            >
+                                {join.fallbackInviteUrl}
+                            </a>
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => void copy(join.fallbackInviteUrl ?? '', 'fallback')}
+                            >
+                                {copied === 'fallback' ? 'Copied' : 'Copy'}
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
+            </div>
+        </section>
+    );
+}
+
 export default function DiscordPage() {
     const status = useDiscordStatus();
     const tokens = useDiscordTokens();
     const saveTokens = useSaveDiscordTokens();
     const validate = useValidateDiscord();
     const reconnect = useReconnectDiscord();
+    const joinStreamer = useJoinStreamer();
     const setRoles = useSetGuildRoles();
     const toast = useToast();
 
@@ -320,6 +542,26 @@ export default function DiscordPage() {
         });
     };
 
+    const addStreamer = (guildId?: string) => {
+        joinStreamer.mutate(guildId, {
+            onSuccess: (status) => {
+                if (status.streamerJoin.state === 'error') {
+                    toast({
+                        title: 'Streamer was not added',
+                        description: status.streamerJoin.error ?? 'Use the fallback invite link.',
+                        tone: 'error',
+                    });
+                    return;
+                }
+                toast({
+                    title: guildId ? 'Adding the streamer' : 'Adding the streamer to every server',
+                    tone: 'info',
+                });
+            },
+            onError: reportError,
+        });
+    };
+
     return (
         <>
             <PageHeader
@@ -366,7 +608,15 @@ export default function DiscordPage() {
                     <ConnectionCard status={status.data} />
                 ) : null}
 
-                <section className="rounded-xl border border-border bg-surface">
+                {status.data ? (
+                    <InviteCard
+                        status={status.data}
+                        retrying={joinStreamer.isPending}
+                        onRetry={addStreamer}
+                    />
+                ) : null}
+
+                <section id="tokens" className="rounded-xl border border-border bg-surface">
                     <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border px-4 py-3">
                         <div>
                             <h2 className="text-sm font-semibold text-text">Tokens</h2>
@@ -454,7 +704,20 @@ export default function DiscordPage() {
                         <EmptyState
                             icon={MessagesSquare}
                             title="The bot is not in any servers"
-                            description="Invite the bot to a Discord server and give it permission to join voice channels."
+                            description="Add the bot to a server above. It will add the streaming account to the same server automatically."
+                            action={
+                                status.data?.botInviteUrl ? (
+                                    <a
+                                        href={status.data.botInviteUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className={buttonStyles({ variant: 'primary', size: 'sm' })}
+                                    >
+                                        <Plus size={14} aria-hidden="true" />
+                                        Add bot to a server
+                                    </a>
+                                ) : undefined
+                            }
                         />
                     ) : (
                         guilds.map((guild, index) => (

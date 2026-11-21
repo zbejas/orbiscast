@@ -116,6 +116,13 @@ export interface PlexStream {
     selected: boolean;
 }
 
+/** A marker on a Plex item, for example an intro or credits marker. */
+export interface PlexMarker {
+    type: 'intro' | 'credits' | 'unknown';
+    startMs: number | null;
+    endMs: number | null;
+}
+
 /** A movie, show, season, or episode with its full media tree. */
 export interface PlexItemDetail extends PlexItem {
     librarySectionTitle: string | null;
@@ -130,6 +137,12 @@ export interface PlexItemDetail extends PlexItem {
     media: PlexMedia[];
     /** All streams across every media part, in Plex order. */
     streams: PlexStream[];
+    /** Show rating key for an episode or season. */
+    showRatingKey: string | null;
+    /** Season rating key for an episode. */
+    seasonRatingKey: string | null;
+    /** Intro and credits markers when requested with includeMarkers. */
+    markers: PlexMarker[];
 }
 
 /** A season belonging to a show. */
@@ -265,9 +278,16 @@ export interface PlexRawItem {
     rating?: number | string;
     originallyAvailableAt?: string;
     Media?: PlexRawMedia[];
+    Marker?: PlexRawMarker[];
     Genre?: PlexRawTag[];
     Director?: PlexRawTag[];
     Writer?: PlexRawTag[];
+}
+
+export interface PlexRawMarker {
+    type?: string;
+    startTimeOffset?: number | string;
+    endTimeOffset?: number | string;
 }
 
 export interface PlexRawLibrary {

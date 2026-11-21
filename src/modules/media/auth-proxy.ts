@@ -6,22 +6,29 @@ import { redactSecrets } from '../../utils/redact';
 const logger = getLogger();
 
 /**
- * A loopback HTTP proxy that injects the Plex client headers into every
- * request. FFmpeg cannot send custom headers reliably through the streaming
- * library, so playback goes through this proxy instead.
+ * A loopback HTTP proxy that injects provider headers into every request.
  *
- * The proxy listens on 127.0.0.1 only. It forwards the path and query to the
- * configured Plex server and adds the token header, so the token never appears
- * in the URL passed to FFmpeg.
+ * FFmpeg does not receive provider credentials directly. The URL handed to
+ * FFmpeg points at this proxy, and the proxy adds the token header, so tokens
+ * stay out of process arguments and logs. It listens on 127.0.0.1 only.
  */
-export class PlexProxy {
+export class AuthProxy {
     private server: Server | null = null;
     private localBase: string | null = null;
+    private readonly base: URL;
+    private readonly baseOrigin: string;
+    private readonly basePath: string;
 
     constructor(
         private readonly baseUrl: string,
-        private readonly headers: Record<string, string>
-    ) {}
+        private readonly headers: Record<string, string>,
+        private readonly label = 'Media',
+        private readonly options: { stripSegmentParams?: string[] } = {}
+    ) {
+        this.base = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
+        this.baseOrigin = this.base.origin;
+        this.basePath = this.base.pathname.replace(/\/$/, '');
+    }
 
     /**
      * Starts the proxy on a random loopback port.
@@ -44,10 +51,10 @@ export class PlexProxy {
 
         const address = this.server.address();
         if (!address || typeof address === 'string') {
-            throw new Error('Could not determine Plex proxy port');
+            throw new Error(`Could not determine ${this.label} proxy port`);
         }
         this.localBase = `http://127.0.0.1:${address.port}`;
-        logger.debug(`Plex proxy listening on ${this.localBase}`);
+        logger.debug(`${this.label} proxy listening on ${this.localBase}`);
         return this.localBase;
     }
 
@@ -63,10 +70,15 @@ export class PlexProxy {
     }
 
     private handle(path: string, incoming: IncomingHttpHeaders, res: ServerResponse): void {
-        const target = new URL(path, this.baseUrl);
-        if (target.origin !== new URL(this.baseUrl).origin) {
+        const target = new URL(path.replace(/^\/+/, ''), this.base);
+        if (!target.pathname.toLowerCase().endsWith('.m3u8')) {
+            for (const param of this.options.stripSegmentParams ?? []) {
+                target.searchParams.delete(param);
+            }
+        }
+        if (target.origin !== this.baseOrigin) {
             res.writeHead(502, { 'Content-Type': 'text/plain' });
-            res.end('Plex proxy rejected a cross-origin request');
+            res.end(`${this.label} proxy rejected a cross-origin request`);
             return;
         }
         const isHttps = target.protocol === 'https:';
@@ -98,11 +110,15 @@ export class PlexProxy {
                 if (locationValue && this.localBase) {
                     try {
                         const parsed = new URL(locationValue, target);
-                        if (parsed.origin === new URL(this.baseUrl).origin) {
-                            responseHeaders.location = `${this.localBase}${parsed.pathname}${parsed.search}`;
+                        if (parsed.origin === this.baseOrigin) {
+                            const suffix =
+                                this.basePath && parsed.pathname.startsWith(this.basePath)
+                                    ? parsed.pathname.slice(this.basePath.length)
+                                    : parsed.pathname;
+                            responseHeaders.location = `${this.localBase}${suffix}${parsed.search}`;
                         }
                     } catch {
-                        // Keep the original header when Plex sends an unparsable location.
+                        // Keep the original header when the provider sends an unparsable location.
                     }
                 }
 
@@ -119,7 +135,8 @@ export class PlexProxy {
                     response.on('end', () => {
                         const text = Buffer.concat(chunks)
                             .toString('utf8')
-                            .replaceAll(new URL(this.baseUrl).origin, this.localBase!);
+                            .replaceAll(this.baseUrl.replace(/\/+$/, ''), this.localBase!)
+                            .replaceAll(this.baseOrigin, this.localBase!);
                         res.end(text);
                     });
                     return;
@@ -129,11 +146,11 @@ export class PlexProxy {
         );
 
         upstream.on('error', error => {
-            logger.warn(`Plex proxy request failed: ${redactSecrets(String(error))}`);
+            logger.warn(`${this.label} proxy request failed: ${redactSecrets(String(error))}`);
             if (!res.headersSent) {
                 res.writeHead(502, { 'Content-Type': 'text/plain' });
             }
-            res.end('Plex proxy error');
+            res.end(`${this.label} proxy error`);
         });
         upstream.end();
     }

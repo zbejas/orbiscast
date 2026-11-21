@@ -7,7 +7,7 @@ Subsystem documentation for OrbisCast. The root [README](../README.md) is the us
 | Folder | Covers |
 |---|---|
 | [webui.md](webui.md) | Express API, React WebUI, auth, SSE, and browser testing |
-| [plex.md](plex.md) | Plex client, transcode proxy, subtitles, placeholder, and queue |
+| [media.md](media.md) | Plex and Jellyfin sources, providers, transcode proxy, subtitles, placeholder, queue, and resume history |
 | [iptv.md](iptv.md) | Paired sources, channel sync, visibility, EPG, and refresh |
 | [database.md](database.md) | SQLite schema, migrations, settings rows, and auth tables |
 | [operations.md](operations.md) | Data directory, keys, admin CLI, Docker, logs, and recovery |
@@ -17,9 +17,9 @@ Subsystem documentation for OrbisCast. The root [README](../README.md) is the us
 | If you are | Read in order |
 |---|---|
 | New to the project | [README](../README.md) -> [AGENTS.md](../AGENTS.md) -> webui.md |
-| Debugging playback | [plex.md](plex.md) -> [operations.md](operations.md) |
+| Debugging playback | [media.md](media.md) -> [operations.md](operations.md) |
 | Debugging IPTV or the guide | [iptv.md](iptv.md) -> [database.md](database.md) |
-| Changing the schema | [database.md](database.md) -> [iptv.md](iptv.md) -> [plex.md](plex.md) |
+| Changing the schema | [database.md](database.md) -> [iptv.md](iptv.md) -> [media.md](media.md) |
 | Deploying or recovering | [operations.md](operations.md) |
 
 ## Writing docs

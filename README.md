@@ -9,12 +9,12 @@
 [![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/zbejas/orbiscast?sort=date)](https://hub.docker.com/r/zbejas/orbiscast)
 [![Docker Pulls](https://img.shields.io/docker/pulls/zbejas/orbiscast)](https://hub.docker.com/r/zbejas/orbiscast)
 
-OrbisCast streams IPTV channels and on-demand Plex media into Discord voice channels. A browser-based WebUI manages the bot, IPTV sources, channel visibility, the EPG, Plex, Discord permissions, streaming settings, and logs. Configuration lives in SQLite, not in environment variables.
+OrbisCast streams IPTV channels and on-demand Plex or Jellyfin media into Discord voice channels. A browser-based WebUI manages the bot, IPTV sources, channel visibility, the EPG, media sources, Discord permissions, streaming settings, and logs. Configuration lives in SQLite, not in environment variables.
 
-The Plex integration adds a virtual on-demand channel. When selected in Discord it joins the voice channel and loops a branded placeholder. Playback starts only when someone picks a movie or episode in the WebUI. The queue is managed in the WebUI, with play, pause, resume, stop, skip, reorder, shuffle, and clear.
+Each media source adds a virtual on-demand channel. When selected in Discord it joins the voice channel and loops a branded placeholder. Playback starts only when someone picks a movie or episode in the WebUI. One queue can mix Plex and Jellyfin items, with play, pause, resume, stop, skip, reorder, shuffle, and clear. OrbisCast saves playback progress, so the Dashboard and Media page offer Continue watching with Resume from the last position. When an episode is finished, it recommends the next episode of that series.
 
 > [!CAUTION]
-> Self-bots violate Discord's Terms of Service and can get an account banned. Use a secondary account and accept the risk. Never commit real tokens. The WebUI encrypts Discord and Plex tokens at rest, but the host and the `data/` volume still need protection.
+> Self-bots violate Discord's Terms of Service and can get an account banned. Use a secondary account and accept the risk. Never commit real tokens. The WebUI encrypts Discord and media server tokens at rest, but the host and the `data/` volume still need protection.
 
 > [!NOTE]
 > This project streams content you are allowed to access. You are responsible for complying with copyright law and your IPTV or Plex provider's terms.
@@ -27,7 +27,7 @@ The Plex integration adds a virtual on-demand channel. When selected in Discord 
 | FFmpeg on `PATH` | Must include `libzmq` for the `azmq` audio filter used by the streaming library. Debian's `ffmpeg` package includes it. Static builds bundled with `node-av` do not. |
 | A Discord bot token and a Discord user token | The bot exposes slash commands. The user token performs the actual voice stream. |
 | An IPTV M3U playlist | One or more sources. XMLTV is optional. |
-| A Plex server and token | Optional. Required only for Plex on-demand playback. |
+| A Plex server and token, or a Jellyfin server and API key | Optional. Required only for on-demand playback from that source. |
 | A recent glibc for Docker | `node-datachannel` needs GLIBC 2.38+. The provided image uses `node:22-trixie-slim`. |
 
 ## Quick start with Docker
@@ -40,10 +40,10 @@ docker compose up -d
 
 Open `http://localhost:3000` or `http://<host-ip>:3000` and follow the setup checklist:
 
-1. Save your Discord bot token and user token. The bot and streamer status turn green when both log in.
+1. Save your Discord bot token and user token, then add the bot to your server from the Discord page. The bot creates a one-time invite and the streaming account joins automatically. The connection cards turn green when both clients log in.
 2. Add an IPTV source. Paste the M3U URL and, optionally, an XMLTV URL.
 3. Pick which channels are visible. New sources start with every channel hidden.
-4. Configure Plex if you want on-demand playback. Enter the server URL and token, then enable the libraries you want to browse.
+4. Add a Plex or Jellyfin source on the Media sources page if you want on-demand playback. Enter the server URL and token or API key, then enable the libraries you want to browse.
 5. Optionally enable WebUI auth in Settings.
 
 All data lives in `./data` on the host, mounted at `/app/data` in the container. The SQLite database, encryption keys, logs, cache, and generated placeholder clip live there.
@@ -55,7 +55,7 @@ Older versions read `.env`. The new version imports that file once and then igno
 - Docker: place the old `.env` at `./data/.env` before the first start. Remove it after the import is logged.
 - Manual: keep `.env` in the project root for the first start, then delete it.
 
-The import maps `PLAYLIST`, `XMLTV`, `REFRESH_IPTV`, the Discord tokens, streaming settings, `DEBUG`, and `TZ`. `GUILD` is ignored because commands are registered in every guild the bot joins. `RAM_CACHE`, `CACHE_DIR`, and `OPENVPN_*` are ignored. The Discord and Plex tokens are encrypted immediately.
+The import maps `PLAYLIST`, `XMLTV`, `REFRESH_IPTV`, the Discord tokens, streaming settings, `DEBUG`, and `TZ`. `GUILD` is ignored because commands are registered in every guild the bot joins. `RAM_CACHE`, `CACHE_DIR`, and `OPENVPN_*` are ignored. The Discord and media server tokens are encrypted immediately.
 
 ## Manual install
 
@@ -83,39 +83,41 @@ Commands are registered in every guild the bot joins. The per-guild role allowli
 
 | Command | Description |
 |---|---|
-| `/stream <channel>` | Stream a visible IPTV channel, or select the Plex on-demand channel to show its placeholder. |
+| `/stream <channel>` | Stream a visible IPTV channel, or select a media on-demand channel to show its placeholder. |
 | `/stop` | Stop the current stream. |
-| `/channels [page]` | List visible channels and the Plex channel. |
+| `/channels [page]` | List visible channels and every media on-demand channel. |
 | `/programme <channel>` | Show the programme guide for a channel. |
 | `/refresh <type>` | Refresh every IPTV source. |
 
-The Plex channel is not a separate command. It appears in `/channels` and in the `/stream` autocomplete using the name set in Plex settings.
+Media channels are not separate commands. Each appears in `/channels` and in the `/stream` autocomplete using the channel name saved on its source.
 
 ## IPTV sources and channels
 
 - A source pairs one M3U playlist with an optional XMLTV guide and refreshes both together.
 - New sources start with every channel hidden. Use the Channels page to search, filter by group, and select what should appear in Discord.
 - Visibility survives source refreshes. A failed refresh keeps the last good channels and guide.
-- The Guide page renders a scrollable timeline for visible channels. The timezone is configured in Settings.
+- The Guide tab on the IPTV page renders a scrollable timeline for visible channels. The timezone is configured in Settings.
 
-## Plex on demand
+## Media on demand
 
-1. Set the Plex server URL and token in the Plex page or Settings. OrbisCast validates the connection and lists libraries.
-2. Enable the libraries you want to browse.
-3. Select the Plex channel in Discord. The streamer joins your voice channel and loops the placeholder.
-4. In the WebUI Plex page, browse or search, choose a movie or episode, set the quality and subtitle track, and add it to the queue.
-5. Press Play and choose the guild and voice channel. The placeholder is replaced by the Plex stream.
+1. Open the Media sources page from the Media tab and add a source. Choose Plex or Jellyfin, enter the server URL, and paste a Plex token or Jellyfin API key.
+2. OrbisCast validates the connection and lists libraries. Enable the movie and TV show libraries you want to browse.
+3. Select the source's virtual channel in Discord. The streamer joins your voice channel and loops the placeholder.
+4. In the WebUI Media page, browse or search, choose a movie or episode, set the quality and subtitle track, and add it to the queue.
+5. Press Play and choose the guild and voice channel. The placeholder is replaced by the selected source's stream.
 
 Behavior details:
 
-- One self-bot means one stream. Starting a new real playback while IPTV or Plex is active is rejected. Stop the current stream first.
+- One self-bot means one stream. Starting a new real playback while IPTV or media is active is rejected. Stop the current stream first.
 - The placeholder is an idle state, not a stream. Starting real playback replaces it.
 - The placeholder leaves after the configured idle timeout (default 5 minutes), or after the configured grace period when the voice channel is empty (default 30 seconds).
-- Plex transcodes on the server. Quality presets are 720p 4 Mbps, 1080p 8 Mbps (default), 1080p 12 Mbps, and 4K 20 Mbps. The quality is chosen per play in the WebUI.
-- Subtitles are burned in. Auto picks the Plex default track, then a forced track, then the first track that Plex can burn. The WebUI dropdown lets you choose Off or a specific burnable track. Image subtitle tracks without a stream index cannot be burned and are shown as unavailable.
-- Pause freezes the Discord stream without ending it. The voice connection and Plex session stay open, so viewers stay connected to a still image. Resume continues the same stream. Seek replaces the Plex transcode at the chosen offset without recreating the Discord stream, so viewers stay connected through a short rebuffer. Stop and skip stop the transcode.
+- Plex and Jellyfin transcode on the server. Quality presets are 720p 4 Mbps, 1080p 8 Mbps (default), 1080p 12 Mbps, and 4K 20 Mbps. The quality is chosen per play in the WebUI.
+- Subtitles are burned in. Auto picks the default track, then a forced track, then the first track the server can burn. You can switch the track from the queue panel while playback continues. Image subtitle tracks work when the server supports them.
+- Pause shows Discord's paused state and suspends the encoder. Resume continues the same stream. Seek replaces the provider transcode at the chosen offset without recreating the Discord stream.
+- Stopping removes the current item from the queue and saves its position. Stopping or skipping at 85 percent or later marks the item watched.
+- The queue panel has Autoplay next episode, which continues a series when an episode ends, and Skip intros, which jumps past Plex intro markers.
 - When the queue ends, OrbisCast stops playback and leaves the voice channel.
-- Thumbnails are proxied through the WebUI so the Plex token never reaches the browser.
+- Thumbnails are proxied through the WebUI so provider tokens never reach the browser.
 
 ## Configuration
 
@@ -135,7 +137,7 @@ data/
   cache/
 ```
 
-`data/keys.json` is required to decrypt saved provider tokens. Back it up with the database. Losing it means re-entering the Discord and Plex tokens. Treat the whole directory as secret.
+`data/keys.json` is required to decrypt saved provider tokens. Back it up with the database. Losing it means re-entering the Discord and media server tokens. Treat the whole directory as secret.
 
 ### WebUI auth
 
@@ -157,8 +159,8 @@ Pull the new image or code, keep the `data/` volume, and restart. Database migra
 | The bot is online but the streamer is not | The user token is invalid or the account is logged out. Generate a fresh token and save it in Discord settings. |
 | The bot joins voice but no video | FFmpeg is missing `libzmq`, or another process on the same host uses port `42069`. Only one OrbisCast stream can run on a host. In Docker, do not expose `42069`. |
 | The streamer cannot join the voice channel | The self-bot account must be a member of the guild and have permission to join that voice channel. |
-| A Plex item fails with a 400 | The Plex server rejected the transcode. Check that the Plex transcoder is enabled, the file is readable, and the chosen subtitle track is burnable. Try another quality or turn subtitles off. |
-| Plex metadata works but playback fails | Plex transcoding can fail on unsupported files or under load. Check the Plex server logs and try a lower quality. |
+| A media item fails with a 400 | The Plex or Jellyfin server rejected the transcode. Check that server transcoding is enabled, the file is readable, and the chosen subtitle track is burnable. Try another quality or turn subtitles off. |
+| Metadata works but playback fails | Provider transcoding can fail on unsupported files or under load. Check the Plex or Jellyfin logs and try a lower quality. |
 | No channels in Discord | Channels are hidden by default. Open Channels and select the ones you want. |
 | Source refresh fails | Check the source URL and credentials. The last good channels and guide stay available. |
 | Auth lockout | Use the admin CLI commands above. |

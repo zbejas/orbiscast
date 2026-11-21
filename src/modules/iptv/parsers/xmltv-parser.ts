@@ -274,9 +274,16 @@ function logProgrammeStatistics(programmes: ProgrammeEntry[]): void {
 
     // Check for date range in the data
     if (programmes.length > 0) {
-        const dates = programmes.map(p => new Date(p.start));
-        const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
-        const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
+        // Loop instead of Math.min(...array): spreading a large guide can
+        // overflow the call stack and discard the whole refresh.
+        let min = Infinity;
+        let max = -Infinity;
+        for (const programme of programmes) {
+            if (programme.start_timestamp < min) min = programme.start_timestamp;
+            if (programme.start_timestamp > max) max = programme.start_timestamp;
+        }
+        const minDate = new Date(min * 1000);
+        const maxDate = new Date(max * 1000);
         logger.info(`Programme date range: ${minDate.toISOString()} to ${maxDate.toISOString()}`);
     }
 }

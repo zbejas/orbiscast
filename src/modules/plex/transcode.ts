@@ -40,13 +40,23 @@ export const QUALITY_PRESETS = {
 /** Quality used when the caller does not specify one. */
 export const DEFAULT_QUALITY: PlexQuality = '1080p-8';
 
+/**
+ * Client profile that tells Plex to produce a raw Matroska transcode stream.
+ *
+ * Plex's HLS packager can advertise `.ts` segments while producing Matroska
+ * chunks, which leaves FFmpeg waiting on 404s. The raw endpoint is stable and
+ * supports seek-by-offset, which is how the app replaces sources.
+ */
+const PLEX_TRANSCODE_PROFILE =
+    'add-transcode-target(type=videoProfile&context=streaming&protocol=http&container=mkv&videoCodec=h264,hevc&audioCodec=aac,ac3,eac3,mp3)';
+
 /** How a subtitle stream was selected. */
 export type PlexSubtitleReason = 'default' | 'forced' | 'first';
 
 /** The subtitle stream chosen for playback. */
 export interface PlexSubtitleSelection {
     stream: PlexStream;
-    streamIndex: number;
+    streamId: number;
     reason: PlexSubtitleReason;
 }
 
@@ -91,9 +101,9 @@ export function isTextSubtitleStream(stream: PlexStream): boolean {
 /**
  * Returns true when a stream is a subtitle that Plex can burn into the video.
  *
- * Plex expects the stream index (not the global stream id) in the
- * `subtitleStreamID` parameter. External tracks without an index cannot be
- * burned through this endpoint.
+ * Plex burns a subtitle with a per-part stream index. The transcode request
+ * itself takes the global stream id in `subtitleStreamID`; the provider maps
+ * the index back to the id.
  *
  * @param stream - Normalized Plex stream
  */
@@ -118,19 +128,19 @@ export function pickSubtitleStream(streams: readonly PlexStream[]): PlexSubtitle
 
     const defaultStream = candidates.find((stream) => stream.default);
     if (defaultStream && defaultStream.index !== null) {
-        return { stream: defaultStream, streamIndex: defaultStream.index, reason: 'default' };
+        return { stream: defaultStream, streamId: defaultStream.id, reason: 'default' };
     }
 
     const forcedStream = candidates.find((stream) => stream.forced);
     if (forcedStream && forcedStream.index !== null) {
-        return { stream: forcedStream, streamIndex: forcedStream.index, reason: 'forced' };
+        return { stream: forcedStream, streamId: forcedStream.id, reason: 'forced' };
     }
 
     const firstStream = candidates[0];
     if (!firstStream || firstStream.index === null) {
         return null;
     }
-    return { stream: firstStream, streamIndex: firstStream.index, reason: 'first' };
+    return { stream: firstStream, streamId: firstStream.id, reason: 'first' };
 }
 
 /** Options for building a Plex HLS transcode URL. */
@@ -142,7 +152,7 @@ export interface BuildTranscodeUrlOptions {
     mediaIndex: number;
     partIndex: number;
     quality: PlexQuality;
-    subtitleStreamIndex: number | null;
+    subtitleStreamId: number | null;
     offsetSeconds: number;
     sessionId: string;
 }
@@ -176,23 +186,33 @@ export function buildTranscodeUrl(options: BuildTranscodeUrlOptions): string {
     requireIndex(options.mediaIndex, 'mediaIndex');
     requireIndex(options.partIndex, 'partIndex');
 
-    const subtitleStreamIndex = options.subtitleStreamIndex;
-    if (subtitleStreamIndex !== null && subtitleStreamIndex !== undefined) {
-        requireIndex(subtitleStreamIndex, 'subtitleStreamIndex');
+    const subtitleStreamId = options.subtitleStreamId;
+    if (subtitleStreamId !== null && subtitleStreamId !== undefined) {
+        requireIndex(subtitleStreamId, 'subtitleStreamId');
     }
 
-    const url = new URL(`${baseUrl}/video/:/transcode/universal/start.m3u8`);
+    const url = new URL(`${baseUrl}/video/:/transcode/universal/start.mkv`);
     const params = url.searchParams;
+    params.set('hasMDE', '1');
     params.set('path', `/library/metadata/${ratingKey}`);
     params.set('mediaIndex', String(options.mediaIndex));
     params.set('partIndex', String(options.partIndex));
-    params.set('protocol', 'hls');
+    params.set('protocol', 'http');
+    params.set('fastSeek', '1');
+    params.set('location', 'lan');
     params.set('directPlay', '0');
-    params.set('directStream', '0');
+    params.set('directStream', '1');
+    params.set('directStreamVideo', '1');
+    params.set('X-Plex-Client-Profile-Extra', PLEX_TRANSCODE_PROFILE);
+    params.set('X-Plex-Client-Profile-Name', 'Chrome');
 
-    if (subtitleStreamIndex !== null && subtitleStreamIndex !== undefined) {
+    if (subtitleStreamId !== null && subtitleStreamId !== undefined) {
         params.set('subtitles', 'burn');
-        params.set('subtitleStreamID', String(subtitleStreamIndex));
+        params.set('subtitleStreamID', String(subtitleStreamId));
+        params.set('subtitleSize', '100');
+    } else {
+        params.set('subtitles', 'none');
+        params.set('subtitleStreamID', '0');
     }
 
     params.set('videoResolution', quality.videoResolution);
@@ -205,10 +225,25 @@ export function buildTranscodeUrl(options: BuildTranscodeUrlOptions): string {
         params.set('X-Plex-Token', token);
     }
 
-    if (subtitleStreamIndex !== null && subtitleStreamIndex !== undefined) {
-        params.set('subtitleSize', '100');
-    }
+    return url.toString();
+}
 
+/**
+ * Builds the Plex transcode decision URL from a start URL.
+ *
+ * Plex chooses the burned subtitle while making the decision. The start
+ * request reuses that decision, so the app asks Plex to decide first with the
+ * same session and stream selection.
+ *
+ * @param startUrl - URL returned by buildTranscodeUrl
+ */
+export function buildTranscodeDecisionUrl(startUrl: string): string {
+    const url = new URL(startUrl);
+    const suffix = '/start.mkv';
+    if (!url.pathname.endsWith(suffix)) {
+        throw new Error('Expected a Plex transcode start URL');
+    }
+    url.pathname = `${url.pathname.slice(0, -suffix.length)}/decision`;
     return url.toString();
 }
 

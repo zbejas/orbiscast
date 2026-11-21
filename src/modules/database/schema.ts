@@ -104,7 +104,135 @@ export const discordGuildSettings = sqliteTable('discord_guild_settings', {
 });
 
 /**
- * Plex libraries exposed in the WebUI. Only enabled libraries are browsable.
+ * One media server, either Plex or Jellyfin. A source owns a virtual Discord
+ * channel, a library list, and the queue entries that point at it.
+ */
+export const mediaSources = sqliteTable(
+    'media_sources',
+    {
+        id: integer('id').primaryKey({ autoIncrement: true }),
+        kind: text('kind', { enum: ['plex', 'jellyfin'] }).notNull(),
+        name: text('name').notNull(),
+        baseUrl: text('base_url').notNull(),
+        tokenEncrypted: text('token_encrypted').notNull().default(''),
+        tokenLast4: text('token_last4').notNull().default(''),
+        /** Stable per-source identifier used for Plex clients and Jellyfin devices. */
+        clientIdentifier: text('client_identifier').notNull().default(''),
+        /** Jellyfin user id used for user-scoped metadata and playback. */
+        userId: text('user_id'),
+        userName: text('user_name'),
+        channelName: text('channel_name').notNull(),
+        idleMinutes: integer('idle_minutes').notNull().default(5),
+        emptyGraceSeconds: integer('empty_grace_seconds').notNull().default(30),
+        defaultQuality: text('default_quality', { enum: ['720p-4', '1080p-8', '1080p-12', '4k-20'] })
+            .notNull()
+            .default('1080p-8'),
+        enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+        createdAt: integer('created_at').notNull(),
+        updatedAt: integer('updated_at').notNull(),
+    },
+    table => [index('media_sources_kind_idx').on(table.kind), index('media_sources_enabled_idx').on(table.enabled)]
+);
+
+/**
+ * Libraries exposed in the WebUI for one media source. Only enabled libraries
+ * are browsable.
+ */
+export const mediaLibraries = sqliteTable(
+    'media_libraries',
+    {
+        id: integer('id').primaryKey({ autoIncrement: true }),
+        sourceId: integer('source_id')
+            .notNull()
+            .references(() => mediaSources.id, { onDelete: 'cascade' }),
+        libraryKey: text('library_key').notNull(),
+        title: text('title').notNull(),
+        type: text('type').notNull(),
+        enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+        updatedAt: integer('updated_at').notNull(),
+    },
+    table => [
+        uniqueIndex('media_libraries_source_key_idx').on(table.sourceId, table.libraryKey),
+        index('media_libraries_source_idx').on(table.sourceId),
+    ]
+);
+
+/**
+ * Persisted on-demand queue. One global queue because one self-bot means one
+ * stream at a time. Entries may point at any configured media source.
+ */
+export const mediaQueueItems = sqliteTable(
+    'media_queue_items',
+    {
+        id: integer('id').primaryKey({ autoIncrement: true }),
+        sourceId: integer('source_id')
+            .notNull()
+            .references(() => mediaSources.id, { onDelete: 'cascade' }),
+        position: integer('position').notNull(),
+        status: text('status', { enum: ['queued', 'playing', 'played', 'failed'] }).notNull().default('queued'),
+        itemId: text('item_id').notNull(),
+        type: text('type', { enum: ['movie', 'episode'] }).notNull(),
+        title: text('title').notNull(),
+        showTitle: text('show_title'),
+        seasonNumber: integer('season_number'),
+        episodeNumber: integer('episode_number'),
+        durationMs: integer('duration_ms'),
+        thumbUrl: text('thumb_url'),
+        quality: text('quality', { enum: ['720p-4', '1080p-8', '1080p-12', '4k-20'] })
+            .notNull()
+            .default('1080p-8'),
+        subtitleMode: text('subtitle_mode').notNull().default('auto'),
+        error: text('error'),
+        createdAt: integer('created_at').notNull(),
+        updatedAt: integer('updated_at').notNull(),
+    },
+    table => [
+        index('media_queue_position_idx').on(table.position),
+        index('media_queue_status_idx').on(table.status),
+        index('media_queue_source_idx').on(table.sourceId),
+    ]
+);
+
+/**
+ * Saved playback progress for on-demand movies and episodes. One row per
+ * `(source_id, item_id)`. Completed rows stay for the played history but are
+ * excluded from the resume list.
+ */
+export const mediaHistory = sqliteTable(
+    'media_history',
+    {
+        id: integer('id').primaryKey({ autoIncrement: true }),
+        sourceId: integer('source_id')
+            .notNull()
+            .references(() => mediaSources.id, { onDelete: 'cascade' }),
+        itemId: text('item_id').notNull(),
+        type: text('type', { enum: ['movie', 'episode'] }).notNull(),
+        title: text('title').notNull(),
+        showTitle: text('show_title'),
+        seasonNumber: integer('season_number'),
+        episodeNumber: integer('episode_number'),
+        durationMs: integer('duration_ms'),
+        thumbUrl: text('thumb_url'),
+        positionMs: integer('position_ms').notNull().default(0),
+        completed: integer('completed', { mode: 'boolean' }).notNull().default(false),
+        quality: text('quality', { enum: ['720p-4', '1080p-8', '1080p-12', '4k-20'] })
+            .notNull()
+            .default('1080p-8'),
+        subtitleMode: text('subtitle_mode').notNull().default('auto'),
+        playedAt: integer('played_at').notNull(),
+        createdAt: integer('created_at').notNull(),
+        updatedAt: integer('updated_at').notNull(),
+    },
+    table => [
+        uniqueIndex('media_history_source_item_idx').on(table.sourceId, table.itemId),
+        index('media_history_played_idx').on(table.playedAt),
+        index('media_history_completed_idx').on(table.completed),
+    ]
+);
+
+/**
+ * Legacy Plex library table kept for the one-time migration into
+ * media_libraries. New code must not write here.
  */
 export const plexLibraries = sqliteTable('plex_libraries', {
     id: integer('id').primaryKey({ autoIncrement: true }),
@@ -116,8 +244,8 @@ export const plexLibraries = sqliteTable('plex_libraries', {
 });
 
 /**
- * Persisted Plex queue. One global queue because one self-bot means one
- * stream at a time.
+ * Legacy Plex queue table kept for the one-time migration into
+ * media_queue_items. New code must not write here.
  */
 export const plexQueueItems = sqliteTable(
     'plex_queue_items',

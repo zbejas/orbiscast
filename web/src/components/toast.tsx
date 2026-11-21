@@ -46,6 +46,49 @@ const TONE_CLASS: Record<ToastTone, string> = {
     error: 'text-danger',
 };
 
+/** Milliseconds before a toast dismisses itself. Errors stay longer. */
+const TOAST_LIFETIME_MS = 6_000;
+const TOAST_LIFETIME_ERROR_MS = 10_000;
+
+function ToastItem({ toast, onDismiss }: { toast: ToastRecord; onDismiss: (id: number) => void }) {
+    const tone = toast.tone ?? 'info';
+    const ToneIcon = TONE_ICON[tone];
+
+    useEffect(() => {
+        const timer = setTimeout(
+            () => onDismiss(toast.id),
+            tone === 'error' ? TOAST_LIFETIME_ERROR_MS : TOAST_LIFETIME_MS
+        );
+        return () => clearTimeout(timer);
+    }, [onDismiss, toast.id, tone]);
+
+    return (
+        <div className="oc-toast flex items-start gap-3">
+            <ToneIcon
+                size={17}
+                aria-hidden="true"
+                className={`mt-0.5 shrink-0 ${TONE_CLASS[tone]}`}
+            />
+            <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium leading-5 text-text">{toast.title}</p>
+                {toast.description ? (
+                    <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                        {toast.description}
+                    </p>
+                ) : null}
+            </div>
+            <IconButton
+                label="Dismiss notification"
+                size="sm"
+                className="-mr-1 -mt-1"
+                onClick={() => onDismiss(toast.id)}
+            >
+                <X size={14} aria-hidden="true" />
+            </IconButton>
+        </div>
+    );
+}
+
 export function ToastProvider({ children }: { children: ReactNode }) {
     const [toasts, setToasts] = useState<ToastRecord[]>([]);
     const [announcement, setAnnouncement] = useState('');
@@ -126,35 +169,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 aria-label="Notifications"
                 className="oc-toast-region"
             >
-                {toasts.map((toast) => {
-                    const tone = toast.tone ?? 'info';
-                    const ToneIcon = TONE_ICON[tone];
-                    return (
-                        <div key={toast.id} className="oc-toast flex items-start gap-3">
-                            <ToneIcon
-                                size={17}
-                                aria-hidden="true"
-                                className={`mt-0.5 shrink-0 ${TONE_CLASS[tone]}`}
-                            />
-                            <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium leading-5 text-text">{toast.title}</p>
-                                {toast.description ? (
-                                    <p className="mt-1 text-xs leading-relaxed text-text-muted">
-                                        {toast.description}
-                                    </p>
-                                ) : null}
-                            </div>
-                            <IconButton
-                                label="Dismiss notification"
-                                size="sm"
-                                className="-mr-1 -mt-1"
-                                onClick={() => dismiss(toast.id)}
-                            >
-                                <X size={14} aria-hidden="true" />
-                            </IconButton>
-                        </div>
-                    );
-                })}
+                {toasts.map((toast) => (
+                    <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} />
+                ))}
             </div>
         </ToastContext.Provider>
     );

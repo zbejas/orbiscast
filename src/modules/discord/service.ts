@@ -19,23 +19,32 @@ import {
 } from 'discord.js';
 import { EventEmitter } from 'node:events';
 import type { Db } from '../database/client';
-import { findVisibleChannelByName, getGuildSettings, listGuildSettings, listVisibleChannels, queryProgrammes } from '../database/repo';
+import { channelRef, findVisibleChannelByRef, getGuildSettings, listGuildSettings, listVisibleChannels, queryProgrammes } from '../database/repo';
 import type { SettingsService } from '../settings';
 import type { PlaybackEngine } from '../playback/engine';
 import type { IptvService } from '../iptv/service';
 import { getLogger } from '../../utils/logger';
 import {
+    getStreamerGuildIds,
     getStreamerStatus,
     initializeStreamer,
+    onStreamerGuildJoin,
     reconnectStreamer,
     shutdownStreamer,
 } from '../streaming';
 import { ProgrammeEmbedProcessor } from '../embeds/programme';
+import { formatChannelLabel } from '../../utils/channels';
+import { StreamerOnboarding } from '../setup/onboarding';
+import { buildBotInviteUrl } from '../setup/invite';
 import type { ConnectionState, DiscordStatusDto, GuildDto } from '../../shared/types';
 import type { ProgrammeEntry } from '../../interfaces/iptv';
 
 const logger = getLogger();
 const COMMANDS_PER_PAGE = 20;
+
+type ChannelPageItem =
+    | { kind: 'media'; sourceId: number; label: string }
+    | { kind: 'iptv'; id: number; label: string };
 
 export interface DiscordValidationResult {
     ok: boolean;
@@ -56,6 +65,9 @@ export class DiscordService {
     private streamerTag: string | null = null;
     private error: string | null = null;
     private reconnectLock: Promise<void> | null = null;
+    private applicationId: string | null = null;
+    private streamerJoinUnsubscribe: (() => void) | null = null;
+    private readonly onboarding: StreamerOnboarding;
 
     constructor(
         private readonly db: Db,
@@ -63,7 +75,12 @@ export class DiscordService {
         private readonly playback: PlaybackEngine,
         private readonly iptv: IptvService,
         private readonly events: EventEmitter
-    ) {}
+    ) {
+        this.onboarding = new StreamerOnboarding({
+            getClient: () => this.client,
+            notify: () => this.emit(),
+        });
+    }
 
     /**
      * Starts both Discord clients when tokens are configured.
@@ -81,10 +98,20 @@ export class DiscordService {
         this.botState = 'connecting';
         this.streamerState = 'connecting';
         this.error = null;
+        this.streamerJoinUnsubscribe ??= onStreamerGuildJoin(guildId =>
+            this.onboarding.handleStreamerJoined(guildId)
+        );
         this.emit();
 
-        void this.startStreamer(userToken);
-        await this.startBot(botToken);
+        await Promise.allSettled([this.startStreamer(userToken), this.startBot(botToken)]);
+
+        if (this.bothOnline()) {
+            this.onboarding.start();
+        }
+    }
+
+    private bothOnline(): boolean {
+        return this.botState === 'online' && this.streamerState === 'online';
     }
 
     /**
@@ -118,6 +145,9 @@ export class DiscordService {
      * Stops both clients. The self-bot is destroyed, never logged out.
      */
     async stop(): Promise<void> {
+        this.streamerJoinUnsubscribe?.();
+        this.streamerJoinUnsubscribe = null;
+        this.onboarding.stop();
         try {
             this.client?.destroy();
         } catch (error) {
@@ -141,10 +171,11 @@ export class DiscordService {
     async validateTokens(botToken: string, userToken: string): Promise<DiscordValidationResult> {
         try {
             const [bot, user] = await Promise.all([
-                fetchDiscordUser(botToken, true),
-                fetchDiscordUser(userToken, false),
+                fetchDiscordIdentity(botToken, true),
+                fetchDiscordIdentity(userToken, false),
             ]);
-            return { ok: true, botTag: bot, streamerTag: user };
+            this.applicationId = bot.id;
+            return { ok: true, botTag: bot.tag, streamerTag: user.tag };
         } catch (error) {
             return { ok: false, error: error instanceof Error ? error.message : 'Token validation failed' };
         }
@@ -183,7 +214,30 @@ export class DiscordService {
             streamerTag: this.streamerTag,
             error: this.error,
             guilds,
+            botInviteUrl: this.getBotInviteUrl(),
+            streamerGuildIds: getStreamerGuildIds(),
+            streamerJoin: this.onboarding.getState(),
         };
+    }
+
+    /**
+     * Returns the OAuth2 invite URL for the bot.
+     */
+    getBotInviteUrl(): string | null {
+        const { botToken } = this.settings.getDiscordTokens();
+        if (!botToken) {
+            return null;
+        }
+        return buildBotInviteUrl(this.client?.user?.id ?? this.applicationId);
+    }
+
+    /**
+     * Retries adding the streaming account to one guild or all of them.
+     *
+     * @param guildId - Guild to retry
+     */
+    retryStreamerJoin(guildId?: string): void {
+        this.onboarding.retry(guildId);
     }
 
     /**
@@ -208,6 +262,7 @@ export class DiscordService {
         client.once('clientReady', async () => {
             this.botState = 'online';
             this.botTag = client.user?.tag ?? null;
+            this.applicationId = client.user?.id ?? this.applicationId;
             this.error = null;
             logger.info(`Discord bot connected as ${this.botTag}`);
             this.emit();
@@ -223,6 +278,11 @@ export class DiscordService {
             void this.registerCommands(guild.id).catch(error =>
                 logger.error(`Failed to register commands in ${guild.name}: ${error}`)
             );
+            this.onboarding.handleGuildCreate(guild);
+        });
+
+        client.on('guildDelete', guild => {
+            this.onboarding.handleGuildDelete(guild.id);
         });
 
         client.on('interactionCreate', interaction => {
@@ -262,7 +322,6 @@ export class DiscordService {
         const { botToken } = this.settings.getDiscordTokens();
         if (!botToken) return;
 
-        const plexName = this.settings.getPlexConfig().channelName;
         const commands = [
             new SlashCommandBuilder()
                 .setName('stream')
@@ -270,7 +329,7 @@ export class DiscordService {
                 .addStringOption(option =>
                     option
                         .setName('channel')
-                        .setDescription(`IPTV channel or ${plexName}`)
+                        .setDescription('IPTV channel or an on-demand media channel')
                         .setAutocomplete(true)
                         .setRequired(true)
                 ),
@@ -354,25 +413,33 @@ export class DiscordService {
         }
 
         const focused = interaction.options.getFocused().toLowerCase();
-        const plexName = this.settings.getPlexConfig().channelName;
-        const choices = listVisibleChannels(this.db, 1000)
-            .map(channel => channel.name)
-            .filter(name => name.toLowerCase().includes(focused));
-
-        if (this.settings.getPlexConfig().tokenSet && plexName.toLowerCase().includes(focused)) {
-            choices.unshift(plexName);
-        }
-
-        await interaction.respond(
-            choices.slice(0, 25).map(name => ({
-                name: name.slice(0, 100),
-                value: name.slice(0, 100),
-            }))
+        const mediaChannels = this.playback.getMediaChannels();
+        const rows = listVisibleChannels(this.db, 1000);
+        const byName = rows.filter(channel => channel.name.toLowerCase().includes(focused));
+        const byGroup = rows.filter(
+            channel =>
+                !channel.name.toLowerCase().includes(focused) &&
+                Boolean(channel.groupTitle?.toLowerCase().includes(focused)) &&
+                focused.length > 0
         );
+        const choices = [...byName, ...byGroup].slice(0, 25).map(channel => ({
+            name: formatChannelLabel(channel.name, channel.groupTitle),
+            value: channelRef(channel.id),
+        }));
+
+        const mediaChoices = mediaChannels
+            .filter(channel => channel.name.toLowerCase().includes(focused))
+            .map(channel => ({
+                name: channel.name.slice(0, 100),
+                value: channel.name.slice(0, 100),
+            }));
+        choices.unshift(...mediaChoices);
+
+        await interaction.respond(choices.slice(0, 25));
     }
 
     private async handleStream(interaction: ChatInputCommandInteraction): Promise<void> {
-        const channelName = interaction.options.getString('channel', true);
+        const channelRefValue = interaction.options.getString('channel', true);
         const member = interaction.member as GuildMember | null;
         const voiceChannel = member?.voice.channel;
         if (!voiceChannel || !interaction.guildId) {
@@ -384,10 +451,12 @@ export class DiscordService {
         }
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        const plexName = this.settings.getPlexConfig().channelName;
+        const mediaChannel = this.playback
+            .getMediaChannels()
+            .find(channel => channel.name.toLowerCase() === channelRefValue.toLowerCase());
 
-        if (channelName.toLowerCase() === plexName.toLowerCase()) {
-            const result = await this.playback.startPlaceholder({
+        if (mediaChannel?.sourceId != null) {
+            const result = await this.playback.startPlaceholder(mediaChannel.sourceId, {
                 guildId: interaction.guildId,
                 voiceChannelId: voiceChannel.id,
             });
@@ -395,9 +464,9 @@ export class DiscordService {
             return;
         }
 
-        const channel = findVisibleChannelByName(this.db, channelName);
+        const channel = findVisibleChannelByRef(this.db, channelRefValue);
         if (!channel) {
-            await interaction.editReply(`Channel not found or not visible: ${channelName}`);
+            await interaction.editReply('Channel not found or not visible.');
             return;
         }
 
@@ -423,42 +492,74 @@ export class DiscordService {
     private async handleChannels(interaction: ChatInputCommandInteraction): Promise<void> {
         const pageOption = interaction.options.getString('page');
         const page = pageOption === 'all' ? 1 : Math.max(1, Number.parseInt(pageOption ?? '1', 10) || 1);
-        const plexName = this.settings.getPlexConfig().channelName;
-        const plexEnabled = this.settings.getPlexConfig().tokenSet;
-        const channels = listVisibleChannels(this.db, 5000);
-        const total = channels.length + (plexEnabled ? 1 : 0);
-        const totalPages = Math.max(1, Math.ceil(total / COMMANDS_PER_PAGE));
-        const safePage = Math.min(page, totalPages);
-        const start = (safePage - 1) * COMMANDS_PER_PAGE;
-
-        const pageItems: Array<{ label: string; id: number | 'plex' }> = [];
-        if (plexEnabled && safePage === 1) {
-            pageItems.push({ label: plexName, id: 'plex' });
-        }
-        const remaining = COMMANDS_PER_PAGE - pageItems.length;
-        for (const channel of channels.slice(start, start + remaining)) {
-            pageItems.push({ label: channel.name, id: channel.id });
-        }
+        const { pageItems, total, totalPages, safePage } = this.buildChannelsPage(page);
 
         const embed = new EmbedBuilder()
             .setTitle('Channels')
             .setColor('#5865f2')
             .setDescription(
                 pageItems.length > 0
-                    ? pageItems.map(item => `- ${item.label}${item.id === 'plex' ? ' (on demand)' : ''}`).join('\n')
+                    ? pageItems
+                          .map(item => `- ${item.label}${item.kind === 'media' ? ' (on demand)' : ''}`)
+                          .join('\n')
                     : 'No visible channels. Add and select channels in the WebUI.'
             )
             .setFooter({ text: `Page ${safePage} of ${totalPages} | ${total} channels` });
 
+        await interaction.reply({
+            embeds: [embed],
+            components: this.channelButtons(pageItems, safePage, totalPages),
+            flags: MessageFlags.Ephemeral,
+        });
+    }
+
+    private buildChannelsPage(page: number): {
+        pageItems: ChannelPageItem[];
+        total: number;
+        totalPages: number;
+        safePage: number;
+    } {
+        const media = this.playback.getMediaChannels().map(channel => ({
+            kind: 'media' as const,
+            sourceId: channel.sourceId ?? 0,
+            label: channel.name,
+        }));
+        const iptv = listVisibleChannels(this.db, 5000).map(channel => ({
+            kind: 'iptv' as const,
+            id: channel.id,
+            label: formatChannelLabel(channel.name, channel.groupTitle),
+        }));
+        const all = [...media, ...iptv];
+        const total = all.length;
+        const totalPages = Math.max(1, Math.ceil(total / COMMANDS_PER_PAGE));
+        const safePage = Math.min(page, totalPages);
+        const start = (safePage - 1) * COMMANDS_PER_PAGE;
+        return {
+            pageItems: all.slice(start, start + COMMANDS_PER_PAGE),
+            total,
+            totalPages,
+            safePage,
+        };
+    }
+
+    private channelButtons(
+        pageItems: ChannelPageItem[],
+        safePage: number,
+        totalPages: number
+    ): ActionRowBuilder<ButtonBuilder>[] {
         const components: ActionRowBuilder<ButtonBuilder>[] = [];
         for (let index = 0; index < pageItems.length; index += 5) {
             const row = new ActionRowBuilder<ButtonBuilder>();
             for (const item of pageItems.slice(index, index + 5)) {
                 row.addComponents(
                     new ButtonBuilder()
-                        .setCustomId(item.id === 'plex' ? 'play_plex' : `play_channel_${item.id}`)
+                        .setCustomId(
+                            item.kind === 'media'
+                                ? `play_media_${item.sourceId}`
+                                : `play_channel_${item.id}`
+                        )
                         .setLabel(item.label.slice(0, 80))
-                        .setStyle(item.id === 'plex' ? ButtonStyle.Secondary : ButtonStyle.Primary)
+                        .setStyle(item.kind === 'media' ? ButtonStyle.Secondary : ButtonStyle.Primary)
                 );
             }
             components.push(row);
@@ -481,16 +582,12 @@ export class DiscordService {
             );
         }
 
-        await interaction.reply({
-            embeds: [embed],
-            components,
-            flags: MessageFlags.Ephemeral,
-        });
+        return components;
     }
 
     private async handleProgramme(interaction: ChatInputCommandInteraction): Promise<void> {
-        const channelName = interaction.options.getString('channel');
-        if (!channelName) {
+        const channelRefValue = interaction.options.getString('channel');
+        if (!channelRefValue) {
             await interaction.reply({
                 content: 'Provide a channel name. Use /channels to see visible channels.',
                 flags: MessageFlags.Ephemeral,
@@ -498,10 +595,10 @@ export class DiscordService {
             return;
         }
 
-        const channel = findVisibleChannelByName(this.db, channelName);
+        const channel = findVisibleChannelByRef(this.db, channelRefValue);
         if (!channel?.tvgId) {
             await interaction.reply({
-                content: `Channel not found or has no guide: ${channelName}`,
+                content: 'Channel not found or has no guide.',
                 flags: MessageFlags.Ephemeral,
             });
             return;
@@ -574,9 +671,10 @@ export class DiscordService {
             return;
         }
 
-        if (interaction.customId === 'play_plex') {
+        if (interaction.customId.startsWith('play_media_')) {
+            const sourceId = Number.parseInt(interaction.customId.replace('play_media_', ''), 10);
             await interaction.deferUpdate();
-            const result = await this.playback.startPlaceholder({
+            const result = await this.playback.startPlaceholder(sourceId, {
                 guildId: interaction.guildId,
                 voiceChannelId: voiceChannel.id,
             });
@@ -611,58 +709,21 @@ export class DiscordService {
             await interaction.deferUpdate();
             const current = Number.parseInt(interaction.customId.split('_').pop() ?? '1', 10);
             const next = interaction.customId.startsWith('channels_next_') ? current + 1 : Math.max(1, current - 1);
-            const plexName = this.settings.getPlexConfig().channelName;
-            const plexEnabled = this.settings.getPlexConfig().tokenSet;
-            const channels = listVisibleChannels(this.db, 5000);
-            const total = channels.length + (plexEnabled ? 1 : 0);
-            const totalPages = Math.max(1, Math.ceil(total / COMMANDS_PER_PAGE));
-            const safePage = Math.min(next, totalPages);
-            const start = (safePage - 1) * COMMANDS_PER_PAGE;
-            const pageItems: Array<{ label: string; id: number | 'plex' }> = [];
-            if (plexEnabled && safePage === 1) pageItems.push({ label: plexName, id: 'plex' });
-            for (const channel of channels.slice(start, start + COMMANDS_PER_PAGE - pageItems.length)) {
-                pageItems.push({ label: channel.name, id: channel.id });
-            }
-
+            const { pageItems, total, totalPages, safePage } = this.buildChannelsPage(next);
             const embed = new EmbedBuilder()
                 .setTitle('Channels')
                 .setColor('#5865f2')
                 .setDescription(
                     pageItems
-                        .map(item => `- ${item.label}${item.id === 'plex' ? ' (on demand)' : ''}`)
+                        .map(item => `- ${item.label}${item.kind === 'media' ? ' (on demand)' : ''}`)
                         .join('\n') || 'No visible channels.'
                 )
                 .setFooter({ text: `Page ${safePage} of ${totalPages} | ${total} channels` });
 
-            const components: ActionRowBuilder<ButtonBuilder>[] = [];
-            for (let index = 0; index < pageItems.length; index += 5) {
-                const row = new ActionRowBuilder<ButtonBuilder>();
-                for (const item of pageItems.slice(index, index + 5)) {
-                    row.addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(item.id === 'plex' ? 'play_plex' : `play_channel_${item.id}`)
-                            .setLabel(item.label.slice(0, 80))
-                            .setStyle(item.id === 'plex' ? ButtonStyle.Secondary : ButtonStyle.Primary)
-                    );
-                }
-                components.push(row);
-            }
-            components.push(
-                new ActionRowBuilder<ButtonBuilder>().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`channels_prev_${safePage}`)
-                        .setLabel('Previous')
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(safePage <= 1),
-                    new ButtonBuilder()
-                        .setCustomId(`channels_next_${safePage}`)
-                        .setLabel('Next')
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(safePage >= totalPages)
-                )
-            );
-
-            await interaction.editReply({ embeds: [embed], components });
+            await interaction.editReply({
+                embeds: [embed],
+                components: this.channelButtons(pageItems, safePage, totalPages),
+            });
         }
     }
 
@@ -686,13 +747,25 @@ export class DiscordService {
     }
 }
 
-async function fetchDiscordUser(token: string, bot: boolean): Promise<string> {
+async function fetchDiscordIdentity(token: string, bot: boolean): Promise<{ id: string; tag: string }> {
     const response = await fetch('https://discord.com/api/v10/users/@me', {
         headers: { Authorization: bot ? `Bot ${token}` : token },
     });
     if (!response.ok) {
         throw new Error(`Discord rejected the ${bot ? 'bot' : 'user'} token (${response.status})`);
     }
-    const user = (await response.json()) as { username: string; discriminator?: string; global_name?: string | null };
-    return user.global_name || (user.discriminator && user.discriminator !== '0' ? `${user.username}#${user.discriminator}` : user.username);
+    const user = (await response.json()) as {
+        id: string;
+        username: string;
+        discriminator?: string;
+        global_name?: string | null;
+    };
+    return {
+        id: user.id,
+        tag:
+            user.global_name ||
+            (user.discriminator && user.discriminator !== '0'
+                ? `${user.username}#${user.discriminator}`
+                : user.username),
+    };
 }

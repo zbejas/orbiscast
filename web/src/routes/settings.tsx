@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Eye, EyeOff, Save, ShieldCheck } from 'lucide-react';
-import { useLocation } from 'react-router';
-import type { PlexQuality, SettingsDto } from '@shared/types';
+import { Film, Save } from 'lucide-react';
+import { Link, useLocation } from 'react-router';
+import type { SettingsDto } from '@shared/types';
 import {
     Button,
     ErrorState,
@@ -16,6 +16,7 @@ import {
     StatusPill,
     Switch,
     Textarea,
+    buttonStyles,
     useToast,
 } from '@/components';
 import {
@@ -23,8 +24,6 @@ import {
     useAuthConfig,
     useEnableAuth,
     useLogin,
-    usePlexConfig,
-    useSavePlexConfig,
     useSettings,
     useUpdateSettings,
 } from '@/lib/hooks';
@@ -58,13 +57,6 @@ const LOG_LEVELS: Array<{ value: SettingsDto['logLevel']; label: string }> = [
     { value: 'debug', label: 'Debug' },
 ];
 
-const QUALITIES: Array<{ value: PlexQuality; label: string }> = [
-    { value: '720p-4', label: '720p · 4 Mbps' },
-    { value: '1080p-8', label: '1080p · 8 Mbps' },
-    { value: '1080p-12', label: '1080p · 12 Mbps' },
-    { value: '4k-20', label: '4K · 20 Mbps' },
-];
-
 interface SettingsForm {
     timezone: string;
     logLevel: SettingsDto['logLevel'];
@@ -75,10 +67,7 @@ interface SettingsForm {
     minimizeLatency: boolean;
     disableTranscode: boolean;
     defaultStreamTimeout: string;
-    plexChannelName: string;
-    idleMinutes: string;
-    emptyGraceSeconds: string;
-    defaultQuality: PlexQuality;
+    playback: SettingsDto['playback'];
     authEnabled: boolean;
 }
 
@@ -86,9 +75,6 @@ type FieldKey =
     | 'bitrateVideo'
     | 'bitrateVideoMax'
     | 'defaultStreamTimeout'
-    | 'plexChannelName'
-    | 'idleMinutes'
-    | 'emptyGraceSeconds'
     | 'timezone'
     | 'publicUrl'
     | 'trustedOrigins';
@@ -106,10 +92,7 @@ function toForm(settings: SettingsDto): SettingsForm {
         minimizeLatency: settings.stream.minimizeLatency,
         disableTranscode: settings.stream.disableTranscode,
         defaultStreamTimeout: String(settings.stream.defaultStreamTimeout),
-        plexChannelName: settings.plex.channelName,
-        idleMinutes: String(settings.plex.idleMinutes),
-        emptyGraceSeconds: String(settings.plex.emptyGraceSeconds),
-        defaultQuality: settings.plex.defaultQuality,
+        playback: settings.playback,
         authEnabled: settings.auth.enabled,
     };
 }
@@ -130,12 +113,7 @@ function toDto(form: SettingsForm): SettingsDto {
             disableTranscode: form.disableTranscode,
             defaultStreamTimeout: Number(form.defaultStreamTimeout),
         },
-        plex: {
-            channelName: form.plexChannelName.trim(),
-            idleMinutes: Number(form.idleMinutes),
-            emptyGraceSeconds: Number(form.emptyGraceSeconds),
-            defaultQuality: form.defaultQuality,
-        },
+        playback: form.playback,
         auth: {
             enabled: form.authEnabled,
         },
@@ -164,16 +142,6 @@ function validateField(key: FieldKey, form: SettingsForm): string | undefined {
         }
         case 'defaultStreamTimeout':
             return numberError(form.defaultStreamTimeout, 1, 1440, 'Fallback stream timeout');
-        case 'plexChannelName':
-            return form.plexChannelName.trim().length === 0
-                ? 'Give the Plex channel a name.'
-                : form.plexChannelName.trim().length > 100
-                  ? 'Keep the channel name under 100 characters.'
-                  : undefined;
-        case 'idleMinutes':
-            return numberError(form.idleMinutes, 1, 240, 'Idle timer');
-        case 'emptyGraceSeconds':
-            return numberError(form.emptyGraceSeconds, 0, 3600, 'Empty channel grace');
         case 'timezone':
             return form.timezone.trim() ? undefined : 'Choose a timezone.';
         case 'publicUrl': {
@@ -217,9 +185,6 @@ function validateAll(form: SettingsForm): FormErrors {
         'bitrateVideo',
         'bitrateVideoMax',
         'defaultStreamTimeout',
-        'plexChannelName',
-        'idleMinutes',
-        'emptyGraceSeconds',
         'timezone',
         'publicUrl',
         'trustedOrigins',
@@ -282,175 +247,6 @@ function Section({
             </div>
             <div className="p-4 sm:p-5">{children}</div>
         </section>
-    );
-}
-
-function PlexConnectionSection() {
-    const config = usePlexConfig();
-    const save = useSavePlexConfig();
-    const toast = useToast();
-    const [serverUrl, setServerUrl] = useState('');
-    const [token, setToken] = useState('');
-    const [reveal, setReveal] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (config.data) setServerUrl(config.data.serverUrl);
-    }, [config.data?.serverUrl]);
-
-    const submit = (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        setError(null);
-        const value = serverUrl.trim();
-        if (!value) {
-            setError('Enter the Plex server URL.');
-            return;
-        }
-        try {
-            const url = new URL(value);
-            if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-                setError('Use an http or https URL.');
-                return;
-            }
-        } catch {
-            setError('Enter a full URL, for example https://plex.example.com:32400.');
-            return;
-        }
-        save.mutate(
-            { serverUrl: value, token: token.trim() || undefined },
-            {
-                onSuccess: (result) => {
-                    setToken('');
-                    setReveal(false);
-                    toast({
-                        title: result.connected ? 'Plex connected' : 'Plex connection failed',
-                        description: result.connected
-                            ? `${result.serverUrl} is reachable.`
-                            : (result.error ?? 'Check the server URL and token.'),
-                        tone: result.connected ? 'success' : 'error',
-                    });
-                },
-                onError: (mutationError) =>
-                    toast({
-                        title: 'Could not save the Plex connection',
-                        description:
-                            mutationError instanceof Error
-                                ? mutationError.message
-                                : 'The request did not complete.',
-                        tone: 'error',
-                    }),
-            }
-        );
-    };
-
-    const status = config.data?.connected
-        ? { label: 'Connected', tone: 'plex' as const }
-        : config.data?.error
-          ? { label: 'Error', tone: 'danger' as const }
-          : { label: 'Not connected', tone: 'neutral' as const };
-
-    return (
-        <Section
-            id="plex-connection"
-            title="Plex connection"
-            description="The Plex server URL and token. This section saves separately and tests the connection when you save."
-        >
-            {config.isPending ? (
-                <div className="space-y-3" aria-hidden="true">
-                    <Skeleton className="h-9 w-full" />
-                    <Skeleton className="h-9 w-full" />
-                </div>
-            ) : config.isError ? (
-                <ErrorState compact error={config.error} onRetry={() => void config.refetch()} />
-            ) : (
-                <form noValidate onSubmit={submit} className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Field
-                            label="Server URL"
-                            htmlFor="plex-server-url"
-                            hint="Include the scheme and port, for example https://plex.example.com:32400."
-                            error={error}
-                            className="sm:col-span-2"
-                        >
-                            <Input
-                                id="plex-server-url"
-                                type="url"
-                                value={serverUrl}
-                                onChange={(event) => {
-                                    setServerUrl(event.target.value);
-                                    if (error) setError(null);
-                                }}
-                                placeholder="https://plex.example.com:32400"
-                                spellCheck={false}
-                                autoComplete="off"
-                            />
-                        </Field>
-                        <Field
-                            label="Plex token"
-                            htmlFor="plex-token"
-                            hint={
-                                config.data?.tokenSet
-                                    ? `Stored token ending ${config.data.tokenLast4 ?? '••••'}. Enter a new value only to replace it.`
-                                    : 'No token stored yet.'
-                            }
-                            className="sm:col-span-2"
-                        >
-                            <div className="relative">
-                                <Input
-                                    id="plex-token"
-                                    type={reveal ? 'text' : 'password'}
-                                    value={token}
-                                    onChange={(event) => setToken(event.target.value)}
-                                    placeholder={
-                                        config.data?.tokenSet
-                                            ? `••••••••••••${config.data.tokenLast4 ?? ''}`
-                                            : 'Paste the Plex token'
-                                    }
-                                    autoComplete="off"
-                                    spellCheck={false}
-                                    className="pr-11 font-mono text-xs"
-                                />
-                                <IconButton
-                                    label={
-                                        token
-                                            ? reveal
-                                                ? 'Hide Plex token'
-                                                : 'Show Plex token'
-                                            : 'Enter a Plex token to reveal it'
-                                    }
-                                    size="sm"
-                                    className="absolute right-1 top-1/2 -translate-y-1/2"
-                                    disabled={!token}
-                                    onClick={() => setReveal((current) => !current)}
-                                >
-                                    {reveal ? (
-                                        <EyeOff size={15} aria-hidden="true" />
-                                    ) : (
-                                        <Eye size={15} aria-hidden="true" />
-                                    )}
-                                </IconButton>
-                            </div>
-                        </Field>
-                    </div>
-                    {config.data?.error ? (
-                        <Notice tone="danger" title="Plex reported an error">
-                            {config.data.error}
-                        </Notice>
-                    ) : null}
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-                        <StatusPill tone={status.tone}>{status.label}</StatusPill>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            loading={save.isPending}
-                            icon={<ShieldCheck size={14} aria-hidden="true" />}
-                        >
-                            Save and test
-                        </Button>
-                    </div>
-                </form>
-            )}
-        </Section>
     );
 }
 
@@ -733,100 +529,13 @@ export default function SettingsPage() {
                         </Section>
 
                         <Section
-                            id="plex"
-                            title="Plex channel"
-                            description="The virtual Discord channel that shows the Plex placeholder and hosts on-demand playback."
+                            title="Media sources"
+                            description="Plex and Jellyfin connections, libraries, virtual channel names, idle timers, and default quality are managed on the Media page."
                         >
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <Field
-                                    label="Channel name"
-                                    htmlFor="plex-channel-name"
-                                    hint="Shown in Discord and on the WebUI."
-                                    error={errors.plexChannelName}
-                                    required
-                                    className="sm:col-span-2"
-                                >
-                                    <Input
-                                        id="plex-channel-name"
-                                        value={form.plexChannelName}
-                                        onChange={(event) =>
-                                            updateField('plexChannelName', event.target.value)
-                                        }
-                                        onBlur={() => blurField('plexChannelName')}
-                                        maxLength={100}
-                                        required
-                                    />
-                                </Field>
-                                <Field
-                                    label="Idle timer (minutes)"
-                                    htmlFor="plex-idle"
-                                    hint="How long the channel stays after playback ends."
-                                    error={errors.idleMinutes}
-                                    required
-                                >
-                                    <Input
-                                        id="plex-idle"
-                                        type="number"
-                                        inputMode="numeric"
-                                        min={1}
-                                        max={240}
-                                        step={1}
-                                        value={form.idleMinutes}
-                                        onChange={(event) => updateField('idleMinutes', event.target.value)}
-                                        onBlur={() => blurField('idleMinutes')}
-                                        required
-                                    />
-                                </Field>
-                                <Field
-                                    label="Empty channel grace (seconds)"
-                                    htmlFor="plex-grace"
-                                    hint="Seconds to wait when the last viewer leaves."
-                                    error={errors.emptyGraceSeconds}
-                                    required
-                                >
-                                    <Input
-                                        id="plex-grace"
-                                        type="number"
-                                        inputMode="numeric"
-                                        min={0}
-                                        max={3600}
-                                        step={5}
-                                        value={form.emptyGraceSeconds}
-                                        onChange={(event) =>
-                                            updateField('emptyGraceSeconds', event.target.value)
-                                        }
-                                        onBlur={() => blurField('emptyGraceSeconds')}
-                                        required
-                                    />
-                                </Field>
-                                <Field
-                                    label="Default quality"
-                                    htmlFor="plex-quality"
-                                    hint="Used when a queue item does not specify a quality."
-                                    className="sm:col-span-2"
-                                >
-                                    <Select
-                                        id="plex-quality"
-                                        value={form.defaultQuality}
-                                        onChange={(event) =>
-                                            updateField(
-                                                'defaultQuality',
-                                                event.target.value as PlexQuality
-                                            )
-                                        }
-                                    >
-                                        {QUALITIES.map((quality) => (
-                                            <option key={quality.value} value={quality.value}>
-                                                {quality.label}
-                                            </option>
-                                        ))}
-                                    </Select>
-                                </Field>
-                                <p className="text-[11px] leading-relaxed text-text-faint sm:col-span-2">
-                                    The channel name updates the next time the virtual channel joins the voice
-                                    channel.
-                                </p>
-                            </div>
+                            <Link to="/media" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
+                                <Film size={14} aria-hidden="true" />
+                                Open Media
+                            </Link>
                         </Section>
 
                         <Section
@@ -1081,7 +790,6 @@ export default function SettingsPage() {
                             </div>
                         </div>
                     </form>
-                    <PlexConnectionSection />
                     </>
                 )}
             </div>

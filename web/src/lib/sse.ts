@@ -105,11 +105,15 @@ export function useAppEvents(): SseStatus {
 
             if (topic.includes('playback')) {
                 void client.invalidateQueries({ queryKey: qk.playback });
-                void client.invalidateQueries({ queryKey: qk.plexQueue });
+                void client.invalidateQueries({ queryKey: qk.mediaQueue });
             }
             if (topic.includes('queue')) {
-                void client.invalidateQueries({ queryKey: qk.plexQueue });
+                void client.invalidateQueries({ queryKey: qk.mediaQueue });
+                void client.invalidateQueries({ queryKey: qk.mediaPlaybackItem });
                 void client.invalidateQueries({ queryKey: qk.playback });
+            }
+            if (topic.includes('history')) {
+                void client.invalidateQueries({ queryKey: qk.mediaHistoryAll });
             }
             if (topic.includes('channel') || topic.includes('source') || topic.includes('guide')) {
                 void client.invalidateQueries({ queryKey: qk.channelsAll });
@@ -119,12 +123,13 @@ export function useAppEvents(): SseStatus {
             if (topic.includes('discord') || topic.includes('guild')) {
                 void client.invalidateQueries({ queryKey: qk.discord });
             }
-            if (topic.includes('settings') || topic.includes('plex')) {
+            if (topic.includes('settings') || topic.includes('media')) {
                 void client.invalidateQueries({ queryKey: qk.settings });
-                void client.invalidateQueries({ queryKey: qk.plexConfig });
+                void client.invalidateQueries({ queryKey: qk.mediaSources });
+                void client.invalidateQueries({ queryKey: qk.mediaChannels });
             }
         },
-        { eventNames: ['playback', 'sources', 'discord', 'queue', 'settings'] }
+        { eventNames: ['playback', 'sources', 'discord', 'queue', 'media', 'history', 'settings'] }
     );
 }
 

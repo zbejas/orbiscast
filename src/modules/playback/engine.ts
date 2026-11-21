@@ -3,7 +3,7 @@ import type { Db } from '../database/client';
 import type { SettingsService } from '../settings';
 import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
-import type { PlaybackStateDto } from '../../shared/types';
+import type { ChannelDto, MediaSourceKind, PlaybackStateDto } from '../../shared/types';
 import {
     getViewerCount,
     getVoiceChannelInfo,
@@ -37,16 +37,18 @@ export interface PlaybackTarget {
 }
 
 /**
- * Optional Plex provider. The Plex service implements this once configured.
+ * On-demand provider contract. The media service implements this once at least
+ * one Plex or Jellyfin source is configured.
  */
-export interface PlexPlaybackProvider {
+export interface MediaPlaybackProvider {
     playQueue(target: PlaybackTarget): Promise<PlaybackResult>;
-    startPlaceholder(target: PlaybackTarget): Promise<PlaybackResult>;
+    startPlaceholder(sourceId: number, target: PlaybackTarget): Promise<PlaybackResult>;
     pause(): Promise<PlaybackResult>;
     resume(): Promise<PlaybackResult>;
     seek(seconds: number): Promise<PlaybackResult>;
     skip(): Promise<PlaybackResult>;
     stop(): Promise<void>;
+    getChannels(): ChannelDto[];
 }
 
 type PlaybackMode = PlaybackStateDto['mode'];
@@ -66,8 +68,11 @@ export class PlaybackEngine {
     private positionUpdatedAt: number | null = null;
     private paused = false;
     private queueItemId: number | null = null;
+    private sourceId: number | null = null;
+    private sourceName: string | null = null;
+    private sourceKind: MediaSourceKind | null = null;
     private runId = 0;
-    private plex: PlexPlaybackProvider | null = null;
+    private media: MediaPlaybackProvider | null = null;
 
     constructor(
         private readonly db: Db,
@@ -85,28 +90,38 @@ export class PlaybackEngine {
     }
 
     /**
-     * Registers the Plex provider.
+     * Registers the on-demand media provider.
      *
-     * @param provider - Plex playback implementation
+     * @param provider - Plex and Jellyfin playback implementation
      */
-    setPlexProvider(provider: PlexPlaybackProvider): void {
-        this.plex = provider;
+    setMediaProvider(provider: MediaPlaybackProvider): void {
+        this.media = provider;
     }
 
     /**
-     * Marks the start of a Plex queue item. The Plex service owns the queue and
-     * calls this so the WebUI and Discord see the current title and poster.
-     *
-     * @param input - Current item metadata
+     * Returns the virtual Discord channels for every configured media source.
      */
-    beginPlexState(input: {
+    getMediaChannels(): ChannelDto[] {
+        return this.media?.getChannels() ?? [];
+    }
+
+    /**
+     * Marks the start of a media queue item. The media service owns the queue
+     * and calls this so the WebUI and Discord see the current title and poster.
+     *
+     * @param input - Current item and source metadata
+     */
+    beginMediaState(input: {
+        sourceId: number;
+        sourceName: string;
+        sourceKind: MediaSourceKind;
         title: string;
         subtitle: string | null;
         posterUrl: string | null;
         queueItemId: number;
         durationMs: number | null;
     }): void {
-        this.mode = 'plex';
+        this.mode = 'media';
         this.title = input.title;
         this.subtitle = input.subtitle;
         this.posterUrl = input.posterUrl;
@@ -116,16 +131,19 @@ export class PlaybackEngine {
         this.positionUpdatedAt = this.startedAt;
         this.paused = false;
         this.queueItemId = input.queueItemId;
+        this.sourceId = input.sourceId;
+        this.sourceName = input.sourceName;
+        this.sourceKind = input.sourceKind;
         this.emit();
     }
 
     /**
-     * Updates the Plex playback position and duration.
+     * Updates the media playback position and duration.
      *
      * @param positionMs - Position at the time of the update
      * @param durationMs - Item duration, or null when unknown
      */
-    setPlexProgress(positionMs: number, durationMs: number | null): void {
+    setMediaProgress(positionMs: number, durationMs: number | null): void {
         this.positionMs = Math.max(0, positionMs);
         this.durationMs = durationMs;
         this.positionUpdatedAt = Date.now();
@@ -133,33 +151,38 @@ export class PlaybackEngine {
     }
 
     /**
-     * Updates the paused flag for Plex playback.
+     * Updates the paused flag for media playback.
      *
      * @param paused - New paused state
      */
-    setPlexPaused(paused: boolean): void {
+    setMediaPaused(paused: boolean): void {
         this.paused = paused;
         this.emit();
     }
 
     /**
-     * Clears Plex state after the queue ends or is stopped.
+     * Clears media state after the queue ends or is stopped.
      */
-    endPlexState(): void {
-        if (this.mode === 'plex') {
+    endMediaState(): void {
+        if (this.mode === 'media') {
             this.reset();
             this.emit();
         }
     }
 
     /**
-     * Marks the Plex placeholder as active.
+     * Marks a media placeholder as active.
      *
-     * @param title - Placeholder title shown in the UI
+     * @param input - Source and channel metadata
      */
-    beginPlaceholderState(title: string): void {
+    beginPlaceholderState(input: {
+        sourceId: number;
+        sourceName: string;
+        sourceKind: MediaSourceKind;
+        title: string;
+    }): void {
         this.mode = 'placeholder';
-        this.title = title;
+        this.title = input.title;
         this.subtitle = 'On demand';
         this.posterUrl = null;
         this.startedAt = Date.now();
@@ -168,6 +191,9 @@ export class PlaybackEngine {
         this.positionUpdatedAt = null;
         this.paused = false;
         this.queueItemId = null;
+        this.sourceId = input.sourceId;
+        this.sourceName = input.sourceName;
+        this.sourceKind = input.sourceKind;
         this.emit();
     }
 
@@ -185,7 +211,7 @@ export class PlaybackEngine {
      * Returns true when a real stream is active.
      */
     isBusy(): boolean {
-        return this.mode === 'iptv' || this.mode === 'plex';
+        return this.mode === 'iptv' || this.mode === 'media';
     }
 
     /**
@@ -209,6 +235,9 @@ export class PlaybackEngine {
             viewers: getViewerCount(),
             paused: this.paused,
             queueItemId: this.queueItemId,
+            sourceId: this.sourceId,
+            sourceName: this.sourceName,
+            sourceKind: this.sourceKind,
         };
     }
 
@@ -225,8 +254,8 @@ export class PlaybackEngine {
 
         const run = ++this.runId;
         if (this.mode === 'placeholder') {
-            if (this.plex) {
-                await this.plex.stop();
+            if (this.media) {
+                await this.media.stop();
             } else {
                 await stopStreaming();
             }
@@ -244,6 +273,9 @@ export class PlaybackEngine {
         this.startedAt = Date.now();
         this.paused = false;
         this.queueItemId = null;
+        this.sourceId = null;
+        this.sourceName = null;
+        this.sourceKind = null;
         this.emit();
 
         const entry: ChannelEntry = {
@@ -260,33 +292,34 @@ export class PlaybackEngine {
     }
 
     /**
-     * Starts the Plex on-demand queue.
+     * Starts the on-demand queue.
      *
      * @param target - Guild and voice channel
      */
-    async playPlex(target: PlaybackTarget): Promise<PlaybackResult> {
-        if (!this.plex) {
-            return { ok: false, message: 'Plex is not configured.' };
+    async playMedia(target: PlaybackTarget): Promise<PlaybackResult> {
+        if (!this.media) {
+            return { ok: false, message: 'No media source is configured.' };
         }
         if (this.isBusy()) {
             return { ok: false, message: 'Another stream is already playing. Stop it first.' };
         }
-        return this.plex.playQueue(target);
+        return this.media.playQueue(target);
     }
 
     /**
-     * Starts the Plex placeholder stream in Discord.
+     * Starts a media source placeholder stream in Discord.
      *
+     * @param sourceId - Media source id
      * @param target - Guild and voice channel
      */
-    async startPlaceholder(target: PlaybackTarget): Promise<PlaybackResult> {
-        if (!this.plex) {
-            return { ok: false, message: 'Plex is not configured.' };
+    async startPlaceholder(sourceId: number, target: PlaybackTarget): Promise<PlaybackResult> {
+        if (!this.media) {
+            return { ok: false, message: 'No media source is configured.' };
         }
         if (this.isBusy()) {
             return { ok: false, message: 'Another stream is already playing. Stop it first.' };
         }
-        return this.plex.startPlaceholder(target);
+        return this.media.startPlaceholder(sourceId, target);
     }
 
     /**
@@ -294,8 +327,8 @@ export class PlaybackEngine {
      */
     async stop(): Promise<PlaybackResult> {
         this.runId++;
-        if (this.plex && (this.mode === 'plex' || this.mode === 'placeholder')) {
-            await this.plex.stop();
+        if (this.media && (this.mode === 'media' || this.mode === 'placeholder')) {
+            await this.media.stop();
         }
         await leaveVoiceChannel();
         this.reset();
@@ -304,11 +337,11 @@ export class PlaybackEngine {
     }
 
     /**
-     * Skips the current Plex item. IPTV stops instead.
+     * Skips the current media item. IPTV stops instead.
      */
     async skip(): Promise<PlaybackResult> {
-        if (this.mode === 'plex' && this.plex) {
-            return this.plex.skip();
+        if (this.mode === 'media' && this.media) {
+            return this.media.skip();
         }
         if (this.mode === 'iptv' || this.mode === 'placeholder') {
             return this.stop();
@@ -317,13 +350,13 @@ export class PlaybackEngine {
     }
 
     /**
-     * Pauses Plex playback. IPTV cannot be paused.
+     * Pauses media playback. IPTV cannot be paused.
      */
     async pause(): Promise<PlaybackResult> {
-        if (this.mode !== 'plex' || !this.plex) {
-            return { ok: false, message: 'Only Plex playback can be paused.' };
+        if (this.mode !== 'media' || !this.media) {
+            return { ok: false, message: 'Only on-demand playback can be paused.' };
         }
-        const result = await this.plex.pause();
+        const result = await this.media.pause();
         if (result.ok) {
             this.paused = true;
             this.emit();
@@ -332,13 +365,13 @@ export class PlaybackEngine {
     }
 
     /**
-     * Resumes Plex playback.
+     * Resumes media playback.
      */
     async resume(): Promise<PlaybackResult> {
-        if (this.mode !== 'plex' || !this.plex) {
-            return { ok: false, message: 'Only Plex playback can be resumed.' };
+        if (this.mode !== 'media' || !this.media) {
+            return { ok: false, message: 'Only on-demand playback can be resumed.' };
         }
-        const result = await this.plex.resume();
+        const result = await this.media.resume();
         if (result.ok) {
             this.paused = false;
             this.emit();
@@ -347,15 +380,15 @@ export class PlaybackEngine {
     }
 
     /**
-     * Seeks Plex playback to an absolute offset.
+     * Seeks media playback to an absolute offset.
      *
      * @param seconds - Target offset in seconds
      */
     async seek(seconds: number): Promise<PlaybackResult> {
-        if (this.mode !== 'plex' || !this.plex) {
-            return { ok: false, message: 'Only Plex playback can be seeked.' };
+        if (this.mode !== 'media' || !this.media) {
+            return { ok: false, message: 'Only on-demand playback can be seeked.' };
         }
-        return this.plex.seek(seconds);
+        return this.media.seek(seconds);
     }
 
     private async runIptv(entry: ChannelEntry, run: number): Promise<void> {
@@ -384,6 +417,9 @@ export class PlaybackEngine {
         this.positionUpdatedAt = null;
         this.paused = false;
         this.queueItemId = null;
+        this.sourceId = null;
+        this.sourceName = null;
+        this.sourceKind = null;
     }
 
     private emit(): void {

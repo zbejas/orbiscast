@@ -1,11 +1,21 @@
 import { Client } from '@lng2004/discord.js-selfbot-v13';
-import { Encoders, prepareStream, playStream, Streamer, Utils } from '@dank074/discord-video-stream';
+import {
+    Encoders,
+    GatewayOpCodes,
+    prepareStream,
+    playStream,
+    Streamer,
+    Utils,
+} from '@dank074/discord-video-stream';
 import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
 import type { ChannelEntry } from '../../interfaces/iptv';
+import { appendFfmpegLine, LOW_LATENCY_INPUT_OPTIONS } from './ffmpeg';
+import { applyLibraryFixes } from './library-fixes';
 import { PersistentStream } from './persistent-session';
 
 const logger = getLogger();
+const libraryFixesReady = applyLibraryFixes();
 
 export interface StreamSettings {
     minimizeLatency: boolean;
@@ -22,6 +32,8 @@ export interface StreamResult {
 
 let streamer = new Streamer(new Client());
 let abortController = new AbortController();
+let joinListenerClient: Client | null = null;
+const streamerJoinHandlers = new Set<(guildId: string) => void>();
 let currentChannelEntry: ChannelEntry | null = null;
 let persistentStream: PersistentStream | null = null;
 let streamProcess: (Promise<unknown> & { kill: (signal?: NodeJS.Signals | number) => boolean }) | null = null;
@@ -37,6 +49,36 @@ let settings: StreamSettings = {
 };
 
 const JOIN_VOICE_TIMEOUT_MS = 20_000;
+const ACCEPT_INVITE_TIMEOUT_MS = 20_000;
+
+/**
+ * Attaches the guild-join listener to the current streamer client once.
+ *
+ * Reconnects replace the client, so this runs again on every login. The bot
+ * client does not request the privileged GuildMembers intent, which is why the
+ * user client is the reliable source for this event.
+ */
+function attachJoinListener(): void {
+    const client = streamer.client as Client;
+    if (joinListenerClient === client) {
+        return;
+    }
+    joinListenerClient = client;
+
+    client.on('guildMemberAdd', member => {
+        const userId = client.user?.id;
+        if (!userId || member.id !== userId) {
+            return;
+        }
+        const guildId = member.guild?.id;
+        if (!guildId) {
+            return;
+        }
+        for (const handler of streamerJoinHandlers) {
+            handler(guildId);
+        }
+    });
+}
 
 /**
  * Applies the current streaming settings to new playback.
@@ -63,6 +105,113 @@ export function getStreamerStatus(): { online: boolean; tag: string | null; guil
         tag: streamer.client.user?.tag ?? null,
         guildId: streamer.voiceConnection?.guildId ?? null,
         channelId: streamer.voiceConnection?.channelId ?? null,
+    };
+}
+
+/**
+ * Returns the logged-in streaming account's public identity.
+ *
+ * @returns User ID and tag, or null when the streamer client is not ready
+ */
+export function getStreamerInfo(): { id: string; tag: string } | null {
+    const client = streamer.client;
+    const user = client.user;
+    if (!client.isReady() || !user) {
+        return null;
+    }
+
+    return { id: user.id, tag: user.tag };
+}
+
+/**
+ * Lists the guilds the streaming account is a member of.
+ *
+ * @returns Guild IDs from the streamer client cache
+ */
+export function getStreamerGuildIds(): string[] {
+    if (!streamer.client.isReady()) {
+        return [];
+    }
+    return [...streamer.client.guilds.cache.keys()];
+}
+
+/**
+ * Checks whether the streaming account is already a member of a guild.
+ *
+ * @param guildId - Discord guild ID
+ * @returns True when the guild is cached for the streaming account
+ */
+export function isStreamerInGuild(guildId: string): boolean {
+    return streamer.client.isReady() && streamer.client.guilds.cache.has(guildId);
+}
+
+/**
+ * Fetches the streaming account's member record from a guild.
+ *
+ * This uses the user client, which does not need the bot's privileged
+ * GuildMembers intent.
+ *
+ * @param guildId - Discord guild ID
+ * @returns True when the streaming account is a member of the guild
+ */
+export async function fetchStreamerGuildMember(guildId: string): Promise<boolean> {
+    const client = streamer.client;
+    const user = client.user;
+    if (!client.isReady() || !user) {
+        return false;
+    }
+
+    let guild = client.guilds.cache.get(guildId);
+    if (!guild) {
+        try {
+            guild = await client.guilds.fetch(guildId);
+        } catch {
+            return false;
+        }
+    }
+
+    try {
+        await guild.members.fetch(user.id);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Accepts a guild invite with the streaming account's user token.
+ *
+ * @param invite - Invite code or URL
+ * @returns Success state and a safe error message
+ */
+export async function acceptGuildInvite(invite: string): Promise<{ success: boolean; error?: string }> {
+    const client = streamer.client;
+    if (!client.isReady()) {
+        return { success: false, error: 'The streaming account is not logged in.' };
+    }
+
+    try {
+        await withTimeout(
+            client.acceptInvite(invite, { bypassOnboarding: true, bypassVerify: true }),
+            ACCEPT_INVITE_TIMEOUT_MS,
+            'Timed out accepting the Discord invite'
+        );
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+}
+
+/**
+ * Subscribes to the streaming account joining a guild.
+ *
+ * @param handler - Called with the joined guild ID
+ * @returns Unsubscribe function
+ */
+export function onStreamerGuildJoin(handler: (guildId: string) => void): () => void {
+    streamerJoinHandlers.add(handler);
+    return () => {
+        streamerJoinHandlers.delete(handler);
     };
 }
 
@@ -113,43 +262,79 @@ export function getCurrentChannelEntry(): ChannelEntry | null {
 }
 
 /**
- * Freezes the active Discord stream without ending it. The Discord stream
- * stays live and the last frame stays on screen; the Plex session and voice
- * connection remain open.
+ * Sends Discord's stream pause state for the active voice stream.
+ *
+ * @param paused - Whether viewers should see Discord's paused screen
+ * @returns True when the opcode was sent
+ */
+function signalStreamPaused(paused: boolean): boolean {
+    const connection = streamer.voiceConnection;
+    const user = streamer.client.user;
+    if (!connection || !user) {
+        return false;
+    }
+    const streamKey = Utils.generateStreamKey(
+        connection.type,
+        connection.guildId,
+        connection.channelId,
+        user.id
+    );
+    streamer.sendOpcode(GatewayOpCodes.STREAM_SET_PAUSED, {
+        stream_key: streamKey,
+        paused,
+    });
+    return true;
+}
+
+/**
+ * Pauses the active Discord stream without ending it. Discord shows its paused
+ * screen, FFmpeg is suspended, and the Plex session and voice connection remain
+ * open.
  *
  * @returns True when the stream was paused
  */
 export function pauseStreaming(): boolean {
     if (persistentStream?.active) {
-        const paused = persistentStream.pause();
-        if (paused) {
-            logger.info('Froze video stream and kept the voice connection open');
+        if (!signalStreamPaused(true)) {
+            return false;
         }
-        return paused;
+        const paused = persistentStream.pause();
+        if (!paused) {
+            signalStreamPaused(false);
+            return false;
+        }
+        logger.info('Paused video stream with the Discord pause state');
+        return true;
     }
     if (!currentChannelEntry || !streamProcess || streamPaused) {
         return false;
     }
+    if (!signalStreamPaused(true)) {
+        return false;
+    }
     if (!streamProcess.kill('SIGSTOP')) {
+        signalStreamPaused(false);
         return false;
     }
     streamPaused = true;
-    logger.info('Froze video stream and kept the voice connection open');
+    logger.info('Paused video stream with the Discord pause state');
     return true;
 }
 
 /**
- * Resumes a stream frozen by {@link pauseStreaming}.
+ * Resumes a stream paused by {@link pauseStreaming}.
  *
  * @returns True when the stream was resumed
  */
 export function resumeStreaming(): boolean {
     if (persistentStream?.active) {
         const resumed = persistentStream.resume();
-        if (resumed) {
-            logger.info('Resumed video stream');
+        if (!resumed) {
+            return false;
         }
-        return resumed;
+        signalStreamPaused(false);
+        logger.info('Resumed video stream');
+        return true;
     }
     if (!currentChannelEntry || !streamProcess || !streamPaused) {
         return false;
@@ -157,6 +342,7 @@ export function resumeStreaming(): boolean {
     if (!streamProcess.kill('SIGCONT')) {
         return false;
     }
+    signalStreamPaused(false);
     streamPaused = false;
     logger.info('Resumed video stream');
     return true;
@@ -175,6 +361,7 @@ export async function initializeStreamer(token?: string): Promise<boolean> {
         logger.warn('No streamer token configured');
         return false;
     }
+    attachJoinListener();
     try {
         await (streamer.client as Client).login(token);
         logger.info('Streamer client logged in successfully');
@@ -317,8 +504,16 @@ export async function startStreaming(
         return { aborted: false, error: 'Streamer client is not logged in' };
     }
 
+    await libraryFixesReady;
     let signal = abortController.signal;
     let errorMessage: string | null = null;
+    const ffmpegLog: string[] = [];
+    let ffmpegTailLogged = false;
+    const logFfmpegTail = () => {
+        if (ffmpegTailLogged || ffmpegLog.length === 0) return;
+        ffmpegTailLogged = true;
+        logger.error(`Last FFmpeg output:\n${ffmpegLog.map(line => redactSecrets(line)).join('\n')}`);
+    };
 
     try {
         logger.info('Stopping any possible existing stream');
@@ -331,21 +526,27 @@ export async function startStreaming(
             x264: { preset: 'veryfast' },
             x265: { preset: 'veryfast' },
         });
+        const inputOptions = [
+            ...(settings.minimizeLatency ? LOW_LATENCY_INPUT_OPTIONS : []),
+            ...(options.inputOptions ?? []),
+        ];
 
         const { command, output, promise } = prepareStream(
             channelEntry.url,
             {
                 noTranscoding: settings.disableTranscode,
-                minimizeLatency: settings.minimizeLatency,
+                // The library's minimizeLatency passes an invalid `-flags lowdelay`.
+                minimizeLatency: false,
                 bitrateVideo: settings.bitrateVideo,
                 bitrateVideoMax: settings.bitrateVideoMax,
                 videoCodec: Utils.normalizeVideoCodec('H264'),
                 encoder,
-                customInputOptions: options.inputOptions ?? [],
+                customInputOptions: inputOptions,
                 customHeaders: options.headers ?? {},
             },
             signal
         );
+        command.on('stderr', (line: string) => appendFfmpegLine(ffmpegLog, line));
 
         currentChannelEntry = channelEntry;
         streamProcess = promise as Promise<unknown> & {
@@ -357,6 +558,7 @@ export async function startStreaming(
             if (!signal.aborted) {
                 errorMessage = String(err);
                 logger.error(`FFmpeg process error: ${redactSecrets(String(err))}`);
+                logFfmpegTail();
             }
         });
 
@@ -364,6 +566,7 @@ export async function startStreaming(
             if (!signal.aborted) {
                 errorMessage = String(err);
                 logger.error(`FFmpeg ${redactSecrets(String(err))}`);
+                logFfmpegTail();
             }
         });
 
@@ -385,6 +588,7 @@ export async function startStreaming(
         if (!signal.aborted) {
             errorMessage = String(error);
             logger.error(`Error starting stream: ${redactSecrets(String(error))}`);
+            logFfmpegTail();
             await stopStreaming();
         }
         return { aborted: signal.aborted, error: errorMessage };
@@ -392,7 +596,7 @@ export async function startStreaming(
 }
 
 /**
- * Starts a Plex stream on one persistent Discord stream connection. The
+ * Starts a media stream on one persistent Discord stream connection. The
  * connection survives source swaps so seeking does not delete and recreate the
  * stream.
  *
@@ -400,15 +604,16 @@ export async function startStreaming(
  * @param options - Input options and headers
  * @returns Playback result
  */
-export async function startPlexStreaming(
+export async function startMediaStreaming(
     channelEntry: ChannelEntry,
-    options: { inputOptions?: string[]; headers?: Record<string, string> } = {}
+    options: { inputOptions?: string[]; headers?: Record<string, string>; maxHeight?: number } = {}
 ): Promise<StreamResult> {
     if (!streamer.client.isReady()) {
         logger.error('Streamer client is not logged in');
         return { aborted: false, error: 'Streamer client is not logged in' };
     }
 
+    await libraryFixesReady;
     logger.info('Stopping any possible existing stream');
     await stopStreaming();
 
@@ -425,16 +630,19 @@ export async function startPlexStreaming(
     try {
         return await session.start(channelEntry.url, {
             noTranscoding: settings.disableTranscode,
-            minimizeLatency: settings.minimizeLatency,
             bitrateVideo: settings.bitrateVideo,
             bitrateVideoMax: settings.bitrateVideoMax,
             encoder,
-            inputOptions: options.inputOptions ?? [],
+            inputOptions: [
+                ...(settings.minimizeLatency ? LOW_LATENCY_INPUT_OPTIONS : []),
+                ...(options.inputOptions ?? []),
+            ],
             headers: options.headers ?? {},
+            maxHeight: options.maxHeight,
         });
     } catch (error) {
         const message = String(error);
-        logger.error(`Error starting Plex stream: ${redactSecrets(message)}`);
+        logger.error(`Error starting media stream: ${redactSecrets(message)}`);
         return { aborted: false, error: message };
     } finally {
         if (persistentStream === session) {
@@ -448,18 +656,25 @@ export async function startPlexStreaming(
 }
 
 /**
- * Replaces the Plex source while keeping the current Discord stream alive.
+ * Replaces the media source while keeping the current Discord stream alive.
  *
- * @param url - New Plex transcode URL
+ * @param url - New provider transcode URL
  * @returns True when the source was replaced
  */
-export async function replacePlexStreamingSource(url: string): Promise<boolean> {
+export async function replaceMediaStreamingSource(url: string): Promise<boolean> {
     if (!persistentStream?.active) {
         return false;
     }
     await persistentStream.replace(url);
+    signalStreamPaused(false);
     return true;
 }
+
+/** @deprecated Use startMediaStreaming. */
+export const startPlexStreaming = startMediaStreaming;
+
+/** @deprecated Use replaceMediaStreamingSource. */
+export const replacePlexStreamingSource = replaceMediaStreamingSource;
 
 /**
  * Stops the current stream without disconnecting from voice.

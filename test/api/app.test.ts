@@ -10,10 +10,15 @@ import { SettingsService } from '../../src/modules/settings';
 import { IptvService } from '../../src/modules/iptv/service';
 import { PlaybackEngine } from '../../src/modules/playback/engine';
 import { DiscordService } from '../../src/modules/discord/service';
-import { PlexService } from '../../src/modules/plex/service';
+import { MediaService } from '../../src/modules/media/service';
 import { createAuthAdapter } from '../../src/web/auth';
 import { createApp } from '../../src/web/app';
-import { addQueueItem, replaceSourceChannels, replaceSourceProgrammes } from '../../src/modules/database/repo';
+import {
+    createMediaSource,
+    replaceSourceChannels,
+    replaceSourceProgrammes,
+    upsertMediaHistory,
+} from '../../src/modules/database/repo';
 
 let dir: string;
 let connection: DatabaseConnection;
@@ -31,8 +36,8 @@ beforeEach(() => {
 
     const iptv = new IptvService(connection.db, settings, events);
     const playback = new PlaybackEngine(connection.db, settings, events);
-    const plex = new PlexService(connection.db, settings, playback, events, dir);
-    playback.setPlexProvider(plex);
+    const media = new MediaService(connection.db, settings, playback, events, dir);
+    playback.setMediaProvider(media);
     const discord = new DiscordService(connection.db, settings, playback, iptv, events);
     const auth = createAuthAdapter({ db: connection.db, settings });
 
@@ -42,7 +47,7 @@ beforeEach(() => {
         settings,
         iptv,
         playback,
-        plex,
+        media,
         discord,
         events,
         auth,
@@ -61,7 +66,25 @@ describe('API', () => {
 
         const setup = await request(app).get('/api/setup/status').expect(200);
         expect(setup.body.discordConfigured).toBe(false);
+        expect(setup.body.guildReady).toBe(false);
+        expect(setup.body.botInviteUrl).toBeNull();
         expect(setup.body.authEnabled).toBe(false);
+    });
+
+    it('reports Discord invite state and refuses a streamer join while offline', async () => {
+        const status = await request(app).get('/api/discord/status').expect(200);
+        expect(status.body.botInviteUrl).toBeNull();
+        expect(status.body.streamerGuildIds).toEqual([]);
+        expect(status.body.streamerJoin).toEqual({
+            state: 'idle',
+            guildId: null,
+            guildName: null,
+            fallbackInviteUrl: null,
+            error: null,
+        });
+
+        const join = await request(app).post('/api/discord/streamer/join').send({}).expect(409);
+        expect(join.body.error.code).toBe('bot_offline');
     });
 
     it('validates and stores sources', async () => {
@@ -251,10 +274,15 @@ describe('API', () => {
     it('persists settings updates', async () => {
         const updated = await request(app)
             .patch('/api/settings')
-            .send({ stream: { bitrateVideo: 9000 }, ui: { logLevel: 'debug' } })
+            .send({
+                stream: { bitrateVideo: 9000 },
+                playback: { autoplayNextEpisode: true },
+                ui: { logLevel: 'debug' },
+            })
             .expect(200);
 
         expect(updated.body.stream.bitrateVideo).toBe(9000);
+        expect(updated.body.playback.autoplayNextEpisode).toBe(true);
         expect(updated.body.logLevel).toBe('debug');
     });
 
@@ -302,55 +330,113 @@ describe('API', () => {
         await request(app).get('/api/settings').expect(200);
     });
 
-    it('manages the queue', async () => {
-        const created = await request(app)
-            .post('/api/queue')
-            .send({
-                ratingKey: '123',
-                type: 'movie',
-                title: 'Test movie',
-                quality: '1080p-8',
-                subtitleMode: 'auto',
-            })
-            .expect(201);
+    it('serves an empty media queue', async () => {
+        const list = await request(app).get('/api/media/queue').expect(200);
+        expect(list.body).toEqual([]);
 
-        expect(created.body.title).toBe('Test movie');
+        const shuffled = await request(app).post('/api/media/queue/shuffle').expect(200);
+        expect(shuffled.body).toEqual([]);
 
-        const list = await request(app).get('/api/queue').expect(200);
-        expect(list.body).toHaveLength(1);
-
-        await request(app).delete(`/api/queue/${created.body.id}`).expect(204);
-        const empty = await request(app).get('/api/queue').expect(200);
-        expect(empty.body).toHaveLength(0);
+        await request(app).delete('/api/media/queue/999').expect(404);
+        await request(app).delete('/api/media/queue').expect(204);
     });
 
-    it('serves the WebUI queue aliases', async () => {
-        addQueueItem(connection.db, {
-            ratingKey: '456',
-            type: 'episode',
-            title: 'Pilot',
-            showTitle: 'Test show',
-            seasonNumber: 1,
-            episodeNumber: 1,
-            quality: '720p-4',
+    it('serves resumable media history and deletes entries', async () => {
+        const empty = await request(app).get('/api/media/history').expect(200);
+        expect(empty.body).toEqual([]);
+
+        const source = createMediaSource(connection.db, {
+            kind: 'plex',
+            name: 'Plex',
+            baseUrl: 'http://plex.test:32400',
+            tokenEncrypted: 'ciphertext',
+            clientIdentifier: 'client',
+            channelName: 'Plex',
+        });
+        const history = upsertMediaHistory(connection.db, {
+            sourceId: source.id,
+            itemId: '100',
+            type: 'movie',
+            title: 'Movie',
+            durationMs: 7_200_000,
+            positionMs: 1_200_000,
+            quality: '1080p-8',
             subtitleMode: 'auto',
         });
 
-        const list = await request(app).get('/api/plex/queue').expect(200);
+        const list = await request(app).get('/api/media/history?limit=5').expect(200);
         expect(list.body).toHaveLength(1);
-        expect(list.body[0].title).toBe('Pilot');
+        expect(list.body[0]).toMatchObject({
+            id: history.id,
+            itemId: '100',
+            title: 'Movie',
+            positionMs: 1_200_000,
+            sourceKind: 'plex',
+        });
 
-        const moved = await request(app)
-            .post(`/api/plex/queue/${list.body[0].id}/move`)
-            .send({ direction: 'down' })
+        await request(app).delete('/api/media/history/999').expect(404);
+        await request(app).delete(`/api/media/history/${history.id}`).expect(204);
+        expect((await request(app).get('/api/media/history').expect(200)).body).toEqual([]);
+    });
+
+    it('reorders media source tabs and keeps the order in settings', async () => {
+        const alpha = createMediaSource(connection.db, {
+            kind: 'plex',
+            name: 'Alpha',
+            baseUrl: 'http://alpha.test:32400',
+            tokenEncrypted: 'ciphertext',
+            clientIdentifier: 'alpha',
+            channelName: 'Alpha',
+        });
+        const zulu = createMediaSource(connection.db, {
+            kind: 'jellyfin',
+            name: 'Zulu',
+            baseUrl: 'https://zulu.test',
+            tokenEncrypted: 'ciphertext',
+            clientIdentifier: 'zulu',
+            channelName: 'Zulu',
+        });
+
+        const initial = await request(app).get('/api/media/sources').expect(200);
+        expect(initial.body.map((source: { id: number }) => source.id)).toEqual([
+            alpha.id,
+            zulu.id,
+        ]);
+
+        const reordered = await request(app)
+            .post('/api/media/sources/order')
+            .send({ ids: [zulu.id, alpha.id] })
             .expect(200);
-        expect(moved.body).toHaveLength(1);
+        expect(reordered.body.map((source: { id: number }) => source.id)).toEqual([
+            zulu.id,
+            alpha.id,
+        ]);
 
-        const shuffled = await request(app).post('/api/plex/queue/shuffle').expect(200);
-        expect(shuffled.body).toHaveLength(1);
+        const reloaded = await request(app).get('/api/media/sources').expect(200);
+        expect(reloaded.body.map((source: { id: number }) => source.id)).toEqual([
+            zulu.id,
+            alpha.id,
+        ]);
+        expect(settings.getUi().mediaSourceOrder).toEqual([zulu.id, alpha.id]);
+    });
 
-        await request(app).delete(`/api/plex/queue/${list.body[0].id}`).expect(204);
-        await request(app).get('/api/plex/queue').expect(200).expect([]);
+    it('validates media source input and lists no channels before a source exists', async () => {
+        await request(app)
+            .post('/api/media/sources')
+            .send({
+                kind: 'jellyfin',
+                name: 'Bad',
+                serverUrl: 'not-a-url',
+                token: 'test',
+                channelName: 'Jellyfin',
+            })
+            .expect(400);
+
+        const sources = await request(app).get('/api/media/sources').expect(200);
+        expect(sources.body).toEqual([]);
+
+        const channels = await request(app).get('/api/channels/media').expect(200);
+        expect(channels.body).toEqual([]);
     });
 
     it('rejects seek when nothing is playing', async () => {
@@ -359,6 +445,17 @@ describe('API', () => {
             .send({ seconds: 30 })
             .expect(409);
         expect(response.body.error.code).toBe('seek_failed');
+    });
+
+    it('serves no current media item and rejects subtitle changes when idle', async () => {
+        const current = await request(app).get('/api/media/playback/item').expect(200);
+        expect(current.body).toBeNull();
+
+        const response = await request(app)
+            .post('/api/media/playback/subtitle')
+            .send({ mode: 'off' })
+            .expect(409);
+        expect(response.body.ok).toBe(false);
     });
 
     it('reports Discord token state without secrets', async () => {

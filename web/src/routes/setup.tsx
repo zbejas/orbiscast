@@ -97,9 +97,9 @@ export default function SetupPage() {
 
     const status = setup.data;
     const sourceCount = sources.data?.length ?? 0;
-    const plexConnected = status.plexValid;
-    const discordConnected = status.discordValid;
-    const requiredComplete = [discordConnected, status.sourcesConfigured, plexConnected].filter(Boolean).length;
+    const mediaConnected = status.mediaValid;
+    const discordConnected = status.discordValid && status.guildReady;
+    const requiredComplete = [discordConnected, status.sourcesConfigured, mediaConnected].filter(Boolean).length;
     const requiredTotal = 3;
 
     const steps: SetupStep[] = [
@@ -107,16 +107,28 @@ export default function SetupPage() {
             id: 'discord',
             title: 'Connect Discord',
             description:
-                'Add the bot token and the streamer token, validate both, and reconnect the streamer to voice.',
+                'Save the bot and streamer tokens, then add the bot to your server. The streaming account joins automatically.',
             status: discordConnected
                 ? 'Connected'
-                : status.discordConfigured
-                  ? 'Needs validation'
-                  : 'Not configured',
-            tone: discordConnected ? 'live' : status.discordConfigured ? 'warn' : 'neutral',
+                : !status.discordConfigured
+                  ? 'Not configured'
+                  : !status.discordValid
+                    ? 'Needs validation'
+                    : status.botInviteUrl
+                      ? 'Add to server'
+                      : 'Waiting for Discord',
+            tone: discordConnected
+                ? 'live'
+                : !status.discordConfigured
+                  ? 'neutral'
+                  : 'warn',
             icon: MessagesSquare,
             to: '/discord',
-            action: discordConnected ? 'Review Discord' : 'Open Discord',
+            action: discordConnected
+                ? 'Review Discord'
+                : status.discordValid
+                  ? 'Add to server'
+                  : 'Open Discord',
             required: true,
             complete: discordConnected,
         },
@@ -128,27 +140,27 @@ export default function SetupPage() {
             status: status.sourcesConfigured ? `${sourceCount} source${sourceCount === 1 ? '' : 's'}` : 'Not configured',
             tone: status.sourcesConfigured ? 'blurple' : 'neutral',
             icon: Rss,
-            to: '/sources',
+            to: '/iptv',
             action: status.sourcesConfigured ? 'Review sources' : 'Add a source',
             required: true,
             complete: status.sourcesConfigured,
         },
         {
-            id: 'plex',
-            title: 'Connect Plex',
+            id: 'media',
+            title: 'Connect a media server',
             description:
-                'Point OrbisCast at the Plex server and confirm that the library is reachable. This powers the on-demand channel.',
-            status: plexConnected
+                'Add a Plex or Jellyfin server and enable the libraries you want to browse. This powers the on-demand channels.',
+            status: mediaConnected
                 ? 'Connected'
-                : status.plexConfigured
+                : status.mediaConfigured
                   ? 'Needs attention'
                   : 'Not configured',
-            tone: plexConnected ? 'plex' : status.plexConfigured ? 'warn' : 'neutral',
+            tone: mediaConnected ? 'plex' : status.mediaConfigured ? 'warn' : 'neutral',
             icon: Film,
-            to: '/settings#plex-connection',
-            action: plexConnected ? 'Review Plex' : 'Configure Plex',
+            to: '/media',
+            action: mediaConnected ? 'Review media' : 'Add a media source',
             required: true,
-            complete: plexConnected,
+            complete: mediaConnected,
         },
         {
             id: 'auth',
@@ -324,7 +336,7 @@ export default function SetupPage() {
                             <ShieldCheck size={18} aria-hidden="true" className="text-blurple-text" />
                             <p className="min-w-0 flex-1 text-xs leading-relaxed text-text-muted">
                                 <span className="font-medium text-text">All required steps are configured.</span>{' '}
-                                The dashboard will show live state as soon as the bot and Plex respond.
+                                The dashboard will show live state as soon as the bot and the media server respond.
                             </p>
                             <Link to="/" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
                                 Open dashboard

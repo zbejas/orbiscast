@@ -7,9 +7,7 @@ import { EventEmitter } from 'node:events';
 import { z, ZodError } from 'zod';
 import type { Db } from '../modules/database/client';
 import {
-    addQueueItem,
     attachChannelGuide,
-    clearQueue,
     createSource,
     deleteSource,
     getChannelById,
@@ -17,14 +15,10 @@ import {
     getGuildSettings,
     getSource,
     listChannelGroups,
-    listPlexLibraries,
-    listQueue,
     listSources,
     listVisibleChannels,
     queryChannels,
     queryProgrammes,
-    removeQueueItem,
-    reorderQueue,
     setChannelVisibility,
     updateSource,
     upsertGuildSettings,
@@ -33,15 +27,16 @@ import type { SettingsService, SettingsUpdateInput } from '../modules/settings';
 import type { IptvService } from '../modules/iptv/service';
 import type { PlaybackEngine } from '../modules/playback/engine';
 import type { DiscordService } from '../modules/discord/service';
-import type { PlexService } from '../modules/plex/service';
+import type { MediaService } from '../modules/media/service';
 import { getLogs, subscribeLogs } from '../utils/log-bus';
 import { configureLogger, getLogger } from '../utils/logger';
 import { AuthSetupError, AuthValidationError } from '../modules/auth/setup';
 import { AuthenticationRequiredError } from '../modules/auth';
 import { PlexError } from '../modules/plex';
+import { JellyfinError } from '../modules/jellyfin/client';
 import { isAPIError } from 'better-auth/api';
 import type { AuthAdapter } from './auth';
-import type { ChannelDto, PlaybackStateDto, QueueItemDto } from '../shared/types';
+import type { MediaQuality, PlaybackStateDto, QueueItemDto } from '../shared/types';
 
 const logger = getLogger();
 
@@ -51,7 +46,7 @@ export interface AppServices {
     settings: SettingsService;
     iptv: IptvService;
     playback: PlaybackEngine;
-    plex: PlexService;
+    media: MediaService;
     discord: DiscordService;
     events: EventEmitter;
     auth?: AuthAdapter;
@@ -102,18 +97,47 @@ const iptvPlaybackSchema = playbackSchema.extend({
     channelId: z.number().int().positive(),
 });
 
-const queueSchema = z.object({
-    ratingKey: z.string().min(1),
-    type: z.enum(['movie', 'episode']),
-    title: z.string().min(1),
-    showTitle: z.string().nullable().optional(),
-    seasonNumber: z.number().int().nullable().optional(),
-    episodeNumber: z.number().int().nullable().optional(),
-    durationMs: z.number().int().nullable().optional(),
-    thumbUrl: z.string().nullable().optional(),
-    quality: z.enum(['720p-4', '1080p-8', '1080p-12', '4k-20']),
-    subtitleMode: z.union([z.literal('auto'), z.literal('off'), z.number().int()]).default('auto'),
-});
+const mediaQualitySchema = z.enum(['720p-4', '1080p-8', '1080p-12', '4k-20']);
+
+const subtitleModeSchema = z
+    .union([z.literal('auto'), z.literal('off'), z.number().int()])
+    .default('auto');
+
+const mediaSourceSchema = z
+    .object({
+        kind: z.enum(['plex', 'jellyfin']),
+        name: z.string().min(1).max(120),
+        serverUrl: urlSchema,
+        token: z.string().min(1),
+        channelName: z.string().min(1).max(80),
+        idleMinutes: z.number().int().min(1).max(120).optional(),
+        emptyGraceSeconds: z.number().int().min(0).max(600).optional(),
+        defaultQuality: mediaQualitySchema.optional(),
+        enabled: z.boolean().optional(),
+    })
+    .strict();
+
+const mediaSourceUpdateSchema = mediaSourceSchema.partial().strict();
+
+const mediaQueueSchema = z
+    .object({
+        sourceId: z.number().int().positive(),
+        itemId: z.string().min(1),
+        quality: mediaQualitySchema,
+        subtitleMode: subtitleModeSchema,
+    })
+    .strict();
+
+const mediaPlaySchema = playbackSchema
+    .extend({
+        sourceId: z.number().int().positive(),
+        itemId: z.string().min(1),
+        quality: mediaQualitySchema,
+        subtitleMode: subtitleModeSchema,
+        queueItemId: z.number().int().positive().nullable().optional(),
+        startOver: z.boolean().optional(),
+    })
+    .strict();
 
 /**
  * Builds the Express application. Kept as a factory so tests can inject a
@@ -283,13 +307,16 @@ export function createApp(services: AppServices) {
         const tokens = services.settings.getDiscordTokens();
         const status = services.discord.getStatus();
         const sources = listSources(services.db);
+        const mediaSources = services.media.getSources();
         res.json({
             needsSetup: sources.length === 0 || !tokens.botToken || !tokens.userToken,
             discordConfigured: Boolean(tokens.botToken && tokens.userToken),
             discordValid: status.bot === 'online' && status.streamer === 'online',
+            guildReady: status.streamerJoin.state === 'joined',
+            botInviteUrl: status.botInviteUrl,
             sourcesConfigured: sources.length > 0,
-            plexConfigured: services.settings.getPlexConfig().tokenSet,
-            plexValid: services.plex.getConfig().connected,
+            mediaConfigured: mediaSources.length > 0,
+            mediaValid: mediaSources.some(source => source.connected),
             authEnabled: services.settings.isAuthEnabled(),
         });
     });
@@ -405,23 +432,8 @@ export function createApp(services: AppServices) {
         res.json({ ...result, items: attachChannelGuide(services.db, result.items) });
     });
 
-    app.get('/api/channels/plex', (_req, res) => {
-        const plex = services.settings.getPlexConfig();
-        const state = services.playback.getState();
-        const dto: ChannelDto = {
-            id: 0,
-            sourceId: null,
-            sourceName: 'Plex',
-            name: plex.channelName,
-            logo: null,
-            group: null,
-            tvgId: null,
-            visible: plex.tokenSet,
-            kind: 'plex',
-            nowPlaying: state.mode === 'plex' ? state.title : null,
-            next: null,
-        };
-        res.json(dto);
+    app.get('/api/channels/media', (_req, res) => {
+        res.json(services.media.getChannels());
     });
 
     app.patch('/api/channels/visibility', (req, res) => {
@@ -573,6 +585,33 @@ export function createApp(services: AppServices) {
         res.json(services.discord.getStatus());
     });
 
+    app.post('/api/discord/streamer/join', (req, res) => {
+        const input = z.object({ guildId: z.string().min(1).optional() }).parse(req.body ?? {});
+        const status = services.discord.getStatus();
+        if (status.bot !== 'online') {
+            res.status(409).json({
+                error: { code: 'bot_offline', message: 'Start the bot before adding the streaming account.' },
+            });
+            return;
+        }
+        if (status.streamer !== 'online') {
+            res.status(409).json({
+                error: {
+                    code: 'streamer_offline',
+                    message: 'Save a valid streamer token before adding the streaming account.',
+                },
+            });
+            return;
+        }
+        if (input.guildId && !status.guilds.some(guild => guild.id === input.guildId)) {
+            res.status(404).json({ error: { code: 'not_found', message: 'Guild not found' } });
+            return;
+        }
+
+        services.discord.retryStreamerJoin(input.guildId);
+        res.status(202).json(services.discord.getStatus());
+    });
+
     app.get('/api/discord/guilds', (_req, res) => {
         res.json(services.discord.getStatus().guilds);
     });
@@ -662,111 +701,66 @@ export function createApp(services: AppServices) {
         res.status(result.ok ? 200 : 409).json(result);
     });
 
-    app.post('/api/playback/plex', async (req, res) => {
+    app.post('/api/playback/media', async (req, res) => {
         const input = playbackSchema.parse(req.body);
-        const result = await services.playback.playPlex(input);
+        const result = await services.playback.playMedia(input);
         res.status(result.ok ? 200 : 409).json(result);
     });
 
-    app.get('/api/queue', (_req, res) => {
-        res.json(listQueue(services.db));
+    app.get('/api/media/sources', (_req, res) => {
+        res.json(services.media.getSources());
     });
 
-    app.post('/api/queue', (req, res) => {
-        const input = queueSchema.parse(req.body);
-        const created = addQueueItem(services.db, {
-            ...input,
-            subtitleMode: String(input.subtitleMode),
-        });
-        services.events.emit('queue', listQueue(services.db));
-        res.status(201).json(created);
+    app.post('/api/media/sources/order', (req, res) => {
+        const schema = z
+            .object({ ids: z.array(z.number().int().positive()).max(500) })
+            .strict();
+        const input = schema.parse(req.body);
+        res.json(services.media.reorderSources(input.ids));
     });
 
-    app.delete('/api/queue/:id', (req, res) => {
-        const removed = removeQueueItem(services.db, Number.parseInt(req.params.id, 10));
-        if (!removed) {
-            res.status(404).json({ error: { code: 'not_found', message: 'Queue item not found' } });
-            return;
-        }
-        services.events.emit('queue', listQueue(services.db));
+    app.post('/api/media/sources', async (req, res) => {
+        const input = mediaSourceSchema.parse(req.body);
+        const source = await services.media.createSource(input);
+        res.status(201).json(source);
+    });
+
+    app.patch('/api/media/sources/:id', async (req, res) => {
+        const id = Number.parseInt(req.params.id, 10);
+        const input = mediaSourceUpdateSchema.parse(req.body);
+        const source = await services.media.updateSource(id, input);
+        res.json(source);
+    });
+
+    app.delete('/api/media/sources/:id', async (req, res) => {
+        const id = Number.parseInt(req.params.id, 10);
+        await services.media.deleteSource(id);
         res.status(204).end();
     });
 
-    app.delete('/api/queue', (_req, res) => {
-        clearQueue(services.db);
-        services.events.emit('queue', listQueue(services.db));
-        res.status(204).end();
+    app.post('/api/media/sources/:id/validate', async (req, res) => {
+        const id = Number.parseInt(req.params.id, 10);
+        res.json(await services.media.connect(id));
     });
 
-    app.post('/api/queue/reorder', (req, res) => {
-        const schema = z.object({ ids: z.array(z.number().int().positive()) });
-        const input = schema.parse(req.body);
-        reorderQueue(services.db, input.ids);
-        services.events.emit('queue', listQueue(services.db));
-        res.json(listQueue(services.db));
+    app.get('/api/media/sources/:id/libraries', (req, res) => {
+        const id = Number.parseInt(req.params.id, 10);
+        res.json(services.media.getLibraries(id));
     });
 
-    app.post('/api/queue/shuffle', (_req, res) => {
-        const items = listQueue(services.db);
-        const ids = items.map(item => item.id);
-        for (let index = ids.length - 1; index > 0; index--) {
-            const swap = Math.floor(Math.random() * (index + 1));
-            [ids[index], ids[swap]] = [ids[swap]!, ids[index]!];
-        }
-        reorderQueue(services.db, ids);
-        services.events.emit('queue', listQueue(services.db));
-        res.json(listQueue(services.db));
-    });
-
-    app.post('/api/queue/play', async (req, res) => {
-        const input = playbackSchema.parse(req.body);
-        const result = await services.playback.playPlex(input);
-        res.status(result.ok ? 200 : 409).json(result);
-    });
-
-    app.get('/api/plex/config', (_req, res) => {
-        res.json(services.plex.getConfig());
-    });
-
-    app.put('/api/plex/config', async (req, res) => {
-        const schema = z.object({
-            serverUrl: urlSchema.optional(),
-            token: z.string().optional(),
-            channelName: z.string().min(1).max(80).optional(),
-            idleMinutes: z.number().int().min(1).max(120).optional(),
-            emptyGraceSeconds: z.number().int().min(0).max(600).optional(),
-            defaultQuality: z.enum(['720p-4', '1080p-8', '1080p-12', '4k-20']).optional(),
-        });
-        const input = schema.parse(req.body);
-        services.settings.update({ plex: input });
-        const config = await services.plex.connect();
-        res.json(config);
-    });
-
-    app.post('/api/plex/validate', async (_req, res) => {
-        res.json(await services.plex.connect());
-    });
-
-    app.get('/api/plex/libraries', async (_req, res) => {
-        res.json(await services.plex.getLibraries());
-    });
-
-    app.patch('/api/plex/libraries/:key', (req, res) => {
+    app.patch('/api/media/sources/:id/libraries/:key', (req, res) => {
+        const id = Number.parseInt(req.params.id, 10);
         const schema = z.object({ enabled: z.boolean() });
         const input = schema.parse(req.body);
-        res.json(services.plex.setLibraryEnabled(req.params.key, input.enabled));
+        res.json(services.media.setLibraryEnabled(id, req.params.key ?? '', input.enabled));
     });
 
-    app.get('/api/plex/search', async (req, res) => {
-        const query = typeof req.query.q === 'string' ? req.query.q : '';
-        res.json({ items: await services.plex.search(query) });
-    });
-
-    app.get('/api/plex/items', async (req, res) => {
+    app.get('/api/media/sources/:id/items', async (req, res) => {
+        const sourceId = Number.parseInt(req.params.id, 10);
         const library = typeof req.query.library === 'string' ? req.query.library : '';
         const search = typeof req.query.search === 'string' ? req.query.search : '';
         if (search.trim()) {
-            const items = await services.plex.search(search.trim());
+            const items = await services.media.search(sourceId, search.trim());
             res.json(library ? items.filter(item => item.libraryKey === library) : items);
             return;
         }
@@ -774,58 +768,98 @@ export function createApp(services: AppServices) {
             res.json([]);
             return;
         }
-        const page = await services.plex.getLibraryItems(library, 0, 200);
+        const start = parseIntParam(req.query.start) ?? 0;
+        const size = Math.min(200, parseIntParam(req.query.size) ?? 200);
+        const page = await services.media.getLibraryItems(sourceId, library, start, size);
         res.json(page.items);
     });
 
-    app.get('/api/plex/items/:ratingKey/children', async (req, res) => {
-        res.json(await services.plex.getChildren(req.params.ratingKey));
+    app.get('/api/media/items/:sourceId/:itemId/children', async (req, res) => {
+        const sourceId = Number.parseInt(req.params.sourceId, 10);
+        res.json(await services.media.getChildren(sourceId, req.params.itemId ?? ''));
     });
 
-    app.get('/api/plex/queue', (_req, res) => {
-        res.json(services.plex.getQueue());
+    app.get('/api/media/items/:sourceId/:itemId', async (req, res) => {
+        const sourceId = Number.parseInt(req.params.sourceId, 10);
+        res.json(await services.media.getItem(sourceId, req.params.itemId ?? ''));
     });
 
-    app.post('/api/plex/queue', async (req, res) => {
-        const schema = z.object({
-            ratingKey: z.string().min(1),
-            quality: z.enum(['720p-4', '1080p-8', '1080p-12', '4k-20']),
-            subtitleMode: z.union([z.literal('auto'), z.literal('off'), z.number().int()]).default('auto'),
-        });
+    app.get('/api/media/thumb/:sourceId/:itemId', async (req, res) => {
+        const sourceId = Number.parseInt(req.params.sourceId, 10);
+        const width = parseIntParam(req.query.width);
+        const height = parseIntParam(req.query.height);
+        const image = await services.media.fetchThumbnail(sourceId, req.params.itemId ?? '', width, height);
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        res.type(image.contentType).send(image.body);
+    });
+
+    app.get('/api/media/playback/item', (_req, res) => {
+        res.json(services.media.getCurrentItem());
+    });
+
+    app.post('/api/media/playback/subtitle', async (req, res) => {
+        const schema = z.object({ mode: subtitleModeSchema }).strict();
         const input = schema.parse(req.body);
-        const item = await services.plex.addToQueue(input.ratingKey, input.quality, String(input.subtitleMode));
+        const result = await services.media.setSubtitleMode(String(input.mode));
+        res.status(result.ok ? 200 : 409).json(result);
+    });
+
+    app.get('/api/media/queue', (_req, res) => {
+        res.json(services.media.getQueue());
+    });
+
+    app.get('/api/media/history', async (req, res) => {
+        const limit = Math.min(50, Math.max(1, parseIntParam(req.query.limit) ?? 20));
+        res.json(await services.media.getHistoryWithNext(limit));
+    });
+
+    app.delete('/api/media/history/:id', (req, res) => {
+        const removed = services.media.removeHistory(Number.parseInt(req.params.id, 10));
+        if (!removed) {
+            res.status(404).json({ error: { code: 'not_found', message: 'History entry not found' } });
+            return;
+        }
+        res.status(204).end();
+    });
+
+    app.post('/api/media/queue', async (req, res) => {
+        const input = mediaQueueSchema.parse(req.body);
+        const item = await services.media.addToQueue(
+            input.sourceId,
+            input.itemId,
+            input.quality,
+            String(input.subtitleMode)
+        );
         res.status(201).json(item);
     });
 
-    app.delete('/api/plex/queue/:id', (req, res) => {
-        const removed = removeQueueItem(services.db, Number.parseInt(req.params.id, 10));
+    app.delete('/api/media/queue/:id', (req, res) => {
+        const removed = services.media.removeQueueItem(Number.parseInt(req.params.id, 10));
         if (!removed) {
             res.status(404).json({ error: { code: 'not_found', message: 'Queue item not found' } });
             return;
         }
-        services.events.emit('queue', listQueue(services.db));
         res.status(204).end();
     });
 
-    app.post('/api/plex/queue/:id/move', (req, res) => {
+    app.post('/api/media/queue/:id/move', (req, res) => {
         const schema = z.object({ direction: z.enum(['up', 'down']) });
         const input = schema.parse(req.body);
-        res.json(services.plex.moveQueueItem(Number.parseInt(req.params.id, 10), input.direction));
+        res.json(services.media.moveQueueItem(Number.parseInt(req.params.id, 10), input.direction));
     });
 
-    app.post('/api/plex/queue/shuffle', (_req, res) => {
-        res.json(services.plex.shuffleQueue());
+    app.post('/api/media/queue/shuffle', (_req, res) => {
+        res.json(services.media.shuffleQueue());
     });
 
-    app.delete('/api/plex/queue', (_req, res) => {
-        clearQueue(services.db);
-        services.events.emit('queue', listQueue(services.db));
+    app.delete('/api/media/queue', (_req, res) => {
+        services.media.clearQueue();
         res.status(204).end();
     });
 
-    app.post('/api/plex/queue/:id/play', async (req, res) => {
+    app.post('/api/media/queue/:id/play', async (req, res) => {
         const input = playbackSchema.parse(req.body);
-        const result = await services.plex.playQueueItem(Number.parseInt(req.params.id, 10), input);
+        const result = await services.media.playQueueItem(Number.parseInt(req.params.id, 10), input);
         if (!result.ok) {
             res.status(409).json({ error: { code: 'playback_conflict', message: result.message } });
             return;
@@ -833,25 +867,19 @@ export function createApp(services: AppServices) {
         res.json(services.playback.getState());
     });
 
-    app.post('/api/plex/play', async (req, res) => {
-        const schema = playbackSchema.extend({
-            ratingKey: z.string().min(1),
-            quality: z.enum(['720p-4', '1080p-8', '1080p-12', '4k-20']),
-            subtitleMode: z.union([z.literal('auto'), z.literal('off'), z.number().int()]).default('auto'),
-            queueItemId: z.number().int().positive().nullable().optional(),
-        });
-        const input = schema.parse(req.body);
+    app.post('/api/media/play', async (req, res) => {
+        const input = mediaPlaySchema.parse(req.body);
+        const target = { guildId: input.guildId, voiceChannelId: input.voiceChannelId };
         const result =
             input.queueItemId !== undefined && input.queueItemId !== null
-                ? await services.plex.playQueueItem(input.queueItemId, {
-                      guildId: input.guildId,
-                      voiceChannelId: input.voiceChannelId,
-                  })
-                : await services.plex.playNow(
-                      input.ratingKey,
-                      input.quality,
+                ? await services.media.playQueueItem(input.queueItemId, target)
+                : await services.media.playNow(
+                      input.sourceId,
+                      input.itemId,
+                      input.quality as MediaQuality,
                       String(input.subtitleMode),
-                      { guildId: input.guildId, voiceChannelId: input.voiceChannelId }
+                      target,
+                      input.startOver ?? false
                   );
         if (!result.ok) {
             res.status(409).json({ error: { code: 'playback_conflict', message: result.message } });
@@ -860,9 +888,9 @@ export function createApp(services: AppServices) {
         res.json(services.playback.getState());
     });
 
-    app.post('/api/plex/placeholder', async (req, res) => {
+    app.post('/api/media/sources/:id/placeholder', async (req, res) => {
         const input = playbackSchema.parse(req.body);
-        const result = await services.playback.startPlaceholder(input);
+        const result = await services.media.startPlaceholder(Number.parseInt(req.params.id, 10), input);
         if (!result.ok) {
             res.status(409).json({ error: { code: 'playback_conflict', message: result.message } });
             return;
@@ -870,57 +898,35 @@ export function createApp(services: AppServices) {
         res.json(services.playback.getState());
     });
 
-    app.get('/api/plex/libraries/:key/items', async (req, res) => {
-        const start = parseIntParam(req.query.start) ?? 0;
-        const size = Math.min(200, parseIntParam(req.query.size) ?? 50);
-        res.json(await services.plex.getLibraryItems(req.params.key, start, size));
-    });
-
-    app.get('/api/plex/shows/:ratingKey/seasons', async (req, res) => {
-        res.json({ items: await services.plex.getSeasons(req.params.ratingKey) });
-    });
-
-    app.get('/api/plex/seasons/:ratingKey/episodes', async (req, res) => {
-        res.json({ items: await services.plex.getEpisodes(req.params.ratingKey) });
-    });
-
-    app.get('/api/plex/items/:ratingKey', async (req, res) => {
-        res.json(await services.plex.getItem(req.params.ratingKey));
-    });
-
-    app.get('/api/plex/thumb/:ratingKey', async (req, res) => {
-        const width = parseIntParam(req.query.width);
-        const height = parseIntParam(req.query.height);
-        const image = await services.plex.fetchThumbnail(req.params.ratingKey, width, height);
-        res.setHeader('Cache-Control', 'private, max-age=3600');
-        res.type(image.contentType).send(image.body);
-    });
-
-    app.post('/api/plex/queue/season', async (req, res) => {
+    app.post('/api/media/queue/season', async (req, res) => {
         const schema = z.object({
-            seasonRatingKey: z.string().min(1),
-            quality: z.enum(['720p-4', '1080p-8', '1080p-12', '4k-20']),
-            subtitleMode: z.union([z.literal('auto'), z.literal('off'), z.number().int()]).default('auto'),
+            sourceId: z.number().int().positive(),
+            seasonId: z.string().min(1),
+            quality: mediaQualitySchema,
+            subtitleMode: subtitleModeSchema,
         });
         const input = schema.parse(req.body);
-        const items = await services.plex.addSeasonToQueue(
-            input.seasonRatingKey,
-            input.quality,
+        const items = await services.media.addSeasonToQueue(
+            input.sourceId,
+            input.seasonId,
+            input.quality as MediaQuality,
             String(input.subtitleMode)
         );
         res.status(201).json({ items });
     });
 
-    app.post('/api/plex/queue/show', async (req, res) => {
+    app.post('/api/media/queue/show', async (req, res) => {
         const schema = z.object({
-            showRatingKey: z.string().min(1),
-            quality: z.enum(['720p-4', '1080p-8', '1080p-12', '4k-20']),
-            subtitleMode: z.union([z.literal('auto'), z.literal('off'), z.number().int()]).default('auto'),
+            sourceId: z.number().int().positive(),
+            showId: z.string().min(1),
+            quality: mediaQualitySchema,
+            subtitleMode: subtitleModeSchema,
         });
         const input = schema.parse(req.body);
-        const items = await services.plex.addShowToQueue(
-            input.showRatingKey,
-            input.quality,
+        const items = await services.media.addShowToQueue(
+            input.sourceId,
+            input.showId,
+            input.quality as MediaQuality,
             String(input.subtitleMode)
         );
         res.status(201).json({ items });
@@ -944,17 +950,23 @@ export function createApp(services: AppServices) {
         send('playback', services.playback.getState());
         send('sources', listSources(services.db));
         send('discord', services.discord.getStatus());
-        send('queue', listQueue(services.db));
+        send('media', services.media.getSources());
+        send('queue', services.media.getQueue());
+        send('history', services.media.getHistory());
 
         const onPlayback = (state: PlaybackStateDto) => send('playback', state);
         const onSources = (sources: unknown) => send('sources', sources);
         const onDiscord = (status: unknown) => send('discord', status);
+        const onMedia = (sources: unknown) => send('media', sources);
         const onQueue = (queue: QueueItemDto[]) => send('queue', queue);
+        const onHistory = (history: unknown) => send('history', history);
         const onSettings = (settings: unknown) => send('settings', settings);
         services.events.on('playback', onPlayback);
         services.events.on('sources', onSources);
         services.events.on('discord', onDiscord);
+        services.events.on('media', onMedia);
         services.events.on('queue', onQueue);
+        services.events.on('history', onHistory);
         services.events.on('settings', onSettings);
 
         const heartbeat = setInterval(() => res.write(': ping\n\n'), 20_000);
@@ -963,7 +975,9 @@ export function createApp(services: AppServices) {
             services.events.off('playback', onPlayback);
             services.events.off('sources', onSources);
             services.events.off('discord', onDiscord);
+            services.events.off('media', onMedia);
             services.events.off('queue', onQueue);
+            services.events.off('history', onHistory);
             services.events.off('settings', onSettings);
         });
     });
@@ -1026,7 +1040,7 @@ export function createApp(services: AppServices) {
             });
             return;
         }
-        if (error instanceof PlexError) {
+        if (error instanceof PlexError || error instanceof JellyfinError) {
             res.status(502).json({
                 error: { code: error.code.toLowerCase(), message: error.message },
             });

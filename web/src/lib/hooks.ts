@@ -4,6 +4,9 @@ import type {
     ChannelDto,
     DiscordStatusDto,
     GuildDto,
+    MediaHistoryDto,
+    MediaItemDetailDto,
+    MediaSourceDto,
     PlaybackStateDto,
     SettingsDto,
     SetupStatusDto,
@@ -18,8 +21,10 @@ import type {
     DiscordTokensInput,
     EnableAuthInput,
     EnqueueInput,
+    SaveSourceInput,
+    StartMediaInput,
     StartPlaceholderInput,
-    StartPlexInput,
+    SubtitleMode,
 } from './types';
 
 export const USE_MOCK = (import.meta.env.VITE_API_MOCKS ?? 'false') === 'true';
@@ -35,13 +40,19 @@ export const qk = {
     channels: (query: ChannelQuery) => ['channels', query] as const,
     guide: (day: string) => ['guide', day] as const,
     logs: (level: string, search: string, limit: number) => ['logs', level, search, limit] as const,
-    plexConfig: ['plex', 'config'] as const,
-    plexLibraries: ['plex', 'libraries'] as const,
-    plexItemsAll: ['plex', 'items'] as const,
-    plexItems: (libraryKey: string, search: string) => ['plex', 'items', libraryKey, search] as const,
-    plexItem: (ratingKey: string) => ['plex', 'item', ratingKey] as const,
-    plexChildren: (ratingKey: string) => ['plex', 'children', ratingKey] as const,
-    plexQueue: ['plex', 'queue'] as const,
+    mediaSources: ['media', 'sources'] as const,
+    mediaLibraries: (sourceId: number) => ['media', 'libraries', sourceId] as const,
+    mediaItemsAll: ['media', 'items'] as const,
+    mediaItems: (sourceId: number, libraryKey: string, search: string) =>
+        ['media', 'items', sourceId, libraryKey, search] as const,
+    mediaItem: (sourceId: number, itemId: string) => ['media', 'item', sourceId, itemId] as const,
+    mediaChildren: (sourceId: number, itemId: string) =>
+        ['media', 'children', sourceId, itemId] as const,
+    mediaQueue: ['media', 'queue'] as const,
+    mediaPlaybackItem: ['media', 'playbackItem'] as const,
+    mediaHistoryAll: ['media', 'history'] as const,
+    mediaHistory: (limit: number) => ['media', 'history', limit] as const,
+    mediaChannels: ['media', 'channels'] as const,
     discord: ['discord', 'status'] as const,
     discordTokens: ['discord', 'tokens'] as const,
     settings: ['settings'] as const,
@@ -90,100 +101,242 @@ export function useGuide(day: string) {
     });
 }
 
-export function usePlexConfig() {
+export function useMediaSources() {
     return useQuery({
-        queryKey: qk.plexConfig,
-        queryFn: source(mockApi.getPlexConfig, api.plex.config),
-        staleTime: 30_000,
+        queryKey: qk.mediaSources,
+        queryFn: () => api.media.sources(),
+        staleTime: 20_000,
     });
 }
 
-export function useSavePlexConfig() {
+export function useCreateMediaSource() {
     const client = useQueryClient();
     return useMutation({
-        mutationFn: (input: { serverUrl: string; token?: string }) =>
-            USE_MOCK ? mockApi.savePlexConfig(input) : api.plex.updateConfig(input),
-        onSuccess: (config) => {
-            client.setQueryData(qk.plexConfig, config);
-            client.invalidateQueries({ queryKey: qk.plexLibraries });
+        mutationFn: (input: Parameters<typeof api.media.createSource>[0]) =>
+            api.media.createSource(input),
+        onSuccess: () => {
+            client.invalidateQueries({ queryKey: qk.mediaSources });
+            client.invalidateQueries({ queryKey: qk.mediaChannels });
             client.invalidateQueries({ queryKey: qk.setup });
         },
     });
 }
 
-export function usePlexLibraries() {
-    return useQuery({
-        queryKey: qk.plexLibraries,
-        queryFn: source(mockApi.getPlexLibraries, api.plex.libraries),
-        staleTime: 60_000,
-    });
-}
-
-export function useSetPlexLibrary() {
+export function useReorderMediaSources() {
     const client = useQueryClient();
-    return useMutation({
-        mutationFn: ({ key, enabled }: { key: string; enabled: boolean }) =>
-            USE_MOCK
-                ? mockApi.setPlexLibraryEnabled(key, enabled)
-                : api.plex.setLibraryEnabled(key, enabled),
-        onSuccess: (libraries) => {
-            client.setQueryData(qk.plexLibraries, libraries);
-            client.invalidateQueries({ queryKey: qk.plexItemsAll });
+    return useMutation<MediaSourceDto[], Error, number[], { previous?: MediaSourceDto[] }>({
+        mutationFn: (ids: number[]) => api.media.reorderSources(ids),
+        onMutate: async (ids) => {
+            await client.cancelQueries({ queryKey: qk.mediaSources });
+            const previous = client.getQueryData<MediaSourceDto[]>(qk.mediaSources);
+            client.setQueryData<MediaSourceDto[]>(qk.mediaSources, (current) => {
+                if (!current) return current;
+                const byId = new Map(current.map((source) => [source.id, source]));
+                const ordered = ids
+                    .map((id) => byId.get(id))
+                    .filter((source): source is MediaSourceDto => Boolean(source));
+                const known = new Set(ids);
+                return [...ordered, ...current.filter((source) => !known.has(source.id))];
+            });
+            return { previous };
+        },
+        onError: (_error, _ids, context) => {
+            if (context?.previous) {
+                client.setQueryData(qk.mediaSources, context.previous);
+            }
+        },
+        onSuccess: (sources) => {
+            client.setQueryData(qk.mediaSources, sources);
+        },
+        onSettled: () => {
+            client.invalidateQueries({ queryKey: qk.mediaSources });
+            client.invalidateQueries({ queryKey: qk.mediaChannels });
         },
     });
 }
 
-export function usePlexItems(libraryKey: string, search: string) {
+export function useUpdateMediaSource() {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: (input: Parameters<typeof api.media.updateSource>[0]) =>
+            api.media.updateSource(input),
+        onSuccess: (source) => {
+            client.setQueryData<MediaSourceDto[]>(qk.mediaSources, (current) =>
+                current?.map((entry) => (entry.id === source.id ? source : entry))
+            );
+            client.invalidateQueries({ queryKey: qk.mediaSources });
+            client.invalidateQueries({ queryKey: qk.mediaLibraries(source.id) });
+            client.invalidateQueries({ queryKey: qk.mediaChannels });
+            client.invalidateQueries({ queryKey: qk.setup });
+        },
+    });
+}
+
+export function useDeleteMediaSource() {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: (id: number) => api.media.removeSource(id),
+        onSuccess: () => {
+            client.invalidateQueries({ queryKey: qk.mediaSources });
+            client.invalidateQueries({ queryKey: qk.mediaChannels });
+            client.invalidateQueries({ queryKey: qk.mediaQueue });
+            client.invalidateQueries({ queryKey: qk.setup });
+        },
+    });
+}
+
+export function useValidateMediaSource() {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: (id: number) => api.media.validateSource(id),
+        onSuccess: (source) => {
+            client.setQueryData<MediaSourceDto[]>(qk.mediaSources, (current) =>
+                current?.map((entry) => (entry.id === source.id ? source : entry))
+            );
+            client.invalidateQueries({ queryKey: qk.mediaLibraries(source.id) });
+            client.invalidateQueries({ queryKey: qk.setup });
+        },
+    });
+}
+
+export function useMediaChannels() {
     return useQuery({
-        queryKey: qk.plexItems(libraryKey, search),
-        queryFn: source(
-            () => mockApi.getPlexItems(libraryKey, search),
-            () => api.plex.items(libraryKey, search)
-        ),
+        queryKey: qk.mediaChannels,
+        queryFn: () => api.channels.media(),
+        staleTime: 20_000,
+    });
+}
+
+export function useMediaLibraries(sourceId: number) {
+    return useQuery({
+        queryKey: qk.mediaLibraries(sourceId),
+        queryFn: () => api.media.libraries(sourceId),
+        staleTime: 30_000,
+        enabled: sourceId > 0,
+    });
+}
+
+export function useSetMediaLibrary() {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: ({
+            sourceId,
+            key,
+            enabled,
+        }: {
+            sourceId: number;
+            key: string;
+            enabled: boolean;
+        }) => api.media.setLibraryEnabled(sourceId, key, enabled),
+        onSuccess: (libraries, variables) => {
+            client.setQueryData(qk.mediaLibraries(variables.sourceId), libraries);
+            client.invalidateQueries({ queryKey: qk.mediaItemsAll });
+            client.invalidateQueries({ queryKey: qk.mediaSources });
+        },
+    });
+}
+
+export function useMediaItems(sourceId: number, libraryKey: string, search: string) {
+    return useQuery({
+        queryKey: qk.mediaItems(sourceId, libraryKey, search),
+        queryFn: () => api.media.items(sourceId, libraryKey, search),
         placeholderData: keepPreviousData,
         staleTime: 30_000,
-        enabled: libraryKey.length > 0,
+        enabled: sourceId > 0 && libraryKey.length > 0,
     });
 }
 
-export function usePlexItem(ratingKey: string | null) {
+export function useMediaItem(sourceId: number, itemId: string | null) {
     return useQuery({
-        queryKey: qk.plexItem(ratingKey ?? ''),
-        queryFn: source(
-            () => mockApi.getPlexItem(ratingKey ?? ''),
-            () => api.plex.item(ratingKey ?? '')
-        ),
-        enabled: Boolean(ratingKey),
+        queryKey: qk.mediaItem(sourceId, itemId ?? ''),
+        queryFn: () => api.media.item(sourceId, itemId ?? ''),
+        enabled: sourceId > 0 && Boolean(itemId),
         staleTime: 60_000,
     });
 }
 
-export function usePlexChildren(ratingKey: string | null) {
+export function useMediaChildren(sourceId: number, itemId: string | null) {
     return useQuery({
-        queryKey: qk.plexChildren(ratingKey ?? ''),
-        queryFn: source(
-            () => mockApi.getPlexChildren(ratingKey ?? ''),
-            () => api.plex.children(ratingKey ?? '')
-        ),
-        enabled: Boolean(ratingKey),
+        queryKey: qk.mediaChildren(sourceId, itemId ?? ''),
+        queryFn: () => api.media.children(sourceId, itemId ?? ''),
+        enabled: sourceId > 0 && Boolean(itemId),
         staleTime: 60_000,
     });
 }
 
-export function usePlexQueue() {
+export function useMediaQueue() {
     return useQuery({
-        queryKey: qk.plexQueue,
-        queryFn: source(mockApi.getQueue, api.plex.queue),
+        queryKey: qk.mediaQueue,
+        queryFn: () => api.media.queue(),
         staleTime: 5_000,
     });
 }
 
+/**
+ * Recently played media with saved resume progress.
+ *
+ * @param limit - Maximum number of entries
+ */
+export function useMediaHistory(limit = 12) {
+    return useQuery<MediaHistoryDto[]>({
+        queryKey: qk.mediaHistory(limit),
+        queryFn: () => api.media.history(limit),
+        staleTime: 15_000,
+    });
+}
+
+export function useRemoveMediaHistory() {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: (id: number) => api.media.removeHistory(id),
+        onSuccess: () => client.invalidateQueries({ queryKey: qk.mediaHistoryAll }),
+    });
+}
+
+/**
+ * Loads the streams of the item that is currently playing.
+ *
+ * @param enabled - Only fetch while a media item is active
+ */
+export function useCurrentMediaItem(enabled: boolean, queueItemId: number | null) {
+    return useQuery<MediaItemDetailDto | null>({
+        queryKey: [...qk.mediaPlaybackItem, queueItemId],
+        queryFn: () => api.media.currentItem(),
+        enabled: enabled && queueItemId !== null,
+        staleTime: 10_000,
+    });
+}
+
+export function useSetSubtitle() {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: (mode: SubtitleMode) => api.media.setSubtitle(mode),
+        onSuccess: () => {
+            void client.invalidateQueries({ queryKey: qk.mediaQueue });
+            void client.invalidateQueries({ queryKey: qk.mediaHistoryAll });
+            void client.invalidateQueries({ queryKey: qk.mediaPlaybackItem });
+            void client.invalidateQueries({ queryKey: qk.playback });
+        },
+    });
+}
+
+export function useUpdatePlaybackPreferences() {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: (playback: Partial<SettingsDto['playback']>) =>
+            api.settings.updatePlayback(playback),
+        onSuccess: (settings) => {
+            client.setQueryData(qk.settings, settings);
+        },
+    });
+}
+
 export function useDiscordStatus() {
-    return useQuery({
+    return useQuery<DiscordStatusDto>({
         queryKey: qk.discord,
         queryFn: source(mockApi.getDiscordStatus, api.discord.status),
         staleTime: 15_000,
-        refetchInterval: 60_000,
+        refetchInterval: (query) => (query.state.data?.streamerJoin.state === 'joining' ? 2_000 : 60_000),
     });
 }
 
@@ -253,7 +406,7 @@ export function useUpdateSettings() {
         onSuccess: (settings) => {
             client.setQueryData(qk.settings, settings);
             client.invalidateQueries({ queryKey: qk.setup });
-            client.invalidateQueries({ queryKey: qk.plexConfig });
+            client.invalidateQueries({ queryKey: qk.mediaSources });
             client.invalidateQueries({ queryKey: qk.playback });
             client.invalidateQueries({ queryKey: qk.authConfig });
         },
@@ -266,7 +419,8 @@ export function useStopPlayback() {
         mutationFn: () => (USE_MOCK ? mockApi.stopPlayback() : api.playback.stop()),
         onSuccess: (playback) => {
             client.setQueryData(qk.playback, playback);
-            client.invalidateQueries({ queryKey: qk.plexQueue });
+            client.invalidateQueries({ queryKey: qk.mediaQueue });
+            client.invalidateQueries({ queryKey: qk.mediaHistoryAll });
         },
     });
 }
@@ -277,7 +431,8 @@ export function useSkipPlayback() {
         mutationFn: () => (USE_MOCK ? mockApi.skipPlayback() : api.playback.skip()),
         onSuccess: (playback) => {
             client.setQueryData(qk.playback, playback);
-            client.invalidateQueries({ queryKey: qk.plexQueue });
+            client.invalidateQueries({ queryKey: qk.mediaQueue });
+            client.invalidateQueries({ queryKey: qk.mediaHistoryAll });
         },
     });
 }
@@ -286,7 +441,10 @@ export function usePausePlayback() {
     const client = useQueryClient();
     return useMutation({
         mutationFn: () => (USE_MOCK ? mockApi.pausePlayback() : api.playback.pause()),
-        onSuccess: (playback) => client.setQueryData(qk.playback, playback),
+        onSuccess: (playback) => {
+            client.setQueryData(qk.playback, playback);
+            client.invalidateQueries({ queryKey: qk.mediaHistoryAll });
+        },
     });
 }
 
@@ -300,7 +458,7 @@ export function useResumePlayback() {
 
 export function useSeekPlayback() {
     const client = useQueryClient();
-    return useMutation({
+    return useMutation<PlaybackStateDto, Error, number, { previous?: PlaybackStateDto }>({
         mutationFn: (seconds: number) =>
             USE_MOCK ? mockApi.seekPlayback(seconds) : api.playback.seek(seconds),
         onMutate: async (seconds) => {
@@ -323,7 +481,8 @@ export function useSeekPlayback() {
         },
         onSuccess: (playback) => {
             client.setQueryData(qk.playback, playback);
-            client.invalidateQueries({ queryKey: qk.plexQueue });
+            client.invalidateQueries({ queryKey: qk.mediaQueue });
+            client.invalidateQueries({ queryKey: qk.mediaHistoryAll });
         },
     });
 }
@@ -406,7 +565,7 @@ export function useBulkChannelVisibility() {
 export function useSaveSource() {
     const client = useQueryClient();
     return useMutation({
-        mutationFn: (input: Parameters<typeof mockApi.createSource>[0]) =>
+        mutationFn: (input: SaveSourceInput) =>
             USE_MOCK
                 ? input.id
                     ? mockApi.updateSource(input)
@@ -491,9 +650,9 @@ export function useSetSourceEnabled() {
 export function useEnqueue() {
     const client = useQueryClient();
     return useMutation({
-        mutationFn: (input: EnqueueInput) => (USE_MOCK ? mockApi.enqueue(input) : api.plex.enqueue(input)),
+        mutationFn: (input: EnqueueInput) => api.media.enqueue(input),
         onSuccess: () => {
-            client.invalidateQueries({ queryKey: qk.plexQueue });
+            client.invalidateQueries({ queryKey: qk.mediaQueue });
         },
     });
 }
@@ -501,8 +660,8 @@ export function useEnqueue() {
 export function useRemoveQueueItem() {
     const client = useQueryClient();
     return useMutation({
-        mutationFn: (id: number) => (USE_MOCK ? mockApi.removeQueueItem(id) : api.plex.remove(id)),
-        onSuccess: () => client.invalidateQueries({ queryKey: qk.plexQueue }),
+        mutationFn: (id: number) => api.media.remove(id),
+        onSuccess: () => client.invalidateQueries({ queryKey: qk.mediaQueue }),
     });
 }
 
@@ -510,25 +669,25 @@ export function useMoveQueueItem() {
     const client = useQueryClient();
     return useMutation({
         mutationFn: ({ id, direction }: { id: number; direction: 'up' | 'down' }) =>
-            USE_MOCK ? mockApi.moveQueueItem(id, direction) : api.plex.move(id, direction),
-        onSuccess: () => client.invalidateQueries({ queryKey: qk.plexQueue }),
+            api.media.move(id, direction),
+        onSuccess: () => client.invalidateQueries({ queryKey: qk.mediaQueue }),
     });
 }
 
 export function useShuffleQueue() {
     const client = useQueryClient();
     return useMutation({
-        mutationFn: () => (USE_MOCK ? mockApi.shuffleQueue() : api.plex.shuffle()),
-        onSuccess: () => client.invalidateQueries({ queryKey: qk.plexQueue }),
+        mutationFn: () => api.media.shuffle(),
+        onSuccess: () => client.invalidateQueries({ queryKey: qk.mediaQueue }),
     });
 }
 
 export function useClearQueue() {
     const client = useQueryClient();
     return useMutation({
-        mutationFn: () => (USE_MOCK ? mockApi.clearQueue() : api.plex.clear()),
+        mutationFn: () => api.media.clear(),
         onSuccess: () => {
-            client.invalidateQueries({ queryKey: qk.plexQueue });
+            client.invalidateQueries({ queryKey: qk.mediaQueue });
             client.invalidateQueries({ queryKey: qk.playback });
         },
     });
@@ -545,25 +704,23 @@ export function usePlayQueueItem() {
             id: number;
             guildId: string;
             voiceChannelId: string;
-        }) =>
-            USE_MOCK
-                ? mockApi.playQueueItem(id, guildId, voiceChannelId)
-                : api.plex.play(id, { guildId, voiceChannelId }),
+        }) => api.media.play(id, { guildId, voiceChannelId }),
         onSuccess: (playback) => {
             client.setQueryData(qk.playback, playback);
-            client.invalidateQueries({ queryKey: qk.plexQueue });
+            client.invalidateQueries({ queryKey: qk.mediaQueue });
+            client.invalidateQueries({ queryKey: qk.mediaHistoryAll });
         },
     });
 }
 
-export function useStartPlexPlayback() {
+export function useStartMediaPlayback() {
     const client = useQueryClient();
     return useMutation({
-        mutationFn: (input: StartPlexInput) =>
-            USE_MOCK ? mockApi.startPlex(input) : api.plex.start(input),
+        mutationFn: (input: StartMediaInput) => api.media.start(input),
         onSuccess: (playback) => {
             client.setQueryData(qk.playback, playback);
-            client.invalidateQueries({ queryKey: qk.plexQueue });
+            client.invalidateQueries({ queryKey: qk.mediaQueue });
+            client.invalidateQueries({ queryKey: qk.mediaHistoryAll });
         },
     });
 }
@@ -571,8 +728,7 @@ export function useStartPlexPlayback() {
 export function useStartPlaceholder() {
     const client = useQueryClient();
     return useMutation({
-        mutationFn: (input: StartPlaceholderInput) =>
-            USE_MOCK ? mockApi.startPlaceholder(input) : api.plex.placeholder(input),
+        mutationFn: (input: StartPlaceholderInput) => api.media.placeholder(input),
         onSuccess: (playback) => {
             client.setQueryData(qk.playback, playback);
         },
@@ -610,6 +766,17 @@ export function useReconnectDiscord() {
         onSuccess: (status) => {
             client.setQueryData(qk.discord, status);
             client.invalidateQueries({ queryKey: qk.setup });
+        },
+    });
+}
+
+export function useJoinStreamer() {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: (guildId?: string) =>
+            USE_MOCK ? mockApi.joinStreamer(guildId) : api.discord.joinStreamer(guildId),
+        onSuccess: (status) => {
+            client.setQueryData(qk.discord, status);
         },
     });
 }

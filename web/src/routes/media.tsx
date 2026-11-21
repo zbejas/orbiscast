@@ -1,17 +1,30 @@
-import { useDeferredValue, useEffect, useState } from 'react';
+import {
+    useDeferredValue,
+    useEffect,
+    useId,
+    useRef,
+    useState,
+    type KeyboardEvent,
+} from 'react';
 import {
     ArrowLeft,
     ChevronDown,
+    ChevronLeft,
     ChevronRight,
     ChevronUp,
     Film,
+    GripVertical,
+    History,
     Library,
     ListOrdered,
     ListPlus,
     MonitorPlay,
     Pause,
     Play,
+    Plus,
+    RefreshCw,
     Search,
+    Server,
     Shuffle,
     SkipForward,
     Square,
@@ -21,10 +34,11 @@ import {
 import { Link } from 'react-router';
 import type {
     GuildDto,
-    PlexItemDetailDto,
-    PlexItemDto,
-    PlexLibraryDto,
-    PlexQuality,
+    MediaHistoryDto,
+    MediaItemDetailDto,
+    MediaItemDto,
+    MediaQuality,
+    MediaSourceDto,
     QueueItemDto,
 } from '@shared/types';
 import {
@@ -39,6 +53,7 @@ import {
     Notice,
     PageHeader,
     Poster,
+    ProgressBar,
     SeekBar,
     Select,
     Skeleton,
@@ -50,40 +65,41 @@ import {
 } from '@/components';
 import {
     useClearQueue,
+    useCurrentMediaItem,
     useDiscordStatus,
     useEnqueue,
     useMoveQueueItem,
     usePausePlayback,
     usePlayback,
     usePlayQueueItem,
-    usePlexChildren,
-    usePlexConfig,
-    usePlexItem,
-    usePlexItems,
-    usePlexLibraries,
-    usePlexQueue,
+    useMediaChildren,
+    useMediaHistory,
+    useMediaItem,
+    useMediaItems,
+    useMediaLibraries,
+    useMediaQueue,
+    useMediaSources,
+    useRemoveMediaHistory,
     useRemoveQueueItem,
+    useReorderMediaSources,
     useResumePlayback,
     useSeekPlayback,
-    useSetPlexLibrary,
+    useSetSubtitle,
+    useSettings,
     useShuffleQueue,
     useSkipPlayback,
     useStartPlaceholder,
-    useStartPlexPlayback,
+    useStartMediaPlayback,
     useStopPlayback,
+    useUpdatePlaybackPreferences,
+    useValidateMediaSource,
     useNow,
 } from '@/lib/hooks';
 import type { SubtitleMode } from '@/lib/types';
 import { cn } from '@/lib/cn';
-import { formatDuration, formatElapsed } from '@/lib/format';
+import { formatDuration, formatElapsed, formatPercent } from '@/lib/format';
+import { isPlayableLibrary, QUALITY_OPTIONS, qualityLabel } from '@/lib/media';
 import { playbackPositionMs } from '@/lib/playback';
-
-const QUALITY_OPTIONS: Array<{ value: PlexQuality; label: string }> = [
-    { value: '720p-4', label: '720p · 4 Mbps' },
-    { value: '1080p-8', label: '1080p · 8 Mbps' },
-    { value: '1080p-12', label: '1080p · 12 Mbps' },
-    { value: '4k-20', label: '4K · 20 Mbps' },
-];
 
 type View =
     | { kind: 'library' }
@@ -92,9 +108,10 @@ type View =
     | { kind: 'item'; itemKey: string; showKey?: string; seasonKey?: string };
 
 type PlayTarget =
-    | { kind: 'item'; item: PlexItemDetailDto; quality: PlexQuality; subtitleMode: SubtitleMode }
+    | { kind: 'item'; item: MediaItemDetailDto; quality: MediaQuality; subtitleMode: SubtitleMode; startOver?: boolean }
+    | { kind: 'history'; entry: MediaHistoryDto }
     | { kind: 'queue'; queueItem: QueueItemDto }
-    | { kind: 'placeholder' };
+    | { kind: 'placeholder'; sourceId: number };
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'The request did not complete. Try again.';
@@ -105,29 +122,395 @@ function toSubtitleMode(value: string): SubtitleMode {
     return Number(value);
 }
 
-function qualityLabel(quality: PlexQuality): string {
-    return QUALITY_OPTIONS.find((option) => option.value === quality)?.label ?? quality;
-}
-
 function targetTitle(target: PlayTarget | null): string {
     if (!target) return 'this item';
     if (target.kind === 'item') return target.item.title;
+    if (target.kind === 'history') return target.entry.title;
     if (target.kind === 'queue') return target.queueItem.title;
-    return 'the Plex channel';
+    return 'the media channel';
 }
 
 function targetMeta(target: PlayTarget): string {
     if (target.kind === 'item') {
         return target.item.type === 'episode'
             ? `${target.item.showTitle ?? 'Show'} · S${target.item.seasonNumber ?? 1} E${target.item.episodeNumber ?? 1}`
-            : `${target.item.year ?? 'Plex'} · ${formatDuration(target.item.durationMs)}`;
+            : `${target.item.year ?? 'Media'} · ${formatDuration(target.item.durationMs)}`;
+    }
+    if (target.kind === 'history') {
+        return target.entry.type === 'episode'
+            ? `${target.entry.showTitle ?? 'Show'} · S${target.entry.seasonNumber ?? 1} E${target.entry.episodeNumber ?? 1} · ${formatElapsed(target.entry.positionMs)} watched`
+            : `${target.entry.sourceName} · ${formatElapsed(target.entry.positionMs)} watched`;
     }
     if (target.kind === 'queue') {
         return target.queueItem.showTitle
             ? `${target.queueItem.showTitle} · S${target.queueItem.seasonNumber ?? 1} E${target.queueItem.episodeNumber ?? 1}`
-            : 'Plex movie';
+            : 'Media movie';
     }
     return 'Virtual channel · Placeholder';
+}
+
+function SourceTabs({
+    sources,
+    value,
+    onChange,
+    onReorder,
+}: {
+    sources: MediaSourceDto[];
+    value: number;
+    onChange: (id: number) => void;
+    onReorder: (ids: number[]) => void;
+}) {
+    const baseId = useId();
+    const tabRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+    const [dragId, setDragId] = useState<number | null>(null);
+    const [overId, setOverId] = useState<number | null>(null);
+    const [announcement, setAnnouncement] = useState('');
+
+    if (sources.length === 0) return null;
+
+    const ids = sources.map((source) => source.id);
+    const active = sources.find((source) => source.id === value) ?? sources[0]!;
+    const activeIndex = sources.findIndex((source) => source.id === active.id);
+
+    const announceMove = (fromIndex: number, toIndex: number) => {
+        const moved = sources[fromIndex];
+        if (!moved) return;
+        setAnnouncement(`${moved.name} moved to position ${toIndex + 1} of ${sources.length}.`);
+    };
+
+    const focusTab = (index: number) => {
+        const next = sources[index];
+        if (!next) return;
+        onChange(next.id);
+        tabRefs.current[next.id]?.focus();
+    };
+
+    const moveTab = (fromIndex: number, toIndex: number) => {
+        if (fromIndex === toIndex || toIndex < 0 || toIndex >= ids.length) return;
+        const next = [...ids];
+        const [moved] = next.splice(fromIndex, 1);
+        if (moved === undefined) return;
+        next.splice(toIndex, 0, moved);
+        announceMove(fromIndex, toIndex);
+        onReorder(next);
+    };
+
+    const dropOn = (targetId: number) => {
+        if (dragId === null || dragId === targetId) return;
+        const fromIndex = ids.indexOf(dragId);
+        const targetIndex = ids.indexOf(targetId);
+        if (fromIndex < 0 || targetIndex < 0) return;
+        const next = ids.filter((id) => id !== dragId);
+        const insertAt =
+            fromIndex < targetIndex ? next.indexOf(targetId) + 1 : next.indexOf(targetId);
+        next.splice(insertAt, 0, dragId);
+        announceMove(fromIndex, next.indexOf(dragId));
+        onReorder(next);
+    };
+
+    const handleKeyDown = (
+        event: KeyboardEvent<HTMLButtonElement>,
+        source: MediaSourceDto,
+        index: number
+    ) => {
+        if (event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+            event.preventDefault();
+            moveTab(index, index + (event.key === 'ArrowRight' ? 1 : -1));
+            window.requestAnimationFrame(() => tabRefs.current[source.id]?.focus());
+            return;
+        }
+
+        let target = index;
+        if (event.key === 'ArrowRight') target = (index + 1) % sources.length;
+        else if (event.key === 'ArrowLeft') target = (index - 1 + sources.length) % sources.length;
+        else if (event.key === 'Home') target = 0;
+        else if (event.key === 'End') target = sources.length - 1;
+        else return;
+        event.preventDefault();
+        focusTab(target);
+    };
+
+    return (
+        <div className="min-w-0">
+            <div className="flex items-end justify-between gap-3 border-b border-border">
+                <div
+                    role="tablist"
+                    aria-label="Media sources"
+                    aria-describedby={`${baseId}-hint`}
+                    className="flex min-w-0 gap-1 overflow-x-auto overflow-y-hidden"
+                >
+                    {sources.map((source, index) => {
+                        const selected = source.id === active.id;
+                        const status = !source.enabled
+                            ? 'Disabled'
+                            : source.connected
+                              ? 'Connected'
+                              : source.error
+                                ? 'Connection error'
+                                : 'Offline';
+                        return (
+                            <button
+                                key={source.id}
+                                ref={(element) => {
+                                    tabRefs.current[source.id] = element;
+                                }}
+                                type="button"
+                                role="tab"
+                                id={`${baseId}-tab-${source.id}`}
+                                aria-selected={selected}
+                                tabIndex={selected ? 0 : -1}
+                                draggable
+                                onDragStart={(event) => {
+                                    setDragId(source.id);
+                                    event.dataTransfer.effectAllowed = 'move';
+                                    event.dataTransfer.setData('text/plain', String(source.id));
+                                }}
+                                onDragOver={(event) => {
+                                    if (dragId === null) return;
+                                    event.preventDefault();
+                                    event.dataTransfer.dropEffect = 'move';
+                                    setOverId(source.id);
+                                }}
+                                onDragLeave={() =>
+                                    setOverId((current) =>
+                                        current === source.id ? null : current
+                                    )
+                                }
+                                onDrop={(event) => {
+                                    event.preventDefault();
+                                    dropOn(source.id);
+                                    setDragId(null);
+                                    setOverId(null);
+                                }}
+                                onDragEnd={() => {
+                                    setDragId(null);
+                                    setOverId(null);
+                                }}
+                                onClick={() => onChange(source.id)}
+                                onKeyDown={(event) => handleKeyDown(event, source, index)}
+                                title={`${source.name} · ${status}. Drag to reorder.`}
+                                className={cn(
+                                    'oc-control group -mb-px inline-flex min-h-10 shrink-0 cursor-grab items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors active:cursor-grabbing',
+                                    selected
+                                        ? 'border-blurple text-text'
+                                        : 'border-transparent text-text-muted hover:text-text',
+                                    dragId === source.id && 'opacity-40',
+                                    overId === source.id &&
+                                        dragId !== source.id &&
+                                        'bg-white/[0.05]'
+                                )}
+                            >
+                                <GripVertical
+                                    size={12}
+                                    aria-hidden="true"
+                                    className="shrink-0 text-text-faint opacity-60 group-hover:opacity-100"
+                                />
+                                <span
+                                    aria-hidden="true"
+                                    className={cn(
+                                        'size-1.5 shrink-0 rounded-full',
+                                        source.enabled
+                                            ? source.connected
+                                                ? 'bg-live'
+                                                : source.error
+                                                  ? 'bg-danger'
+                                                  : 'bg-text-faint'
+                                            : 'bg-text-faint/60'
+                                    )}
+                                />
+                                {source.name}
+                                <span className="sr-only">, {status}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+                <div className="flex shrink-0 items-center gap-1 pb-1">
+                    <span
+                        aria-hidden="true"
+                        className="hidden pr-1 text-[11px] text-text-faint sm:inline"
+                    >
+                        Drag to reorder
+                    </span>
+                    <IconButton
+                        label={`Move ${active.name} left`}
+                        size="sm"
+                        disabled={activeIndex <= 0}
+                        onClick={() => moveTab(activeIndex, activeIndex - 1)}
+                    >
+                        <ChevronLeft size={14} aria-hidden="true" />
+                    </IconButton>
+                    <IconButton
+                        label={`Move ${active.name} right`}
+                        size="sm"
+                        disabled={activeIndex < 0 || activeIndex >= sources.length - 1}
+                        onClick={() => moveTab(activeIndex, activeIndex + 1)}
+                    >
+                        <ChevronRight size={14} aria-hidden="true" />
+                    </IconButton>
+                </div>
+            </div>
+            <p id={`${baseId}-hint`} className="sr-only">
+                Drag a source tab to reorder it. With a keyboard, press Alt plus Left or Right
+                Arrow to move the focused tab. The arrow buttons move the selected tab.
+            </p>
+            <p role="status" aria-live="polite" className="sr-only">
+                {announcement}
+            </p>
+        </div>
+    );
+}
+
+function historyMeta(entry: MediaHistoryDto): string {
+    if (entry.type === 'episode') {
+        return `${entry.showTitle ?? 'Show'} · S${entry.seasonNumber ?? 1} E${
+            entry.episodeNumber ?? 1
+        } · ${entry.sourceName}`;
+    }
+    return `Movie · ${entry.sourceName}`;
+}
+
+function ContinueWatching({
+    entries,
+    sources,
+    pending,
+    onResume,
+    onOpen,
+    onRemove,
+}: {
+    entries: MediaHistoryDto[];
+    sources: MediaSourceDto[];
+    pending: boolean;
+    onResume: (entry: MediaHistoryDto) => void;
+    onOpen: (entry: MediaHistoryDto) => void;
+    onRemove: (entry: MediaHistoryDto) => void;
+}) {
+    if (!pending && entries.length === 0) return null;
+
+    return (
+        <section aria-labelledby="continue-watching-title" className="mb-4 border-b border-border pb-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <div className="flex items-baseline gap-2">
+                    <h2
+                        id="continue-watching-title"
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-text"
+                    >
+                        <History size={14} aria-hidden="true" className="text-plex" />
+                        Continue watching
+                    </h2>
+                    {pending ? null : (
+                        <span className="font-mono text-[11px] tabular-nums text-text-muted">
+                            {entries.length}
+                        </span>
+                    )}
+                </div>
+                <p className="text-[11px] text-text-muted">
+                    Resume a saved position or start the next episode
+                </p>
+            </div>
+
+            {pending ? (
+                <div className="mt-3 space-y-3" aria-hidden="true">
+                    {[0, 1].map((index) => (
+                        <div key={index} className="flex items-center gap-3">
+                            <Skeleton className="h-14 w-9 shrink-0" />
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                                <Skeleton className="h-3.5 w-2/3" />
+                                <Skeleton className="h-3 w-1/2" />
+                                <Skeleton className="h-1 w-full" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <ul className="mt-3 divide-y divide-border">
+                    {entries.map(entry => {
+                        const source = sources.find(item => item.id === entry.sourceId);
+                        const unavailable = !source || !source.enabled || !source.connected;
+                        const duration = entry.durationMs ?? 0;
+                        const progress = duration > 0 ? entry.positionMs / duration : 0;
+                        const remaining = duration > 0 ? Math.max(0, duration - entry.positionMs) : null;
+                        const recommended = entry.recommended === true;
+                        return (
+                            <li key={entry.id} className="py-3 first:pt-1 last:pb-1">
+                                <div className="flex items-start gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => onOpen(entry)}
+                                        className="flex min-w-0 flex-1 items-center gap-3 rounded text-left transition-colors hover:text-blurple-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blurple/60"
+                                        aria-label={`Open ${entry.title}`}
+                                    >
+                                        <Poster
+                                            title={entry.title}
+                                            seed={entry.itemId}
+                                            src={entry.thumbUrl}
+                                            showTitle={false}
+                                            className="h-14 w-9 shrink-0 rounded border border-border"
+                                        />
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block truncate text-sm font-medium text-text">
+                                                {entry.title}
+                                                {recommended ? (
+                                                    <span className="ml-2 inline-flex rounded-full border border-plex/40 bg-plex/10 px-1.5 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-[0.08em] text-plex">
+                                                        Up next
+                                                    </span>
+                                                ) : null}
+                                            </span>
+                                            <span className="mt-0.5 block truncate text-[11px] text-text-muted">
+                                                {recommended ? 'Next episode · ' : ''}
+                                                {historyMeta(entry)}
+                                            </span>
+                                            <span className="mt-0.5 block text-[11px] text-text-faint">
+                                                {recommended
+                                                    ? 'Starts from the beginning'
+                                                    : `${formatElapsed(entry.positionMs)} watched${
+                                                          remaining === null
+                                                              ? ''
+                                                              : ` · ${formatDuration(remaining)} left`
+                                                      }`}
+                                                {unavailable ? ' · source offline' : ''}
+                                            </span>
+                                        </span>
+                                    </button>
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        icon={<Play size={12} aria-hidden="true" />}
+                                        disabled={unavailable}
+                                        onClick={() => onResume(entry)}
+                                    >
+                                        {recommended ? 'Play next' : 'Resume'}
+                                    </Button>
+                                    {recommended ? null : (
+                                        <IconButton
+                                            label={`Remove ${entry.title} from Continue watching`}
+                                            size="sm"
+                                            onClick={() => onRemove(entry)}
+                                        >
+                                            <X size={14} aria-hidden="true" />
+                                        </IconButton>
+                                    )}
+                                </div>
+                                {duration > 0 && !recommended ? (
+                                    <div className="mt-2 flex items-center gap-2 pl-12">
+                                        <ProgressBar
+                                            value={entry.positionMs}
+                                            max={duration}
+                                            tone="plex"
+                                            label={`${entry.title} progress`}
+                                            className="h-1"
+                                        />
+                                        <span className="w-8 shrink-0 text-right font-mono text-[10px] tabular-nums text-text-muted">
+                                            {formatPercent(progress)}
+                                        </span>
+                                    </div>
+                                ) : null}
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+        </section>
+    );
 }
 
 function QueuePanel({
@@ -143,7 +526,7 @@ function QueuePanel({
     onRequestPlaceholder: () => void;
     onBrowse: () => void;
 }) {
-    const queue = usePlexQueue();
+    const queue = useMediaQueue();
     const playback = usePlayback();
     const now = useNow(1_000);
     const remove = useRemoveQueueItem();
@@ -155,6 +538,13 @@ function QueuePanel({
     const seek = useSeekPlayback();
     const skip = useSkipPlayback();
     const stop = useStopPlayback();
+    const settings = useSettings();
+    const updatePlayback = useUpdatePlaybackPreferences();
+    const setSubtitle = useSetSubtitle();
+    const currentItem = useCurrentMediaItem(
+        playback.data?.mode === 'media',
+        playback.data?.queueItemId ?? null
+    );
     const toast = useToast();
     const [confirmClear, setConfirmClear] = useState(false);
 
@@ -165,6 +555,9 @@ function QueuePanel({
     const currentQueueItem = queue.data?.find((item) => item.id === playback.data?.queueItemId);
     const elapsed = playbackPositionMs(playback.data, now);
     const duration = playback.data?.durationMs ?? currentQueueItem?.durationMs ?? 0;
+    const subtitleStreams =
+        currentItem.data?.streams.filter((stream) => stream.type === 'subtitle') ?? [];
+    const subtitleValue = currentQueueItem ? String(currentQueueItem.subtitleMode) : 'auto';
 
     if (!open) return null;
 
@@ -183,13 +576,13 @@ function QueuePanel({
 
     return (
         <aside
-            id="plex-queue"
-            aria-labelledby="plex-queue-title"
+            id="media-queue"
+            aria-labelledby="media-queue-title"
             className="oc-panel-enter min-w-0 scroll-mt-20 rounded-xl border border-border bg-surface xl:sticky xl:top-[68px] xl:max-h-[calc(100dvh-5.25rem)] xl:overflow-y-auto"
         >
             <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
                 <div className="flex items-baseline gap-2">
-                    <h2 id="plex-queue-title" className="text-sm font-semibold text-text">
+                    <h2 id="media-queue-title" className="text-sm font-semibold text-text">
                         Queue
                     </h2>
                     <span className="font-mono text-[11px] tabular-nums text-text-muted">
@@ -201,12 +594,12 @@ function QueuePanel({
                 </IconButton>
             </div>
 
-            {playback.data?.mode === 'plex' && currentQueueItem ? (
+            {playback.data?.mode === 'media' && currentQueueItem ? (
                 <div className="border-b border-border px-4 py-3">
                     <div className="flex items-start gap-3">
                         <Poster
                             title={currentQueueItem.title}
-                            seed={currentQueueItem.ratingKey}
+                            seed={currentQueueItem.itemId}
                             src={currentQueueItem.thumbUrl}
                             showTitle={false}
                             className="h-14 w-9 shrink-0 rounded border border-border"
@@ -232,7 +625,7 @@ function QueuePanel({
                                 durationMs={duration}
                                 onSeek={seekTo}
                                 disabled={seek.isPending}
-                                label="Seek current Plex item"
+                                label="Seek current Media item"
                             />
                             <div className="mt-1 flex justify-between font-mono text-[10px] tabular-nums text-text-muted">
                                 <span>{formatElapsed(Math.min(elapsed, duration))}</span>
@@ -240,6 +633,41 @@ function QueuePanel({
                             </div>
                         </div>
                     ) : null}
+                    <div className="mt-3 space-y-3 border-t border-border pt-3">
+                        <Field
+                            label="Subtitles"
+                            htmlFor="current-subtitles"
+                            hint="Changes apply to the live stream."
+                        >
+                            <Select
+                                id="current-subtitles"
+                                value={subtitleValue}
+                                disabled={setSubtitle.isPending}
+                                onChange={(event) =>
+                                    setSubtitle.mutate(toSubtitleMode(event.target.value), {
+                                        onSuccess: () =>
+                                            toast({ title: 'Subtitles changed', tone: 'success' }),
+                                        onError: reportError,
+                                    })
+                                }
+                            >
+                                <option value="auto">Auto (match the file)</option>
+                                <option value="off">Off</option>
+                                {subtitleStreams.map((stream) => (
+                                    <option
+                                        key={stream.id}
+                                        value={stream.id}
+                                        disabled={!stream.burnable}
+                                    >
+                                        {stream.displayTitle ??
+                                            stream.language ??
+                                            `Track ${stream.id}`}
+                                        {stream.burnable ? '' : ' (unavailable)'}
+                                    </option>
+                                ))}
+                            </Select>
+                        </Field>
+                    </div>
                 </div>
             ) : null}
 
@@ -263,7 +691,7 @@ function QueuePanel({
                         compact
                         icon={ListOrdered}
                         title="Queue is empty"
-                        description="Add a movie or episode to line it up for the Plex channel."
+                        description="Add a movie or episode to line it up for the on-demand channel."
                         action={
                             <Button size="sm" variant="secondary" onClick={onBrowse}>
                                 Browse library
@@ -279,7 +707,7 @@ function QueuePanel({
                                 </span>
                                 <Poster
                                     title={item.title}
-                                    seed={item.ratingKey}
+                                    seed={item.itemId}
                                     src={item.thumbUrl}
                                     showTitle={false}
                                     className="h-12 w-8 shrink-0 rounded border border-border"
@@ -354,12 +782,39 @@ function QueuePanel({
                                 </div>
                                 <p className="mt-1 text-xs font-medium text-text">{item.title}</p>
                                 <p className="mt-0.5 text-[11px] leading-relaxed text-danger">
-                                    {item.error ?? 'Plex could not start this item.'}
+                                    {item.error ?? 'The media source could not start this item.'}
                                 </p>
                             </div>
                         ))}
                     </div>
                 ) : null}
+            </div>
+
+            <div className="space-y-3 border-t border-border px-4 py-3">
+                <Switch
+                    checked={settings.data?.playback.autoplayNextEpisode ?? false}
+                    disabled={!settings.data || updatePlayback.isPending}
+                    onChange={(event) =>
+                        updatePlayback.mutate(
+                            { autoplayNextEpisode: event.target.checked },
+                            { onError: reportError }
+                        )
+                    }
+                    label="Autoplay next episode"
+                    description="Queue the next episode when this one ends."
+                />
+                <Switch
+                    checked={settings.data?.playback.autoSkipIntro ?? false}
+                    disabled={!settings.data || updatePlayback.isPending}
+                    onChange={(event) =>
+                        updatePlayback.mutate(
+                            { autoSkipIntro: event.target.checked },
+                            { onError: reportError }
+                        )
+                    }
+                    label="Skip intros"
+                    description="Jump past Plex intro markers."
+                />
             </div>
 
             <div className="space-y-2 border-t border-border p-3">
@@ -374,7 +829,7 @@ function QueuePanel({
                     >
                         Play queue
                     </Button>
-                    {playback.data?.mode === 'plex' ? (
+                    {playback.data?.mode === 'media' ? (
                         playback.data.paused ? (
                             <Button
                                 variant="secondary"
@@ -408,13 +863,13 @@ function QueuePanel({
                     <IconButton
                         label="Skip to the next queue item"
                         size="sm"
-                        disabled={playback.data?.mode !== 'plex'}
+                        disabled={playback.data?.mode !== 'media' || skip.isPending}
                         onClick={() =>
                             skip.mutate(undefined, {
                                 onError: reportError,
                                 onSuccess: (state) =>
                                     toast({
-                                        title: state.mode === 'plex' ? 'Skipped to the next item' : 'Queue finished',
+                                        title: state.mode === 'media' ? 'Skipped to the next item' : 'Queue finished',
                                         tone: 'success',
                                     }),
                             })
@@ -423,9 +878,9 @@ function QueuePanel({
                         <SkipForward size={14} aria-hidden="true" />
                     </IconButton>
                     <IconButton
-                        label="Stop Plex playback"
+                        label="Stop Media playback"
                         size="sm"
-                        disabled={playback.data?.mode !== 'plex'}
+                        disabled={playback.data?.mode !== 'media' || stop.isPending}
                         onClick={() =>
                             stop.mutate(undefined, {
                                 onError: reportError,
@@ -481,7 +936,7 @@ function QueuePanel({
                     })
                 }
                 title="Clear the queue?"
-                description="Queued items are removed. The current Plex playback keeps running."
+                description="Queued items are removed. The current Media playback keeps running."
                 confirmLabel="Clear queue"
             />
         </aside>
@@ -526,7 +981,7 @@ function VoicePromptDialog({
         <Dialog
             open={open}
             onClose={onClose}
-            title={target?.kind === 'placeholder' ? 'Open the Plex channel' : 'Start playback'}
+            title={target?.kind === 'placeholder' ? 'Open the media channel' : 'Start playback'}
             description={
                 target?.kind === 'placeholder'
                     ? 'Choose the Discord voice channel for the placeholder.'
@@ -548,13 +1003,27 @@ function VoicePromptDialog({
                             </div>
                         ) : (
                             <Poster
-                                title={target.kind === 'item' ? target.item.title : target.queueItem.title}
+                                title={
+                                    target.kind === 'item'
+                                        ? target.item.title
+                                        : target.kind === 'history'
+                                          ? target.entry.title
+                                          : target.queueItem.title
+                                }
                                 seed={
                                     target.kind === 'item'
-                                        ? target.item.ratingKey
-                                        : target.queueItem.ratingKey
+                                        ? target.item.itemId
+                                        : target.kind === 'history'
+                                          ? target.entry.itemId
+                                          : target.queueItem.itemId
                                 }
-                                src={target.kind === 'item' ? target.item.thumbUrl : target.queueItem.thumbUrl}
+                                src={
+                                    target.kind === 'item'
+                                        ? target.item.thumbUrl
+                                        : target.kind === 'history'
+                                          ? target.entry.thumbUrl
+                                          : target.queueItem.thumbUrl
+                                }
                                 showTitle={false}
                                 className="h-16 w-11 shrink-0 rounded border border-border"
                             />
@@ -565,6 +1034,10 @@ function VoicePromptDialog({
                             {target.kind === 'item' ? (
                                 <p className="mt-1 text-[11px] text-text-faint">
                                     {qualityLabel(target.quality)}
+                                </p>
+                            ) : target.kind === 'history' ? (
+                                <p className="mt-1 text-[11px] text-text-faint">
+                                    {qualityLabel(target.entry.quality)}
                                 </p>
                             ) : null}
                         </div>
@@ -663,145 +1136,44 @@ function VoicePromptDialog({
     );
 }
 
-function isPlayableLibrary(library: PlexLibraryDto): boolean {
-    return library.type === 'movie' || library.type === 'show';
-}
-
-function libraryTypeLabel(type: string): string {
-    switch (type) {
-        case 'movie':
-            return 'Movies';
-        case 'show':
-            return 'TV shows';
-        case 'artist':
-            return 'Music';
-        case 'photo':
-            return 'Photos';
-        default:
-            return type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Unknown';
-    }
-}
-
-function LibrariesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-    const libraries = usePlexLibraries();
-    const setLibrary = useSetPlexLibrary();
-    const toast = useToast();
-    const list = libraries.data ?? [];
-    const pendingKey = setLibrary.isPending ? setLibrary.variables?.key : undefined;
-
-    return (
-        <Dialog
-            open={open}
-            onClose={onClose}
-            title="Plex libraries"
-            description="Choose the libraries OrbisCast can browse. Only movie and TV show libraries are playable."
-            footer={
-                <Button variant="secondary" onClick={onClose} data-autofocus="true">
-                    Done
-                </Button>
-            }
-        >
-            {libraries.isPending ? (
-                <div className="space-y-3" aria-hidden="true">
-                    {[0, 1, 2].map((index) => (
-                        <div key={index} className="flex items-center justify-between gap-4">
-                            <div className="flex-1 space-y-1.5">
-                                <Skeleton className="h-4 w-40" />
-                                <Skeleton className="h-3 w-24" />
-                            </div>
-                            <Skeleton className="h-6 w-10 rounded-full" />
-                        </div>
-                    ))}
-                </div>
-            ) : libraries.isError ? (
-                <ErrorState
-                    compact
-                    title="Plex libraries could not load"
-                    error={libraries.error}
-                    onRetry={() => void libraries.refetch()}
-                />
-            ) : list.length === 0 ? (
-                <EmptyState
-                    compact
-                    icon={Library}
-                    title="No libraries discovered"
-                    description="Check the Plex connection, then reopen this dialog."
-                />
-            ) : (
-                <ul className="divide-y divide-border">
-                    {list.map((library) => {
-                        const playable = isPlayableLibrary(library);
-                        return (
-                            <li
-                                key={library.key}
-                                className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"
-                            >
-                                <div className="min-w-0">
-                                    <p className="truncate text-sm font-medium text-text">
-                                        {library.title}
-                                    </p>
-                                    <p className="mt-0.5 text-[11px] uppercase tracking-[0.06em] text-text-faint">
-                                        {libraryTypeLabel(library.type)}
-                                        {playable
-                                            ? library.enabled
-                                                ? ' · Shown'
-                                                : ' · Hidden'
-                                            : ' · Not playable'}
-                                    </p>
-                                </div>
-                                <Switch
-                                    checked={library.enabled}
-                                    disabled={!playable || pendingKey === library.key}
-                                    onChange={(event) =>
-                                        setLibrary.mutate(
-                                            { key: library.key, enabled: event.target.checked },
-                                            {
-                                                onError: (error) =>
-                                                    toast({
-                                                        title: 'Could not update the library',
-                                                        description: errorMessage(error),
-                                                        tone: 'error',
-                                                    }),
-                                            }
-                                        )
-                                    }
-                                    label={
-                                        <span className="sr-only">
-                                            Show {library.title} in OrbisCast
-                                        </span>
-                                    }
-                                    className="shrink-0"
-                                />
-                            </li>
-                        );
-                    })}
-                </ul>
-            )}
-        </Dialog>
-    );
-}
-
-export default function PlexPage() {
+export default function MediaPage() {
     const [libraryKey, setLibraryKey] = useState('');
     const [search, setSearch] = useState('');
     const deferredSearch = useDeferredValue(search);
-    const [view, setView] = useState<View>({ kind: 'library' });
+    const [view, setView] = useState<View>(() => {
+        const params = new URLSearchParams(window.location.search);
+        const requestedSource = Number(params.get('source'));
+        const requestedItem = params.get('item');
+        return requestedItem && Number.isInteger(requestedSource) && requestedSource > 0
+            ? { kind: 'item', itemKey: requestedItem }
+            : { kind: 'library' };
+    });
+    const skipViewReset = useRef(true);
     const [queueOpen, setQueueOpen] = useState(true);
-    const [librariesOpen, setLibrariesOpen] = useState(false);
     const [prompt, setPrompt] = useState<PlayTarget | null>(null);
     const [conflict, setConflict] = useState<PlayTarget | null>(null);
     const [promptError, setPromptError] = useState<string | null>(null);
     const [promptBusy, setPromptBusy] = useState(false);
-    const [quality, setQuality] = useState<PlexQuality>('1080p-8');
+    const [quality, setQuality] = useState<MediaQuality>('1080p-8');
     const [subtitle, setSubtitle] = useState('auto');
 
-    const libraries = usePlexLibraries();
-    const config = usePlexConfig();
+    const mediaSources = useMediaSources();
+    const sourceList = mediaSources.data ?? [];
+    const [selectedSourceId, setSelectedSourceId] = useState(() => {
+        const requested = Number(new URLSearchParams(window.location.search).get('source'));
+        return Number.isInteger(requested) && requested > 0 ? requested : 0;
+    });
+    const selectedSource = sourceList.find((source) => source.id === selectedSourceId) ?? sourceList[0] ?? null;
+    const sourceId = selectedSource?.id ?? 0;
+
+    const libraries = useMediaLibraries(sourceId);
     const discord = useDiscordStatus();
-    const items = usePlexItems(libraryKey, deferredSearch);
-    const queue = usePlexQueue();
+    const items = useMediaItems(sourceId, libraryKey, deferredSearch);
+    const queue = useMediaQueue();
+    const history = useMediaHistory(12);
     const playback = usePlayback();
-    const detail = usePlexItem(
+    const detail = useMediaItem(
+        sourceId,
         view.kind === 'show'
             ? view.showKey
             : view.kind === 'season'
@@ -810,7 +1182,8 @@ export default function PlexPage() {
                 ? view.itemKey
                 : null
     );
-    const show = usePlexItem(
+    const show = useMediaItem(
+        sourceId,
         view.kind === 'show'
             ? view.showKey
             : view.kind === 'season'
@@ -819,14 +1192,16 @@ export default function PlexPage() {
                 ? (view.showKey ?? null)
                 : null
     );
-    const season = usePlexItem(
+    const season = useMediaItem(
+        sourceId,
         view.kind === 'season'
             ? view.seasonKey
             : view.kind === 'item'
               ? (view.seasonKey ?? null)
               : null
     );
-    const children = usePlexChildren(
+    const children = useMediaChildren(
+        sourceId,
         view.kind === 'show' ? view.showKey : view.kind === 'season' ? view.seasonKey : null
     );
 
@@ -839,16 +1214,46 @@ export default function PlexPage() {
 
     const enqueue = useEnqueue();
     const stop = useStopPlayback();
-    const startPlex = useStartPlexPlayback();
+    const startMedia = useStartMediaPlayback();
     const playQueue = usePlayQueueItem();
     const placeholder = useStartPlaceholder();
+    const validateSource = useValidateMediaSource();
+    const removeHistory = useRemoveMediaHistory();
+    const reorderSources = useReorderMediaSources();
     const toast = useToast();
+
+    useEffect(() => {
+        if (sourceList.length > 0 && !sourceList.some((source) => source.id === selectedSourceId)) {
+            setSelectedSourceId(sourceList[0]?.id ?? 0);
+        }
+    }, [mediaSources.data, selectedSourceId]);
+
+    useEffect(() => {
+        setLibraryKey('');
+        setSearch('');
+        if (skipViewReset.current) {
+            skipViewReset.current = false;
+            return;
+        }
+        setView({ kind: 'library' });
+    }, [selectedSourceId]);
 
     const activeLibrary = libraries.data?.find((library) => library.key === libraryKey);
     const queuedCount = queue.data?.filter((item) => item.status === 'queued').length ?? 0;
     const currentQueueItem = queue.data?.find((item) => item.id === playback.data?.queueItemId);
-    const isCurrentItem = Boolean(itemDetail && currentQueueItem?.ratingKey === itemDetail.ratingKey);
-    const busy = playback.data?.mode === 'iptv' || playback.data?.mode === 'plex';
+    const isCurrentItem = Boolean(
+        itemDetail && currentQueueItem?.itemId === itemDetail.itemId && currentQueueItem.sourceId === sourceId
+    );
+    const busy = playback.data?.mode === 'iptv' || playback.data?.mode === 'media';
+    const historyEntry =
+        itemDetail && history.data
+            ? (history.data.find(
+                  (entry) =>
+                      entry.sourceId === sourceId &&
+                      entry.itemId === itemDetail.itemId &&
+                      !entry.recommended
+              ) ?? null)
+            : null;
 
     useEffect(() => {
         if (!libraries.data) return;
@@ -857,23 +1262,21 @@ export default function PlexPage() {
             if (libraryKey !== '') {
                 setLibraryKey('');
                 setSearch('');
-                setView({ kind: 'library' });
             }
             return;
         }
         if (!enabled.some((library) => library.key === libraryKey)) {
             setLibraryKey(enabled[0].key);
             setSearch('');
-            setView({ kind: 'library' });
         }
     }, [libraries.data, libraryKey]);
 
     useEffect(() => {
         if (itemDetail) {
-            setQuality(config.data?.defaultQuality ?? '1080p-8');
+            setQuality(selectedSource?.defaultQuality ?? '1080p-8');
             setSubtitle('auto');
         }
-    }, [itemDetail?.ratingKey, config.data?.defaultQuality]);
+    }, [itemDetail?.itemId, selectedSource?.defaultQuality]);
 
     const resetToLibrary = () => {
         setView({ kind: 'library' });
@@ -885,6 +1288,8 @@ export default function PlexPage() {
                 setView({ kind: 'season', showKey: view.showKey, seasonKey: view.seasonKey });
             } else if (view.showKey) {
                 setView({ kind: 'show', showKey: view.showKey });
+            } else if (itemDetail?.showItemId) {
+                setView({ kind: 'show', showKey: itemDetail.showItemId });
             } else {
                 setView({ kind: 'library' });
             }
@@ -910,13 +1315,8 @@ export default function PlexPage() {
         if (!itemDetail || (itemDetail.type !== 'movie' && itemDetail.type !== 'episode')) return;
         enqueue.mutate(
             {
-                ratingKey: itemDetail.ratingKey,
-                type: itemDetail.type,
-                title: itemDetail.title,
-                showTitle: itemDetail.showTitle,
-                seasonNumber: itemDetail.seasonNumber,
-                episodeNumber: itemDetail.episodeNumber,
-                durationMs: itemDetail.durationMs,
+                sourceId,
+                itemId: itemDetail.itemId,
                 quality,
                 subtitleMode: toSubtitleMode(subtitle),
             },
@@ -930,7 +1330,7 @@ export default function PlexPage() {
                             : 'smooth';
                         window.setTimeout(() => {
                             document
-                                .getElementById('plex-queue')
+                                .getElementById('media-queue')
                                 ?.scrollIntoView({ block: 'start', behavior });
                         }, 60);
                     }
@@ -945,43 +1345,93 @@ export default function PlexPage() {
         );
     };
 
-    const playNow = () => {
+    const playNow = (startOver = false) => {
         if (!itemDetail) return;
         requestPlay({
             kind: 'item',
             item: itemDetail,
             quality,
             subtitleMode: toSubtitleMode(subtitle),
+            startOver,
         });
     };
+
+    const openHistoryItem = (entry: MediaHistoryDto) => {
+        if (entry.sourceId !== selectedSourceId) {
+            skipViewReset.current = true;
+            setSelectedSourceId(entry.sourceId);
+        }
+        setView({ kind: 'item', itemKey: entry.itemId });
+    };
+
+    const autoPlay = useRef(
+        new URLSearchParams(window.location.search).get('play') === '1'
+    );
+
+    useEffect(() => {
+        if (!autoPlay.current || !itemDetail || history.isPending) return;
+        if (itemDetail.type !== 'movie' && itemDetail.type !== 'episode') return;
+        autoPlay.current = false;
+        const saved =
+            history.data?.find(
+                (entry) => entry.sourceId === sourceId && entry.itemId === itemDetail.itemId
+            ) ?? null;
+        requestPlay(
+            saved
+                ? { kind: 'history', entry: saved }
+                : {
+                      kind: 'item',
+                      item: itemDetail,
+                      quality,
+                      subtitleMode: toSubtitleMode(subtitle),
+                      startOver: false,
+                  }
+        );
+        const url = new URL(window.location.href);
+        url.searchParams.delete('play');
+        window.history.replaceState(window.history.state, '', url);
+    }, [itemDetail, history.isPending, history.data, quality, subtitle, sourceId]);
 
     const confirmPlayback = async (guildId: string, voiceChannelId: string) => {
         if (!prompt) return;
         setPromptBusy(true);
         setPromptError(null);
         try {
-            let title = 'Plex On Demand';
+            let title = 'On demand';
             if (prompt.kind === 'item') {
-                await startPlex.mutateAsync({
-                    ratingKey: prompt.item.ratingKey,
+                await startMedia.mutateAsync({
+                    sourceId: prompt.item.sourceId,
+                    itemId: prompt.item.itemId,
                     quality: prompt.quality,
                     subtitleMode: prompt.subtitleMode,
                     guildId,
                     voiceChannelId,
+                    startOver: prompt.startOver ?? false,
                 });
                 title = prompt.item.title;
+            } else if (prompt.kind === 'history') {
+                await startMedia.mutateAsync({
+                    sourceId: prompt.entry.sourceId,
+                    itemId: prompt.entry.itemId,
+                    quality: prompt.entry.quality,
+                    subtitleMode: prompt.entry.subtitleMode,
+                    guildId,
+                    voiceChannelId,
+                    startOver: false,
+                });
+                title = prompt.entry.title;
             } else if (prompt.kind === 'queue') {
                 await playQueue.mutateAsync({ id: prompt.queueItem.id, guildId, voiceChannelId });
                 title = prompt.queueItem.title;
             } else {
-                await placeholder.mutateAsync({ guildId, voiceChannelId });
-                title = 'Plex On Demand';
+                await placeholder.mutateAsync({ sourceId: prompt.sourceId, guildId, voiceChannelId });
+                title = 'On demand';
             }
             const channelName = discord.data?.guilds
                 .flatMap((guild) => guild.voiceChannels)
                 .find((channel) => channel.id === voiceChannelId)?.name;
             toast({
-                title: prompt.kind === 'placeholder' ? 'Plex channel opened' : `Playing ${title}`,
+                title: prompt.kind === 'placeholder' ? 'Media channel opened' : `Playing ${title}`,
                 description: channelName ? `Started in ${channelName}` : undefined,
                 tone: 'success',
             });
@@ -1016,6 +1466,11 @@ export default function PlexPage() {
             label: show.data.title,
             onClick: () => setView({ kind: 'show', showKey: view.showKey! }),
         });
+    } else if (view.kind === 'item' && itemDetail?.showItemId) {
+        breadcrumbs.push({
+            label: itemDetail.showTitle ?? 'Series',
+            onClick: () => setView({ kind: 'show', showKey: itemDetail.showItemId! }),
+        });
     }
     if (view.kind === 'item' && season.data) {
         breadcrumbs.push({
@@ -1031,22 +1486,23 @@ export default function PlexPage() {
     return (
         <>
             <PageHeader
-                title="Plex"
+                title="Media"
                 meta={
-                    libraries.data
-                        ? `${enabledLibraries.length} of ${playableLibraries.length} playable libraries · ${config.data?.connected ? 'Connected' : 'Not connected'}`
-                        : 'Plex on demand'
+                    sourceList.length > 0
+                        ? `${sourceList.length} source${sourceList.length === 1 ? '' : 's'} · ${
+                              sourceList.filter((source) => source.connected).length
+                          } connected`
+                        : 'Plex and Jellyfin on demand'
                 }
                 actions={
                     <>
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            icon={<Library size={14} aria-hidden="true" />}
-                            onClick={() => setLibrariesOpen(true)}
+                        <Link
+                            to="/media/sources"
+                            className={buttonStyles({ variant: 'secondary', size: 'sm' })}
                         >
-                            Libraries
-                        </Button>
+                            <Server size={14} aria-hidden="true" />
+                            Manage sources
+                        </Link>
                         <Button
                             variant="secondary"
                             size="sm"
@@ -1062,17 +1518,50 @@ export default function PlexPage() {
                 }
             />
             <div className="oc-page-enter mx-auto w-full max-w-[1600px] space-y-4 p-3 sm:p-5 xl:p-6">
-                {config.data && (!config.data.connected || config.data.error) ? (
+                {sourceList.length > 0 ? (
+                    <SourceTabs
+                        sources={sourceList}
+                        value={sourceId}
+                        onChange={setSelectedSourceId}
+                        onReorder={(ids) =>
+                            reorderSources.mutate(ids, {
+                                onError: (error) =>
+                                    toast({
+                                        title: 'Could not reorder sources',
+                                        description: errorMessage(error),
+                                        tone: 'error',
+                                    }),
+                            })
+                        }
+                    />
+                ) : null}
+                {selectedSource && (!selectedSource.connected || selectedSource.error) ? (
                     <Notice
                         tone="warn"
-                        title="Plex needs attention"
+                        title={`${selectedSource.name} needs attention`}
                         action={
-                            <Link to="/settings#plex-connection" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
-                                Open Plex settings
-                            </Link>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                icon={<RefreshCw size={13} aria-hidden="true" />}
+                                loading={validateSource.isPending}
+                                onClick={() =>
+                                    validateSource.mutate(selectedSource.id, {
+                                        onSuccess: (source) =>
+                                            toast({
+                                                title: source.connected ? 'Connection is healthy' : 'Connection failed',
+                                                description: source.error ?? undefined,
+                                                tone: source.connected ? 'success' : 'error',
+                                            }),
+                                    })
+                                }
+                            >
+                                Retry
+                            </Button>
                         }
                     >
-                        {config.data.error ?? 'The Plex server is not reachable. Check the server URL and token.'}
+                        {selectedSource.error ??
+                            `${selectedSource.kind === 'jellyfin' ? 'Jellyfin' : 'Plex'} is not reachable. Check the server URL and token.`}
                     </Notice>
                 ) : null}
 
@@ -1080,7 +1569,51 @@ export default function PlexPage() {
                     <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface">
                         {view.kind === 'library' ? (
                             <div className="p-3 sm:p-4">
-                                {libraries.isPending ? (
+                                <ContinueWatching
+                                    entries={history.data ?? []}
+                                    sources={sourceList}
+                                    pending={history.isPending && sourceList.length > 0}
+                                    onResume={(entry) => requestPlay({ kind: 'history', entry })}
+                                    onOpen={openHistoryItem}
+                                    onRemove={(entry) =>
+                                        removeHistory.mutate(entry.id, {
+                                            onSuccess: () =>
+                                                toast({
+                                                    title: 'Removed from Continue watching',
+                                                    description: entry.title,
+                                                    tone: 'success',
+                                                }),
+                                            onError: (error) =>
+                                                toast({
+                                                    title: 'Could not remove the entry',
+                                                    description: errorMessage(error),
+                                                    tone: 'error',
+                                                }),
+                                        })
+                                    }
+                                />
+                                {mediaSources.isPending ? (
+                                    <div className="space-y-4" aria-hidden="true">
+                                        <Skeleton className="h-9 w-72" />
+                                        <Skeleton className="h-9 w-full max-w-sm" />
+                                    </div>
+                                ) : sourceList.length === 0 ? (
+                                    <EmptyState
+                                        compact
+                                        icon={Server}
+                                        title="No media sources"
+                                        description="Add a Plex or Jellyfin server to browse libraries and open a virtual channel in Discord."
+                                        action={
+                                            <Link
+                                                to="/media/sources"
+                                                className={buttonStyles({ variant: 'primary', size: 'sm' })}
+                                            >
+                                                <Plus size={13} aria-hidden="true" />
+                                                Add media source
+                                            </Link>
+                                        }
+                                    />
+                                ) : libraries.isPending ? (
                                     <div className="space-y-4" aria-hidden="true">
                                         <Skeleton className="h-9 w-72" />
                                         <Skeleton className="h-9 w-full max-w-sm" />
@@ -1088,7 +1621,7 @@ export default function PlexPage() {
                                 ) : libraries.isError ? (
                                     <ErrorState
                                         compact
-                                        title="Plex libraries could not load"
+                                        title="Libraries could not load"
                                         error={libraries.error}
                                         onRetry={() => void libraries.refetch()}
                                     />
@@ -1096,11 +1629,14 @@ export default function PlexPage() {
                                     <EmptyState
                                         compact
                                         icon={Film}
-                                        title="No Plex libraries"
-                                        description="Check that the Plex token can see at least one movie or show library."
+                                        title="No media libraries"
+                                        description="Check that the token can see at least one movie or show library, then validate the source again."
                                         action={
-                                            <Link to="/settings#plex-connection" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
-                                                Open Plex settings
+                                            <Link
+                                                to="/media/sources"
+                                                className={buttonStyles({ variant: 'secondary', size: 'sm' })}
+                                            >
+                                                Edit source
                                             </Link>
                                         }
                                     />
@@ -1109,20 +1645,19 @@ export default function PlexPage() {
                                         compact
                                         icon={Library}
                                         title="No playable libraries enabled"
-                                        description="Enable at least one movie or TV show library to browse and play Plex content."
+                                        description="Enable at least one movie or TV show library to browse and play media content."
                                         action={
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                onClick={() => setLibrariesOpen(true)}
+                                            <Link
+                                                to="/media/sources"
+                                                className={buttonStyles({ variant: 'secondary', size: 'sm' })}
                                             >
                                                 Choose libraries
-                                            </Button>
+                                            </Link>
                                         }
                                     />
                                 ) : (
                                     <Tabs
-                                        label="Plex libraries"
+                                        label="Media libraries"
                                         items={enabledLibraries.map((library) => ({
                                             id: library.key,
                                             label: library.title,
@@ -1136,7 +1671,7 @@ export default function PlexPage() {
                                     >
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                             <div className="relative w-full sm:max-w-xs">
-                                                <label htmlFor="plex-search" className="sr-only">
+                                                <label htmlFor="media-search" className="sr-only">
                                                     Search this library
                                                 </label>
                                                 <Search
@@ -1145,7 +1680,7 @@ export default function PlexPage() {
                                                     className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-faint"
                                                 />
                                                 <Input
-                                                    id="plex-search"
+                                                    id="media-search"
                                                     type="search"
                                                     value={search}
                                                     onChange={(event) => setSearch(event.target.value)}
@@ -1186,7 +1721,7 @@ export default function PlexPage() {
                                                     description={
                                                         search.trim()
                                                             ? 'Try a shorter search, or switch libraries.'
-                                                            : 'Plex returned no playable items for this library.'
+                                                            : 'The media source returned no playable items for this library.'
                                                     }
                                                     action={
                                                         search.trim() ? (
@@ -1203,14 +1738,14 @@ export default function PlexPage() {
                                             ) : (
                                                 <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
                                                     {itemList.map((item) => (
-                                                        <PlexCard
-                                                            key={item.ratingKey}
+                                                        <MediaCard
+                                                            key={item.itemId}
                                                             item={item}
                                                             onOpen={() => {
                                                                 if (item.type === 'show') {
-                                                                    setView({ kind: 'show', showKey: item.ratingKey });
+                                                                    setView({ kind: 'show', showKey: item.itemId });
                                                                 } else {
-                                                                    setView({ kind: 'item', itemKey: item.ratingKey });
+                                                                    setView({ kind: 'item', itemKey: item.itemId });
                                                                 }
                                                             }}
                                                         />
@@ -1280,14 +1815,14 @@ export default function PlexPage() {
                                     <ErrorState
                                         error={detail.error}
                                         onRetry={() => void detail.refetch()}
-                                        title="This Plex item could not load"
+                                        title="This Media item could not load"
                                     />
                                 ) : itemDetail ? (
                                     <div className="p-4 sm:p-5">
                                         <div className="grid grid-cols-1 gap-5 md:grid-cols-[160px_minmax(0,1fr)] xl:grid-cols-[180px_minmax(0,1fr)]">
                                             <Poster
                                                 title={itemDetail.title}
-                                                seed={itemDetail.ratingKey}
+                                                seed={itemDetail.itemId}
                                                 src={itemDetail.thumbUrl}
                                                 className="w-full max-w-[180px] rounded-lg border border-border"
                                             />
@@ -1296,13 +1831,33 @@ export default function PlexPage() {
                                                     {itemDetail.title}
                                                 </h2>
                                                 <p className="mt-1 text-sm text-text-muted">
-                                                    {itemDetail.type === 'episode'
-                                                        ? `${itemDetail.showTitle ?? 'Show'} · Season ${itemDetail.seasonNumber ?? 1}, Episode ${itemDetail.episodeNumber ?? 1}`
-                                                        : itemDetail.type === 'season'
-                                                          ? `${itemDetail.showTitle ?? 'Show'} · Season ${itemDetail.seasonNumber ?? 1}`
-                                                          : itemDetail.type === 'show'
-                                                            ? `${itemDetail.year ?? 'Unknown year'} · Series`
-                                                            : `${itemDetail.year ?? 'Unknown year'} · ${formatDuration(itemDetail.durationMs)}`}
+                                                    {itemDetail.type === 'episode' ? (
+                                                        <>
+                                                            {itemDetail.showItemId ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setView({
+                                                                            kind: 'show',
+                                                                            showKey: itemDetail.showItemId!,
+                                                                        })
+                                                                    }
+                                                                    className="rounded font-medium text-blurple-text transition-colors hover:text-[#a5acff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blurple/60"
+                                                                >
+                                                                    {itemDetail.showTitle ?? 'Show'}
+                                                                </button>
+                                                            ) : (
+                                                                (itemDetail.showTitle ?? 'Show')
+                                                            )}
+                                                            {` · Season ${itemDetail.seasonNumber ?? 1}, Episode ${itemDetail.episodeNumber ?? 1}`}
+                                                        </>
+                                                    ) : itemDetail.type === 'season' ? (
+                                                        `${itemDetail.showTitle ?? 'Show'} · Season ${itemDetail.seasonNumber ?? 1}`
+                                                    ) : itemDetail.type === 'show' ? (
+                                                        `${itemDetail.year ?? 'Unknown year'} · Series`
+                                                    ) : (
+                                                        `${itemDetail.year ?? 'Unknown year'} · ${formatDuration(itemDetail.durationMs)}`
+                                                    )}
                                                 </p>
                                                 <p className="mt-3 max-w-[70ch] text-sm leading-relaxed text-text-muted">
                                                     {itemDetail.summary}
@@ -1340,7 +1895,7 @@ export default function PlexPage() {
                                                                     id="item-quality"
                                                                     value={quality}
                                                                     onChange={(event) =>
-                                                                        setQuality(event.target.value as PlexQuality)
+                                                                        setQuality(event.target.value as MediaQuality)
                                                                     }
                                                                 >
                                                                     {QUALITY_OPTIONS.map((option) => (
@@ -1367,10 +1922,20 @@ export default function PlexPage() {
                                                             <Button
                                                                 variant="primary"
                                                                 icon={<Play size={14} aria-hidden="true" />}
-                                                                onClick={playNow}
+                                                                onClick={() => playNow(false)}
                                                             >
-                                                                Play now
+                                                                {historyEntry
+                                                                    ? `Resume from ${formatElapsed(historyEntry.positionMs)}`
+                                                                    : 'Play now'}
                                                             </Button>
+                                                            {historyEntry ? (
+                                                                <Button
+                                                                    variant="secondary"
+                                                                    onClick={() => playNow(true)}
+                                                                >
+                                                                    Start over
+                                                                </Button>
+                                                            ) : null}
                                                             <Button
                                                                 variant="secondary"
                                                                 icon={<ListPlus size={14} aria-hidden="true" />}
@@ -1381,7 +1946,9 @@ export default function PlexPage() {
                                                             </Button>
                                                         </div>
                                                         <p className="mt-2 text-[11px] text-text-faint">
-                                                            Playback starts in a Discord voice channel you choose next.
+                                                            {historyEntry
+                                                                ? `Saved progress: ${formatElapsed(historyEntry.positionMs)}. Playback starts in a Discord voice channel you choose next.`
+                                                                : 'Playback starts in a Discord voice channel you choose next.'}
                                                         </p>
                                                     </>
                                                 ) : null}
@@ -1420,26 +1987,26 @@ export default function PlexPage() {
                                                                 ? 'No seasons found'
                                                                 : 'No episodes found'
                                                         }
-                                                        description="Plex returned no children for this item."
+                                                        description="The media source returned no children for this item."
                                                     />
                                                 ) : itemDetail.type === 'show' ? (
                                                     <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
                                                         {childItems.map((seasonItem) => (
                                                             <button
-                                                                key={seasonItem.ratingKey}
+                                                                key={seasonItem.itemId}
                                                                 type="button"
                                                                 onClick={() =>
                                                                     setView({
                                                                         kind: 'season',
-                                                                        showKey: view.kind === 'show' ? view.showKey : itemDetail.ratingKey,
-                                                                        seasonKey: seasonItem.ratingKey,
+                                                                        showKey: view.kind === 'show' ? view.showKey : itemDetail.itemId,
+                                                                        seasonKey: seasonItem.itemId,
                                                                     })
                                                                 }
                                                                 className="group min-w-0 text-left"
                                                             >
                                                                 <Poster
                                                                     title={seasonItem.title}
-                                                                    seed={seasonItem.ratingKey}
+                                                                    seed={seasonItem.itemId}
                                                                     src={seasonItem.thumbUrl}
                                                                     className="w-full rounded-lg border border-border transition-colors group-hover:border-border-strong"
                                                                 />
@@ -1455,21 +2022,21 @@ export default function PlexPage() {
                                                 ) : (
                                                     <ol className="mt-3 divide-y divide-border border-t border-border">
                                                         {childItems.map((episode) => (
-                                                            <li key={episode.ratingKey}>
+                                                            <li key={episode.itemId}>
                                                                 <button
                                                                     type="button"
                                                                     onClick={() =>
                                                                         setView({
                                                                             kind: 'item',
-                                                                            itemKey: episode.ratingKey,
-                                                                            showKey: view.kind === 'season' ? view.showKey : show.data?.ratingKey,
+                                                                            itemKey: episode.itemId,
+                                                                            showKey: view.kind === 'season' ? view.showKey : show.data?.itemId,
                                                                             seasonKey: view.kind === 'season' ? view.seasonKey : undefined,
                                                                         })
                                                                     }
                                                                     className="flex w-full items-start gap-3 px-1 py-3 text-left transition-colors hover:bg-white/[0.02]"
                                                                 >
                                                                     <span className="w-7 shrink-0 pt-0.5 text-right font-mono text-[11px] tabular-nums text-text-faint">
-                                                                        {episode.episodeNumber ?? '—'}
+                                                                        {episode.episodeNumber ?? '-'}
                                                                     </span>
                                                                     <span className="min-w-0 flex-1">
                                                                         <span className="block truncate text-sm font-medium text-text">
@@ -1504,7 +2071,7 @@ export default function PlexPage() {
                         open={queueOpen}
                         onClose={() => setQueueOpen(false)}
                         onRequestQueuePlay={(item) => requestPlay({ kind: 'queue', queueItem: item })}
-                        onRequestPlaceholder={() => requestPlay({ kind: 'placeholder' })}
+                        onRequestPlaceholder={() => requestPlay({ kind: 'placeholder', sourceId })}
                         onBrowse={() => {
                             setQueueOpen(false);
                             setView({ kind: 'library' });
@@ -1512,8 +2079,6 @@ export default function PlexPage() {
                     />
                 </div>
             </div>
-
-            <LibrariesDialog open={librariesOpen} onClose={() => setLibrariesOpen(false)} />
 
             <VoicePromptDialog
                 open={prompt !== null}
@@ -1559,13 +2124,13 @@ export default function PlexPage() {
     );
 }
 
-function PlexCard({ item, onOpen }: { item: PlexItemDto; onOpen: () => void }) {
+function MediaCard({ item, onOpen }: { item: MediaItemDto; onOpen: () => void }) {
     return (
         <button type="button" onClick={onOpen} className="group min-w-0 text-left">
             <div className="relative overflow-hidden rounded-lg border border-border transition-colors group-hover:border-border-strong">
                 <Poster
                     title={item.title}
-                    seed={item.ratingKey}
+                    seed={item.itemId}
                     src={item.thumbUrl}
                     className="w-full"
                 />

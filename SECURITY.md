@@ -12,12 +12,12 @@ Only the latest release and the `master` branch receive fixes. The Docker image 
 
 ## What OrbisCast stores
 
-- **SQLite database:** `data/orbiscast.db` holds settings, IPTV sources and channels, Plex libraries, the queue, and Better Auth sessions.
+- **SQLite database:** `data/orbiscast.db` holds settings, IPTV sources and channels, media sources and libraries, the queue, and Better Auth sessions.
 - **Encryption keys:** `data/keys.json` holds the AES-256-GCM key and the Better Auth secret. It is created with mode `0600`.
-- **Encrypted provider tokens:** Discord bot and user tokens and the Plex token are encrypted at rest with AES-256-GCM.
+- **Encrypted provider tokens:** Discord bot and user tokens and media server tokens are encrypted at rest with AES-256-GCM.
 - **Plaintext data:** IPTV source URLs are stored plaintext by decision. They may contain provider credentials. Treat the whole data directory as secret.
 - **Logs:** `data/logs/app.log` is redacted for token patterns, but source URLs and other operational metadata can appear.
-- **Cache:** `data/cache/` holds downloaded playlists, guides, and the generated Plex placeholder clip.
+- **Cache:** `data/cache/` holds downloaded playlists, guides, and the generated media placeholder clip.
 
 Losing `data/keys.json` makes saved provider tokens unrecoverable. Back up the whole data directory and restrict access to the host and the Docker volume.
 

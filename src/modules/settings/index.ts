@@ -6,7 +6,7 @@ import type { Db } from '../database/client';
 import { settings as settingsTable } from '../database/schema';
 import { getLogger } from '../../utils/logger';
 import { decryptSecret, encryptSecret, type KeyMaterial, maskSecret, encryptionKey } from '../../utils/crypto';
-import type { PlexConfigDto, PlexQuality, SettingsDto } from '../../shared/types';
+import type { MediaQuality, SettingsDto } from '../../shared/types';
 
 const logger = getLogger();
 
@@ -49,11 +49,20 @@ const authSchema = z.object({
     enabled: z.boolean().default(false),
 });
 
+const playbackSchema = z.object({
+    /** Queue the next episode when the current one ends. */
+    autoplayNextEpisode: z.boolean().default(false),
+    /** Skip a Plex intro marker when playback reaches it. */
+    autoSkipIntro: z.boolean().default(false),
+});
+
 const uiSchema = z.object({
     timezone: z.string().default(systemTimezone),
     logLevel: z.enum(LOG_LEVELS).default('info'),
     publicUrl: z.string().default(''),
     trustedOrigins: z.array(z.string()).default([]),
+    /** Media source ids in the WebUI tab order. Unknown ids are ignored. */
+    mediaSourceOrder: z.array(z.number().int().positive()).max(500).default([]),
 });
 
 const metaSchema = z.object({
@@ -64,11 +73,13 @@ export type StreamSettings = z.infer<typeof streamSchema>;
 export type StoredPlexSettings = z.infer<typeof plexSchema>;
 export type StoredDiscordSettings = z.infer<typeof discordSchema>;
 export type AuthSettings = z.infer<typeof authSchema>;
+export type PlaybackSettings = z.infer<typeof playbackSchema>;
 export type UiSettings = z.infer<typeof uiSchema>;
 export type MetaSettings = z.infer<typeof metaSchema>;
 
 export interface StoredSettings {
     stream: StreamSettings;
+    playback: PlaybackSettings;
     plex: StoredPlexSettings;
     discord: StoredDiscordSettings;
     auth: AuthSettings;
@@ -76,15 +87,27 @@ export interface StoredSettings {
     meta: MetaSettings;
 }
 
+/** Legacy Plex connection shape used by the one-time media-source migration. */
+export interface LegacyPlexConfig {
+    serverUrl: string;
+    tokenSet: boolean;
+    tokenLast4: string | null;
+    channelName: string;
+    idleMinutes: number;
+    emptyGraceSeconds: number;
+    defaultQuality: MediaQuality;
+}
+
 export interface SettingsUpdateInput {
     stream?: Partial<StreamSettings>;
+    playback?: Partial<PlaybackSettings>;
     plex?: Partial<{
         serverUrl: string;
         token: string;
         channelName: string;
         idleMinutes: number;
         emptyGraceSeconds: number;
-        defaultQuality: PlexQuality;
+        defaultQuality: MediaQuality;
     }>;
     discord?: Partial<{
         botToken: string;
@@ -96,9 +119,27 @@ export interface SettingsUpdateInput {
     ui?: Partial<UiSettings>;
 }
 
+const playbackUpdateSchema = z
+    .object({
+        autoplayNextEpisode: z.boolean().optional(),
+        autoSkipIntro: z.boolean().optional(),
+    })
+    .strict();
+
+const uiUpdateSchema = z
+    .object({
+        timezone: z.string().optional(),
+        logLevel: z.enum(LOG_LEVELS).optional(),
+        publicUrl: z.string().optional(),
+        trustedOrigins: z.array(z.string()).optional(),
+        mediaSourceOrder: z.array(z.number().int().positive()).max(500).optional(),
+    })
+    .strict();
+
 const updateSchema = z
     .object({
         stream: streamSchema.partial().optional(),
+        playback: playbackUpdateSchema.optional(),
         plex: z
             .object({
                 serverUrl: z.string().min(1).optional(),
@@ -120,7 +161,7 @@ const updateSchema = z
             .strict()
             .optional(),
         auth: authSchema.partial().optional(),
-        ui: uiSchema.partial().optional(),
+        ui: uiUpdateSchema.optional(),
     })
     .strict();
 
@@ -149,6 +190,7 @@ export class SettingsService {
         const rows = this.readRows();
         const defaults: Record<string, unknown> = {
             stream: streamSchema.parse({}),
+            playback: playbackSchema.parse({}),
             plex: { ...plexSchema.parse({}), clientIdentifier: randomUUID() },
             discord: discordSchema.parse({}),
             auth: authSchema.parse({}),
@@ -183,20 +225,15 @@ export class SettingsService {
             publicUrl: this.cache.ui.publicUrl,
             trustedOrigins: this.cache.ui.trustedOrigins,
             stream: { ...this.cache.stream },
-            plex: {
-                channelName: this.cache.plex.channelName,
-                idleMinutes: this.cache.plex.idleMinutes,
-                emptyGraceSeconds: this.cache.plex.emptyGraceSeconds,
-                defaultQuality: this.cache.plex.defaultQuality,
-            },
+            playback: { ...this.cache.playback },
             auth: { enabled: this.cache.auth.enabled },
         };
     }
 
     /**
-     * Returns the Plex connection DTO. Connection state is filled by the caller.
+     * Returns the legacy Plex connection DTO used for migration.
      */
-    getPlexConfig(): PlexConfigDto {
+    getPlexConfig(): LegacyPlexConfig {
         return {
             serverUrl: this.cache.plex.serverUrl,
             tokenSet: Boolean(this.cache.plex.tokenEncrypted),
@@ -205,8 +242,6 @@ export class SettingsService {
             idleMinutes: this.cache.plex.idleMinutes,
             emptyGraceSeconds: this.cache.plex.emptyGraceSeconds,
             defaultQuality: this.cache.plex.defaultQuality,
-            connected: false,
-            error: null,
         };
     }
 
@@ -218,10 +253,30 @@ export class SettingsService {
     }
 
     /**
+     * Returns the playback behavior settings used by the media service.
+     */
+    getPlayback(): PlaybackSettings {
+        return { ...this.cache.playback };
+    }
+
+    /**
      * Returns the raw timezone and log level settings.
      */
     getUi(): UiSettings {
         return { ...this.cache.ui };
+    }
+
+    /**
+     * Persists the WebUI media source tab order.
+     *
+     * @param ids - Source ids in display order
+     */
+    setMediaSourceOrder(ids: number[]): void {
+        const unique = [...new Set(ids.filter(id => Number.isInteger(id) && id > 0))];
+        const now = Date.now();
+        this.writeSection('ui', { ...this.cache.ui, mediaSourceOrder: unique }, now);
+        this.cache = this.load();
+        this.events?.emit('settings', this.getPublic());
     }
 
     /**
@@ -232,6 +287,32 @@ export class SettingsService {
             return null;
         }
         return decryptSecret(this.cache.plex.tokenEncrypted, encryptionKey(this.keys));
+    }
+
+    /**
+     * Encrypts a provider secret for storage in a media source row.
+     *
+     * @param value - Plaintext token
+     * @returns Ciphertext and the last four characters
+     */
+    encodeSecret(value: string): { encrypted: string; last4: string } {
+        return {
+            encrypted: encryptSecret(value, encryptionKey(this.keys)),
+            last4: value.slice(-4),
+        };
+    }
+
+    /**
+     * Decrypts a provider secret stored in a media source row.
+     *
+     * @param encrypted - Ciphertext from the database
+     * @returns Plaintext token, or null when the value is empty
+     */
+    decodeSecret(encrypted: string): string | null {
+        if (!encrypted) {
+            return null;
+        }
+        return decryptSecret(encrypted, encryptionKey(this.keys));
     }
 
     /**
@@ -298,6 +379,10 @@ export class SettingsService {
 
         if (parsed.stream) {
             this.writeSection('stream', { ...this.cache.stream, ...parsed.stream }, now);
+        }
+
+        if (parsed.playback) {
+            this.writeSection('playback', { ...this.cache.playback, ...parsed.playback }, now);
         }
 
         if (parsed.plex) {
@@ -370,6 +455,7 @@ export class SettingsService {
         const rows = this.readRows();
         return {
             stream: this.parseSection(rows, 'stream', streamSchema),
+            playback: this.parseSection(rows, 'playback', playbackSchema),
             plex: this.parseSection(rows, 'plex', plexSchema),
             discord: this.parseSection(rows, 'discord', discordSchema),
             auth: this.parseSection(rows, 'auth', authSchema),

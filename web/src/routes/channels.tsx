@@ -32,7 +32,7 @@ import {
 import {
     useBulkChannelVisibility,
     useChannels,
-    usePlexConfig,
+    useMediaChannels,
     usePlayback,
     useSetChannelVisibility,
     useSources,
@@ -75,7 +75,7 @@ export default function ChannelsPage() {
     const setVisible = useSetChannelVisibility();
     const bulk = useBulkChannelVisibility();
     const playback = usePlayback();
-    const plexConfig = usePlexConfig();
+    const mediaChannels = useMediaChannels();
 
     const items = channels.data?.items ?? [];
     const pageIds = items.map((channel) => channel.id);
@@ -141,12 +141,17 @@ export default function ChannelsPage() {
         );
     };
 
-    const plexState =
-        playback.data?.mode === 'plex'
-            ? `Playing ${playback.data.title ?? 'Plex'}`
-            : playback.data?.mode === 'placeholder'
-              ? `Placeholder running in ${playback.data.voiceChannelName ?? 'Discord'}`
-              : 'Idle. Starts on demand.';
+    const mediaList = mediaChannels.data ?? [];
+    const mediaState = (sourceId: number): string => {
+        const state = playback.data;
+        if (state?.mode === 'media' && state.sourceId === sourceId) {
+            return `Playing ${state.title ?? 'on demand'}`;
+        }
+        if (state?.mode === 'placeholder' && state.sourceId === sourceId) {
+            return `Placeholder running in ${state.voiceChannelName ?? 'Discord'}`;
+        }
+        return 'Idle. Starts on demand.';
+    };
 
     const columns: TableColumn<ChannelDto>[] = [
         {
@@ -251,44 +256,50 @@ export default function ChannelsPage() {
                 }
                 actions={
                     <span className="hidden sm:inline-flex">
-                        <Link to="/sources" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
+                        <Link to="/iptv" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
                             Manage sources
                         </Link>
                     </span>
                 }
             />
             <div className="oc-page-enter mx-auto w-full max-w-[1600px] space-y-4 p-3 sm:p-5 xl:p-6">
-                <section className="rounded-xl border border-plex/25 bg-plex/[0.045]">
-                    <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-                        <div className="flex aspect-[2/3] w-10 shrink-0 items-center justify-center rounded-md border border-plex/30 bg-plex/10">
-                            <Film size={18} aria-hidden="true" className="text-plex" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm font-semibold text-text">
-                                    {plexConfig.data?.channelName ?? 'Plex On Demand'}
-                                </p>
-                                <StatusPill tone="plex" dot={false}>
-                                    On demand
-                                </StatusPill>
-                                <span className="inline-flex items-center gap-1 text-[11px] text-text-muted">
-                                    <Pin size={11} aria-hidden="true" />
-                                    Pinned
-                                </span>
+                {mediaList.map((channel) => (
+                    <section
+                        key={`media-${channel.sourceId}`}
+                        className="rounded-xl border border-plex/25 bg-plex/[0.045]"
+                    >
+                        <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                            <div className="flex aspect-[2/3] w-10 shrink-0 items-center justify-center rounded-md border border-plex/30 bg-plex/10">
+                                <Film size={18} aria-hidden="true" className="text-plex" />
                             </div>
-                            <p className="mt-0.5 truncate text-xs text-text-muted">
-                                Plex virtual channel · {plexState}
-                            </p>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-sm font-semibold text-text">{channel.name}</p>
+                                    <StatusPill tone="plex" dot={false}>
+                                        {channel.kind === 'jellyfin' ? 'Jellyfin' : 'Plex'}
+                                    </StatusPill>
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-text-muted">
+                                        <Pin size={11} aria-hidden="true" />
+                                        Pinned
+                                    </span>
+                                </div>
+                                <p className="mt-0.5 truncate text-xs text-text-muted">
+                                    On-demand channel · {mediaState(channel.sourceId ?? 0)}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="hidden text-[11px] text-text-muted sm:inline">Always visible</span>
+                                <Link
+                                    to={`/media?source=${channel.sourceId ?? ''}`}
+                                    className={buttonStyles({ variant: 'secondary', size: 'sm' })}
+                                >
+                                    <Film size={14} aria-hidden="true" />
+                                    Open media
+                                </Link>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <span className="hidden text-[11px] text-text-muted sm:inline">Always visible</span>
-                            <Link to="/plex" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
-                                <Film size={14} aria-hidden="true" />
-                                Open Plex
-                            </Link>
-                        </div>
-                    </div>
-                </section>
+                    </section>
+                ))}
 
                 <section className="rounded-xl border border-border bg-surface p-3">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_repeat(3,minmax(0,1fr))_auto]">
@@ -471,7 +482,7 @@ export default function ChannelsPage() {
                             }
                             action={
                                 channels.data.totalAll === 0 ? (
-                                    <Link to="/sources" className={buttonStyles({ variant: 'primary', size: 'sm' })}>
+                                    <Link to="/iptv" className={buttonStyles({ variant: 'primary', size: 'sm' })}>
                                         Add a source
                                     </Link>
                                 ) : (

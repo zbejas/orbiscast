@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    CalendarDays,
     Film,
     LayoutDashboard,
     LogOut,
@@ -30,9 +29,8 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/channels', label: 'Channels', icon: Tv },
-    { to: '/guide', label: 'Guide', icon: CalendarDays },
-    { to: '/plex', label: 'Plex', icon: Film },
-    { to: '/sources', label: 'Sources', icon: Rss },
+    { to: '/iptv', label: 'IPTV', icon: Rss },
+    { to: '/media', label: 'Media', icon: Film },
     { to: '/discord', label: 'Discord', icon: MessagesSquare },
     { to: '/logs', label: 'Logs', icon: ScrollText },
     { to: '/settings', label: 'Settings', icon: Settings },

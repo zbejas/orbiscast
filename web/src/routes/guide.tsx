@@ -14,7 +14,6 @@ import {
     Dialog,
     EmptyState,
     ErrorState,
-    PageHeader,
     Skeleton,
     StatusPill,
     buttonStyles,
@@ -53,7 +52,7 @@ function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'The guide did not load. Try again.';
 }
 
-export default function GuidePage() {
+export function GuidePanel() {
     const todayKey = toDateKey();
     const [day, setDay] = useState(todayKey);
     const [selected, setSelected] = useState<{ programme: ProgrammeDto; channelName: string } | null>(null);
@@ -91,15 +90,7 @@ export default function GuidePage() {
 
     return (
         <>
-            <PageHeader
-                title="Guide"
-                meta={
-                    channels.length > 0
-                        ? `${channels.length} visible channels · local time`
-                        : 'Visible channels and now/next'
-                }
-            />
-            <div className="oc-page-enter mx-auto w-full max-w-[1600px] space-y-4 p-3 sm:p-5 xl:p-6">
+            <div className="space-y-4">
                 <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                         <button
@@ -184,7 +175,7 @@ export default function GuidePage() {
                             title="No guide data for this day"
                             description="The channels are available, but the XMLTV guide has no programmes for this date. Refresh the source or choose another day."
                             action={
-                                <Link to="/sources" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
+                                <Link to="/iptv" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
                                     Open sources
                                 </Link>
                             }

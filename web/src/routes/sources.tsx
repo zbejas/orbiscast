@@ -18,7 +18,6 @@ import {
     Field,
     IconButton,
     Input,
-    PageHeader,
     Select,
     StatusPill,
     Switch,
@@ -281,7 +280,7 @@ function SourceFormDialog({
     );
 }
 
-export default function SourcesPage() {
+export function SourcesPanel() {
     const sources = useSources();
     const refresh = useRefreshSource();
     const toggle = useSetSourceEnabled();
@@ -441,44 +440,36 @@ export default function SourcesPage() {
 
     return (
         <>
-            <PageHeader
-                title="Sources"
-                meta={
-                    sources.data
-                        ? `${formatCount(list.length)} sources · ${formatCount(totalChannels)} channels · ${formatCount(totalVisible)} visible`
-                        : 'Playlist and guide intake'
-                }
-                actions={
-                    <Button
-                        variant="primary"
-                        size="sm"
-                        icon={<Plus size={14} aria-hidden="true" />}
-                        onClick={() => setDialog({ source: null })}
-                    >
-                        Add source
-                    </Button>
-                }
-            />
-            <div className="oc-page-enter mx-auto w-full max-w-[1600px] space-y-4 p-3 sm:p-5 xl:p-6">
+            <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="max-w-2xl text-xs leading-relaxed text-text-muted">
                         Pair each M3U playlist with its XMLTV guide. Refreshes replace the channel list while
                         keeping your visible channels where the IDs still match.
                     </p>
                     <Link
-                        to="/settings#plex-connection"
+                        to="/media"
                         className="text-xs font-medium text-blurple-text hover:text-[#a5acff]"
                     >
-                        Plex is configured in Settings
+                        Plex and Jellyfin are on the Media page
                     </Link>
                 </div>
 
                 <section className="overflow-hidden rounded-xl border border-border bg-surface">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
                         <h2 className="text-sm font-semibold text-text">Configured sources</h2>
-                        <span className="font-mono text-[11px] tabular-nums text-text-muted">
-                            {sources.data ? formatCount(totalChannels) : ''}
-                        </span>
+                        <div className="flex items-center gap-3">
+                            <span className="font-mono text-[11px] tabular-nums text-text-muted">
+                                {sources.data ? formatCount(totalChannels) : ''}
+                            </span>
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                icon={<Plus size={14} aria-hidden="true" />}
+                                onClick={() => setDialog({ source: null })}
+                            >
+                                Add source
+                            </Button>
+                        </div>
                     </div>
 
                     {sources.isPending ? (

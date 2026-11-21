@@ -1,10 +1,24 @@
-import { and, asc, eq, gt, inArray, lte, ne, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, lte, ne, notInArray, sql } from 'drizzle-orm';
 import type { Db } from './client';
-import { channels, discordGuildSettings, iptvSources, plexLibraries, plexQueueItems, programmes } from './schema';
+import {
+    channels,
+    discordGuildSettings,
+    iptvSources,
+    mediaHistory,
+    mediaLibraries,
+    mediaQueueItems,
+    mediaSources,
+    plexLibraries,
+    plexQueueItems,
+    programmes,
+} from './schema';
 import type {
     ChannelDto,
-    PlexLibraryDto,
-    PlexQuality,
+    MediaHistoryDto,
+    MediaLibraryDto,
+    MediaLibraryType,
+    MediaQuality,
+    MediaSourceKind,
     QueueItemDto,
     QueueStatus,
     SourceDto,
@@ -71,8 +85,27 @@ export interface GuildSettingsRecord {
     enabled: boolean;
 }
 
-export interface QueueInput {
-    ratingKey: string;
+export interface MediaSourceInput {
+    kind: MediaSourceKind;
+    name: string;
+    baseUrl: string;
+    tokenEncrypted?: string;
+    tokenLast4?: string;
+    clientIdentifier?: string;
+    userId?: string | null;
+    userName?: string | null;
+    channelName: string;
+    idleMinutes?: number;
+    emptyGraceSeconds?: number;
+    defaultQuality?: MediaQuality;
+    enabled?: boolean;
+}
+
+export type MediaSourceRecord = typeof mediaSources.$inferSelect;
+
+export interface MediaQueueInput {
+    sourceId: number;
+    itemId: string;
     type: 'movie' | 'episode';
     title: string;
     showTitle?: string | null;
@@ -80,7 +113,23 @@ export interface QueueInput {
     episodeNumber?: number | null;
     durationMs?: number | null;
     thumbUrl?: string | null;
-    quality: PlexQuality;
+    quality: MediaQuality;
+    subtitleMode: string;
+}
+
+export interface MediaHistoryInput {
+    sourceId: number;
+    itemId: string;
+    type: 'movie' | 'episode';
+    title: string;
+    showTitle?: string | null;
+    seasonNumber?: number | null;
+    episodeNumber?: number | null;
+    durationMs?: number | null;
+    thumbUrl?: string | null;
+    positionMs?: number;
+    completed?: boolean;
+    quality: MediaQuality;
     subtitleMode: string;
 }
 
@@ -479,6 +528,35 @@ export function getChannelById(db: Db, id: number) {
 }
 
 /**
+ * Builds a stable reference for a channel in Discord autocomplete and command
+ * options. The numeric id stays unique when two channels share a name.
+ *
+ * @param id - Channel id
+ * @returns Reference such as `id:42`
+ */
+export function channelRef(id: number): string {
+    return `id:${id}`;
+}
+
+/**
+ * Resolves a channel reference from autocomplete, or a typed channel name.
+ *
+ * @param db - Drizzle client
+ * @param ref - `id:<n>` reference or channel name
+ * @returns Visible channel row or undefined
+ */
+export function findVisibleChannelByRef(db: Db, ref: string) {
+    const value = ref.trim();
+    if (value.startsWith('id:')) {
+        const id = Number.parseInt(value.slice(3), 10);
+        if (!Number.isInteger(id)) return undefined;
+        const channel = getChannelById(db, id);
+        return channel?.visible ? channel : undefined;
+    }
+    return findVisibleChannelByName(db, value);
+}
+
+/**
  * Returns one channel as an API DTO.
  *
  * @param db - Drizzle client
@@ -692,41 +770,138 @@ export function upsertGuildSettings(
 }
 
 /**
- * Returns stored Plex libraries.
+ * Lists configured media sources.
  *
  * @param db - Drizzle client
- * @returns Library rows
+ * @returns Media source rows ordered by name
  */
-export function listPlexLibraries(db: Db): PlexLibraryDto[] {
+export function listMediaSources(db: Db): MediaSourceRecord[] {
+    return db.select().from(mediaSources).orderBy(asc(mediaSources.name)).all();
+}
+
+/**
+ * Returns one media source.
+ *
+ * @param db - Drizzle client
+ * @param id - Media source id
+ * @returns Media source row or undefined
+ */
+export function getMediaSource(db: Db, id: number): MediaSourceRecord | undefined {
+    return db.select().from(mediaSources).where(eq(mediaSources.id, id)).get();
+}
+
+/**
+ * Creates a media source.
+ *
+ * @param db - Drizzle client
+ * @param input - Source fields, with the token already encrypted
+ * @returns The created row
+ */
+export function createMediaSource(db: Db, input: MediaSourceInput): MediaSourceRecord {
+    const now = Date.now();
+    return db
+        .insert(mediaSources)
+        .values({
+            kind: input.kind,
+            name: input.name,
+            baseUrl: input.baseUrl,
+            tokenEncrypted: input.tokenEncrypted ?? '',
+            tokenLast4: input.tokenLast4 ?? '',
+            clientIdentifier: input.clientIdentifier ?? '',
+            userId: input.userId ?? null,
+            userName: input.userName ?? null,
+            channelName: input.channelName,
+            idleMinutes: input.idleMinutes ?? 5,
+            emptyGraceSeconds: input.emptyGraceSeconds ?? 30,
+            defaultQuality: input.defaultQuality ?? '1080p-8',
+            enabled: input.enabled ?? true,
+            createdAt: now,
+            updatedAt: now,
+        })
+        .returning()
+        .get();
+}
+
+/**
+ * Updates a media source.
+ *
+ * @param db - Drizzle client
+ * @param id - Media source id
+ * @param input - Changed fields
+ * @returns The updated row, or undefined when it does not exist
+ */
+export function updateMediaSource(
+    db: Db,
+    id: number,
+    input: Partial<Omit<MediaSourceInput, 'kind'>> & { kind?: MediaSourceKind }
+): MediaSourceRecord | undefined {
+    const changed = Object.fromEntries(
+        Object.entries(input).filter(([, value]) => value !== undefined)
+    ) as Partial<typeof mediaSources.$inferInsert>;
+    if (Object.keys(changed).length === 0) {
+        return getMediaSource(db, id);
+    }
+    return db
+        .update(mediaSources)
+        .set({ ...changed, updatedAt: Date.now() })
+        .where(eq(mediaSources.id, id))
+        .returning()
+        .get();
+}
+
+/**
+ * Deletes a media source. Libraries and queue entries cascade.
+ *
+ * @param db - Drizzle client
+ * @param id - Media source id
+ * @returns True when a row was deleted
+ */
+export function deleteMediaSource(db: Db, id: number): boolean {
+    return db.delete(mediaSources).where(eq(mediaSources.id, id)).run().changes > 0;
+}
+
+/**
+ * Lists one source's libraries.
+ *
+ * @param db - Drizzle client
+ * @param sourceId - Media source id
+ * @returns Library DTOs
+ */
+export function listMediaLibraries(db: Db, sourceId: number): MediaLibraryDto[] {
     return db
         .select()
-        .from(plexLibraries)
-        .orderBy(asc(plexLibraries.title))
+        .from(mediaLibraries)
+        .where(eq(mediaLibraries.sourceId, sourceId))
+        .orderBy(asc(mediaLibraries.title))
         .all()
         .map(row => ({
+            sourceId: row.sourceId,
             key: row.libraryKey,
             title: row.title,
-            type: row.type,
+            type: normalizeLibraryType(row.type),
             enabled: row.enabled,
         }));
 }
 
 /**
- * Syncs the library list while preserving each library's enabled flag.
+ * Syncs one source's library list while preserving enabled flags.
  *
  * @param db - Drizzle client
- * @param input - Libraries from Plex
+ * @param sourceId - Media source id
+ * @param input - Libraries reported by the server
  * @returns Number of libraries seen
  */
-export function replacePlexLibraries(
+export function replaceMediaLibraries(
     db: Db,
+    sourceId: number,
     input: Array<{ key: string; title: string; type: string }>
 ): number {
     const now = Date.now();
     return db.transaction(tx => {
         for (const library of input) {
-            tx.insert(plexLibraries)
+            tx.insert(mediaLibraries)
                 .values({
+                    sourceId,
                     libraryKey: library.key,
                     title: library.title,
                     type: library.type,
@@ -734,7 +909,7 @@ export function replacePlexLibraries(
                     updatedAt: now,
                 })
                 .onConflictDoUpdate({
-                    target: plexLibraries.libraryKey,
+                    target: [mediaLibraries.sourceId, mediaLibraries.libraryKey],
                     set: {
                         title: library.title,
                         type: library.type,
@@ -746,9 +921,11 @@ export function replacePlexLibraries(
 
         const keys = input.map(library => library.key);
         if (keys.length > 0) {
-            tx.delete(plexLibraries).where(notInArray(plexLibraries.libraryKey, keys)).run();
+            tx.delete(mediaLibraries)
+                .where(and(eq(mediaLibraries.sourceId, sourceId), notInArray(mediaLibraries.libraryKey, keys)))
+                .run();
         } else {
-            tx.delete(plexLibraries).run();
+            tx.delete(mediaLibraries).where(eq(mediaLibraries.sourceId, sourceId)).run();
         }
 
         return input.length;
@@ -756,83 +933,100 @@ export function replacePlexLibraries(
 }
 
 /**
- * Enables or disables a Plex library.
+ * Enables or disables one library.
  *
  * @param db - Drizzle client
- * @param key - Plex library key
+ * @param sourceId - Media source id
+ * @param key - Library key from the server
  * @param enabled - New enabled state
  * @returns Number of updated rows
  */
-export function setPlexLibraryEnabled(db: Db, key: string, enabled: boolean): number {
+export function setMediaLibraryEnabled(
+    db: Db,
+    sourceId: number,
+    key: string,
+    enabled: boolean
+): number {
     return db
-        .update(plexLibraries)
+        .update(mediaLibraries)
         .set({ enabled, updatedAt: Date.now() })
-        .where(eq(plexLibraries.libraryKey, key))
+        .where(and(eq(mediaLibraries.sourceId, sourceId), eq(mediaLibraries.libraryKey, key)))
         .run().changes;
 }
 
 /**
- * Returns the queue ordered by position.
+ * Returns the global queue ordered by position.
  *
  * @param db - Drizzle client
- * @returns Queue rows ready for the API
+ * @returns Queue entries with their source metadata
  */
-export function listQueue(db: Db): QueueItemDto[] {
+export function listMediaQueue(db: Db): QueueItemDto[] {
     return db
-        .select()
-        .from(plexQueueItems)
-        .orderBy(asc(plexQueueItems.position))
+        .select({
+            id: mediaQueueItems.id,
+            sourceId: mediaQueueItems.sourceId,
+            sourceName: mediaSources.name,
+            sourceKind: mediaSources.kind,
+            position: mediaQueueItems.position,
+            status: mediaQueueItems.status,
+            itemId: mediaQueueItems.itemId,
+            type: mediaQueueItems.type,
+            title: mediaQueueItems.title,
+            showTitle: mediaQueueItems.showTitle,
+            seasonNumber: mediaQueueItems.seasonNumber,
+            episodeNumber: mediaQueueItems.episodeNumber,
+            durationMs: mediaQueueItems.durationMs,
+            thumbUrl: mediaQueueItems.thumbUrl,
+            quality: mediaQueueItems.quality,
+            subtitleMode: mediaQueueItems.subtitleMode,
+            error: mediaQueueItems.error,
+        })
+        .from(mediaQueueItems)
+        .innerJoin(mediaSources, eq(mediaQueueItems.sourceId, mediaSources.id))
+        .orderBy(asc(mediaQueueItems.position))
         .all()
         .map(row => ({
-            id: row.id,
-            position: row.position,
+            ...row,
+            sourceKind: row.sourceKind as MediaSourceKind,
             status: row.status as QueueStatus,
-            ratingKey: row.ratingKey,
-            type: row.type,
-            title: row.title,
-            showTitle: row.showTitle,
-            seasonNumber: row.seasonNumber,
-            episodeNumber: row.episodeNumber,
-            durationMs: row.durationMs,
-            thumbUrl: row.thumbUrl,
-            quality: row.quality,
+            quality: row.quality as MediaQuality,
             subtitleMode: parseSubtitleMode(row.subtitleMode),
-            error: row.error,
         }));
 }
 
 /**
- * Returns one queue row as an API DTO.
+ * Returns one queue entry.
  *
  * @param db - Drizzle client
- * @param id - Queue item id
- * @returns Queue item DTO or undefined
+ * @param id - Queue entry id
+ * @returns Queue entry or undefined
  */
-export function getQueueItem(db: Db, id: number): QueueItemDto | undefined {
-    return listQueue(db).find(item => item.id === id);
+export function getMediaQueueItem(db: Db, id: number): QueueItemDto | undefined {
+    return listMediaQueue(db).find(item => item.id === id);
 }
 
 /**
- * Appends an item to the queue.
+ * Appends an item to the global queue.
  *
  * @param db - Drizzle client
  * @param input - Queue item fields
- * @returns The created row
+ * @returns The created queue entry
  */
-export function addQueueItem(db: Db, input: QueueInput) {
+export function addMediaQueueItem(db: Db, input: MediaQueueInput): QueueItemDto {
     const now = Date.now();
     const maxRow = db
-        .select({ max: sql<number | null>`max(${plexQueueItems.position})` })
-        .from(plexQueueItems)
+        .select({ max: sql<number | null>`max(${mediaQueueItems.position})` })
+        .from(mediaQueueItems)
         .get();
     const position = (maxRow?.max ?? 0) + 1;
 
-    return db
-        .insert(plexQueueItems)
+    const created = db
+        .insert(mediaQueueItems)
         .values({
+            sourceId: input.sourceId,
             position,
             status: 'queued',
-            ratingKey: input.ratingKey,
+            itemId: input.itemId,
             type: input.type,
             title: input.title,
             showTitle: input.showTitle ?? null,
@@ -848,60 +1042,86 @@ export function addQueueItem(db: Db, input: QueueInput) {
         })
         .returning()
         .get();
+
+    const item = getMediaQueueItem(db, created.id);
+    if (!item) {
+        throw new Error('Could not read the created queue item');
+    }
+    return item;
 }
 
 /**
- * Removes a queue item and compacts the remaining positions.
+ * Removes a queue entry and compacts the remaining positions.
  *
  * @param db - Drizzle client
- * @param id - Queue item id
+ * @param id - Queue entry id
  * @returns True when a row was deleted
  */
-export function removeQueueItem(db: Db, id: number): boolean {
-    const deleted = db.delete(plexQueueItems).where(eq(plexQueueItems.id, id)).run().changes;
+export function removeMediaQueueItem(db: Db, id: number): boolean {
+    const deleted = db.delete(mediaQueueItems).where(eq(mediaQueueItems.id, id)).run().changes;
     compactQueue(db);
     return deleted > 0;
 }
 
 /**
- * Clears the queue.
+ * Clears the queue, optionally keeping one item.
  *
  * @param db - Drizzle client
+ * @param keepId - Queue entry id to preserve, usually the active playback
  */
-export function clearQueue(db: Db): void {
-    db.delete(plexQueueItems).run();
+export function clearMediaQueue(db: Db, keepId?: number): void {
+    if (keepId === undefined) {
+        db.delete(mediaQueueItems).run();
+    } else {
+        db.delete(mediaQueueItems).where(ne(mediaQueueItems.id, keepId)).run();
+    }
+    compactQueue(db);
 }
 
 /**
  * Rewrites queue positions from an ordered id list.
  *
  * @param db - Drizzle client
- * @param ids - Queue item ids in the desired order
+ * @param ids - Queue entry ids in the desired order
  */
-export function reorderQueue(db: Db, ids: number[]): void {
+export function reorderMediaQueue(db: Db, ids: number[]): void {
     const now = Date.now();
     db.transaction(tx => {
         ids.forEach((id, index) => {
-            tx.update(plexQueueItems)
+            tx.update(mediaQueueItems)
                 .set({ position: index + 1, updatedAt: now })
-                .where(eq(plexQueueItems.id, id))
+                .where(eq(mediaQueueItems.id, id))
                 .run();
         });
     });
 }
 
 /**
- * Marks a queue item's status and optional error.
+ * Marks a queue entry's status and optional error.
  *
  * @param db - Drizzle client
- * @param id - Queue item id
+ * @param id - Queue entry id
  * @param status - New status
  * @param error - Optional error message
  */
-export function setQueueItemStatus(db: Db, id: number, status: QueueStatus, error: string | null = null): void {
-    db.update(plexQueueItems)
+export function setMediaQueueStatus(db: Db, id: number, status: QueueStatus, error: string | null = null): void {
+    db.update(mediaQueueItems)
         .set({ status, error, updatedAt: Date.now() })
-        .where(eq(plexQueueItems.id, id))
+        .where(eq(mediaQueueItems.id, id))
+        .run();
+}
+
+/**
+ * Updates one queue entry's subtitle preference.
+ *
+ * @param db - Drizzle client
+ * @param id - Queue entry id
+ * @param subtitleMode - Auto, off, or a stream id
+ */
+export function setMediaQueueSubtitleMode(db: Db, id: number, subtitleMode: string): void {
+    db.update(mediaQueueItems)
+        .set({ subtitleMode, updatedAt: Date.now() })
+        .where(eq(mediaQueueItems.id, id))
         .run();
 }
 
@@ -909,39 +1129,256 @@ export function setQueueItemStatus(db: Db, id: number, status: QueueStatus, erro
  * Returns the next queued item.
  *
  * @param db - Drizzle client
- * @returns Queue row or undefined
+ * @returns Queue entry or undefined
  */
-export function nextQueuedItem(db: Db) {
-    return db
-        .select()
-        .from(plexQueueItems)
-        .where(eq(plexQueueItems.status, 'queued'))
-        .orderBy(asc(plexQueueItems.position))
-        .get();
+export function nextQueuedMediaItem(db: Db): QueueItemDto | undefined {
+    return listMediaQueue(db).find(item => item.status === 'queued');
 }
 
 /**
- * Resets a stale playing item back to queued after a restart.
+ * Resets stale playing items back to queued after a restart.
  *
  * @param db - Drizzle client
  */
-export function resetPlayingQueueItems(db: Db): void {
-    db.update(plexQueueItems)
+export function resetPlayingMediaItems(db: Db): void {
+    db.update(mediaQueueItems)
         .set({ status: 'queued', error: null, updatedAt: Date.now() })
-        .where(eq(plexQueueItems.status, 'playing'))
+        .where(eq(mediaQueueItems.status, 'playing'))
         .run();
+}
+
+/**
+ * Returns saved playback progress, newest first.
+ *
+ * @param db - Drizzle client
+ * @param limit - Maximum number of rows
+ * @param includeCompleted - Whether finished items are returned
+ * @returns History entries with their source metadata
+ */
+export function listMediaHistory(db: Db, limit = 20, includeCompleted = false): MediaHistoryDto[] {
+    const rows = db
+        .select({
+            id: mediaHistory.id,
+            sourceId: mediaHistory.sourceId,
+            sourceName: mediaSources.name,
+            sourceKind: mediaSources.kind,
+            itemId: mediaHistory.itemId,
+            type: mediaHistory.type,
+            title: mediaHistory.title,
+            showTitle: mediaHistory.showTitle,
+            seasonNumber: mediaHistory.seasonNumber,
+            episodeNumber: mediaHistory.episodeNumber,
+            durationMs: mediaHistory.durationMs,
+            thumbUrl: mediaHistory.thumbUrl,
+            positionMs: mediaHistory.positionMs,
+            completed: mediaHistory.completed,
+            quality: mediaHistory.quality,
+            subtitleMode: mediaHistory.subtitleMode,
+            playedAt: mediaHistory.playedAt,
+        })
+        .from(mediaHistory)
+        .innerJoin(mediaSources, eq(mediaHistory.sourceId, mediaSources.id))
+        .where(includeCompleted ? undefined : eq(mediaHistory.completed, false))
+        .orderBy(desc(mediaHistory.playedAt))
+        .limit(limit)
+        .all();
+
+    return rows.map(row => normalizeHistoryRow(row));
+}
+
+/**
+ * Returns saved progress for one media item.
+ *
+ * @param db - Drizzle client
+ * @param sourceId - Media source id
+ * @param itemId - Item id
+ * @returns History entry or undefined
+ */
+export function getMediaHistoryItem(
+    db: Db,
+    sourceId: number,
+    itemId: string
+): MediaHistoryDto | undefined {
+    const row = db
+        .select({
+            id: mediaHistory.id,
+            sourceId: mediaHistory.sourceId,
+            sourceName: mediaSources.name,
+            sourceKind: mediaSources.kind,
+            itemId: mediaHistory.itemId,
+            type: mediaHistory.type,
+            title: mediaHistory.title,
+            showTitle: mediaHistory.showTitle,
+            seasonNumber: mediaHistory.seasonNumber,
+            episodeNumber: mediaHistory.episodeNumber,
+            durationMs: mediaHistory.durationMs,
+            thumbUrl: mediaHistory.thumbUrl,
+            positionMs: mediaHistory.positionMs,
+            completed: mediaHistory.completed,
+            quality: mediaHistory.quality,
+            subtitleMode: mediaHistory.subtitleMode,
+            playedAt: mediaHistory.playedAt,
+        })
+        .from(mediaHistory)
+        .innerJoin(mediaSources, eq(mediaHistory.sourceId, mediaSources.id))
+        .where(and(eq(mediaHistory.sourceId, sourceId), eq(mediaHistory.itemId, itemId)))
+        .get();
+
+    if (!row) return undefined;
+    return normalizeHistoryRow(row);
+}
+
+/**
+ * Creates or updates saved playback progress for one item.
+ *
+ * @param db - Drizzle client
+ * @param input - Item metadata and progress
+ * @returns The stored history entry
+ */
+export function upsertMediaHistory(db: Db, input: MediaHistoryInput): MediaHistoryDto {
+    const now = Date.now();
+    db.insert(mediaHistory)
+        .values({
+            sourceId: input.sourceId,
+            itemId: input.itemId,
+            type: input.type,
+            title: input.title,
+            showTitle: input.showTitle ?? null,
+            seasonNumber: input.seasonNumber ?? null,
+            episodeNumber: input.episodeNumber ?? null,
+            durationMs: input.durationMs ?? null,
+            thumbUrl: input.thumbUrl ?? null,
+            positionMs: Math.max(0, Math.round(input.positionMs ?? 0)),
+            completed: input.completed ?? false,
+            quality: input.quality,
+            subtitleMode: input.subtitleMode,
+            playedAt: now,
+            createdAt: now,
+            updatedAt: now,
+        })
+        .onConflictDoUpdate({
+            target: [mediaHistory.sourceId, mediaHistory.itemId],
+            set: {
+                type: input.type,
+                title: input.title,
+                showTitle: input.showTitle ?? null,
+                seasonNumber: input.seasonNumber ?? null,
+                episodeNumber: input.episodeNumber ?? null,
+                durationMs: input.durationMs ?? null,
+                thumbUrl: input.thumbUrl ?? null,
+                positionMs: Math.max(0, Math.round(input.positionMs ?? 0)),
+                completed: input.completed ?? false,
+                quality: input.quality,
+                subtitleMode: input.subtitleMode,
+                playedAt: now,
+                updatedAt: now,
+            },
+        })
+        .run();
+
+    const item = getMediaHistoryItem(db, input.sourceId, input.itemId);
+    if (!item) {
+        throw new Error('Could not read the saved media history entry');
+    }
+    return item;
+}
+
+/**
+ * Updates the saved position of an existing history row.
+ *
+ * @param db - Drizzle client
+ * @param sourceId - Media source id
+ * @param itemId - Item id
+ * @param positionMs - New position in milliseconds
+ * @param completed - Optional completed flag
+ */
+export function setMediaHistoryProgress(
+    db: Db,
+    sourceId: number,
+    itemId: string,
+    positionMs: number,
+    completed?: boolean
+): void {
+    const now = Date.now();
+    db.update(mediaHistory)
+        .set({
+            positionMs: Math.max(0, Math.round(positionMs)),
+            ...(completed === undefined ? {} : { completed }),
+            playedAt: now,
+            updatedAt: now,
+        })
+        .where(and(eq(mediaHistory.sourceId, sourceId), eq(mediaHistory.itemId, itemId)))
+        .run();
+}
+
+/**
+ * Updates the saved subtitle preference of an existing history row.
+ *
+ * @param db - Drizzle client
+ * @param sourceId - Media source id
+ * @param itemId - Item id
+ * @param subtitleMode - Auto, off, or a stream id
+ */
+export function setMediaHistorySubtitleMode(
+    db: Db,
+    sourceId: number,
+    itemId: string,
+    subtitleMode: string
+): void {
+    db.update(mediaHistory)
+        .set({ subtitleMode, updatedAt: Date.now() })
+        .where(and(eq(mediaHistory.sourceId, sourceId), eq(mediaHistory.itemId, itemId)))
+        .run();
+}
+
+/**
+ * Removes one history entry.
+ *
+ * @param db - Drizzle client
+ * @param id - History entry id
+ * @returns True when a row was deleted
+ */
+export function removeMediaHistory(db: Db, id: number): boolean {
+    return db.delete(mediaHistory).where(eq(mediaHistory.id, id)).run().changes > 0;
+}
+
+/**
+ * Reads the legacy Plex library rows for the one-time migration.
+ *
+ * @param db - Drizzle client
+ * @returns Legacy rows
+ */
+export function listLegacyPlexLibraries(db: Db) {
+    return db.select().from(plexLibraries).orderBy(asc(plexLibraries.title)).all();
+}
+
+/**
+ * Reads the legacy Plex queue rows for the one-time migration.
+ *
+ * @param db - Drizzle client
+ * @returns Legacy rows
+ */
+export function listLegacyPlexQueue(db: Db) {
+    return db.select().from(plexQueueItems).orderBy(asc(plexQueueItems.position)).all();
 }
 
 function compactQueue(db: Db): void {
     const rows = db
-        .select({ id: plexQueueItems.id })
-        .from(plexQueueItems)
-        .orderBy(asc(plexQueueItems.position))
+        .select({ id: mediaQueueItems.id })
+        .from(mediaQueueItems)
+        .orderBy(asc(mediaQueueItems.position))
         .all();
-    reorderQueue(
+    reorderMediaQueue(
         db,
         rows.map(row => row.id)
     );
+}
+
+function normalizeLibraryType(value: string): MediaLibraryType {
+    if (value === 'movie' || value === 'show' || value === 'artist' || value === 'photo') {
+        return value;
+    }
+    return 'unknown';
 }
 
 function parseRoleIds(value: string): string[] {
@@ -959,4 +1396,19 @@ function parseSubtitleMode(value: string): 'auto' | 'off' | number {
     }
     const number = Number(value);
     return Number.isFinite(number) ? number : 'auto';
+}
+
+function normalizeHistoryRow(
+    row: Omit<MediaHistoryDto, 'sourceKind' | 'quality' | 'subtitleMode'> & {
+        sourceKind: string;
+        quality: string;
+        subtitleMode: string;
+    }
+): MediaHistoryDto {
+    return {
+        ...row,
+        sourceKind: row.sourceKind as MediaSourceKind,
+        quality: row.quality as MediaQuality,
+        subtitleMode: parseSubtitleMode(row.subtitleMode),
+    };
 }

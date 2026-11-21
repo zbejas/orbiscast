@@ -70,10 +70,10 @@ function LiveStatusPill() {
         if (playback.isError || !playback.data) return { label: 'Status unknown', tone: 'neutral' as const, pulse: false };
         const state = playback.data;
         if (state.mode === 'iptv') return { label: 'Live IPTV', tone: 'live' as const, pulse: true };
-        if (state.mode === 'plex') {
+        if (state.mode === 'media') {
             return state.paused
-                ? { label: 'Plex paused', tone: 'plex' as const, pulse: false }
-                : { label: 'Live Plex', tone: 'plex' as const, pulse: true };
+                ? { label: 'On demand paused', tone: 'plex' as const, pulse: false }
+                : { label: state.sourceName ?? 'On demand', tone: 'plex' as const, pulse: true };
         }
         if (state.mode === 'placeholder') return { label: 'Placeholder', tone: 'plex' as const, pulse: false };
         return { label: 'Idle', tone: 'neutral' as const, pulse: false };
@@ -117,7 +117,7 @@ export function PageHeader({ title, meta, actions }: PageHeaderProps) {
                     <p className="hidden min-w-0 truncate text-xs text-text-muted sm:block">{meta}</p>
                 ) : null}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 {actions}
                 <LiveStatusPill />
             </div>

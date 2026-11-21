@@ -8,8 +8,8 @@ import { importLegacyEnv } from './modules/setup/import-env';
 import { IptvService } from './modules/iptv/service';
 import { PlaybackEngine } from './modules/playback/engine';
 import { DiscordService } from './modules/discord/service';
-import { PlexService } from './modules/plex/service';
-import { resetPlayingQueueItems } from './modules/database/repo';
+import { MediaService } from './modules/media/service';
+import { resetPlayingMediaItems } from './modules/database/repo';
 import { createApp } from './web/app';
 import { createAuthAdapter } from './web/auth';
 import { configureLogger, getLogger } from './utils/logger';
@@ -67,9 +67,9 @@ async function main(): Promise<void> {
 
     const iptv = new IptvService(connection.db, settings, events);
     const playback = new PlaybackEngine(connection.db, settings, events);
-    const plex = new PlexService(connection.db, settings, playback, events, options.dataDir);
-    playback.setPlexProvider(plex);
-    resetPlayingQueueItems(connection.db);
+    const media = new MediaService(connection.db, settings, playback, events, options.dataDir);
+    playback.setMediaProvider(media);
+    resetPlayingMediaItems(connection.db);
     const discord = new DiscordService(connection.db, settings, playback, iptv, events);
     const auth = createAuthAdapter({ db: connection.db, settings });
 
@@ -79,7 +79,7 @@ async function main(): Promise<void> {
         settings,
         iptv,
         playback,
-        plex,
+        media,
         discord,
         events,
         auth,
@@ -104,7 +104,7 @@ async function main(): Promise<void> {
 
     if (!options.testMode) {
         void discord.start();
-        void plex.initialize();
+        void media.initialize();
         iptv.start();
     } else {
         logger.info('Test mode: Discord clients and IPTV refresh are disabled');
@@ -115,7 +115,7 @@ async function main(): Promise<void> {
         try {
             iptv.stop();
             await playback.stop();
-            await plex.shutdown();
+            await media.shutdown();
             await discord.stop();
             await new Promise<void>(resolveClose => server.close(() => resolveClose()));
             connection.close();

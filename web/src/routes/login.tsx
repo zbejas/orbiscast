@@ -97,7 +97,7 @@ export default function LoginPage() {
                     <div className="relative flex flex-col items-start">
                         <OrbitalGlyph size={260} className="text-blurple-text opacity-90" strokeWidth={0.9} />
                         <p className="mt-8 max-w-md text-2xl font-semibold leading-snug tracking-[-0.02em] text-text">
-                            One streamer, one stream. IPTV, Plex, and Discord in a single control surface.
+                            One streamer, one stream. IPTV, media, and Discord in a single control surface.
                         </p>
                         <p className="mt-3 max-w-md text-sm leading-relaxed text-text-muted">
                             Curate a large playlist, queue a movie, and see what the bot is doing without editing a
@@ -107,7 +107,7 @@ export default function LoginPage() {
                     <div className="relative flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-text-muted">
                         <span>IPTV guide</span>
                         <span aria-hidden="true" className="size-1 rounded-full bg-text-faint" />
-                        <span>Plex queue</span>
+                        <span>Media queue</span>
                         <span aria-hidden="true" className="size-1 rounded-full bg-text-faint" />
                         <span>Discord voice</span>
                     </div>

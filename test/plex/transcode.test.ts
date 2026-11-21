@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     buildStopSessionUrl,
+    buildTranscodeDecisionUrl,
     buildTranscodeUrl,
     createSessionId,
     DEFAULT_QUALITY,
@@ -61,7 +62,7 @@ const baseTranscodeOptions = {
     mediaIndex: 0,
     partIndex: 0,
     quality: '1080p-8' as const,
-    subtitleStreamIndex: 4003 as number | null,
+    subtitleStreamId: 4003 as number | null,
     offsetSeconds: 42.5,
     sessionId: 'session-1'
 };
@@ -116,7 +117,7 @@ describe('pickSubtitleStream', () => {
             subtitleStream(3, 'srt', { default: true })
         ]);
 
-        expect(selection).toMatchObject({ streamIndex: 1, reason: 'default' });
+        expect(selection).toMatchObject({ streamId: 1, reason: 'default' });
         expect(selection?.stream.id).toBe(1);
     });
 
@@ -127,7 +128,7 @@ describe('pickSubtitleStream', () => {
             subtitleStream(12, 'ass')
         ]);
 
-        expect(selection).toMatchObject({ streamIndex: 11, reason: 'forced' });
+        expect(selection).toMatchObject({ streamId: 11, reason: 'forced' });
     });
 
     it('falls back to the first burnable subtitle', () => {
@@ -137,7 +138,7 @@ describe('pickSubtitleStream', () => {
             subtitleStream(22, 'ass')
         ]);
 
-        expect(selection).toMatchObject({ streamIndex: 21, reason: 'first' });
+        expect(selection).toMatchObject({ streamId: 21, reason: 'first' });
     });
 
     it('returns null when there are no subtitle streams', () => {
@@ -166,19 +167,25 @@ describe('pickSubtitleStream', () => {
 });
 
 describe('buildTranscodeUrl', () => {
-    it('sets every required HLS parameter and the token query parameter', () => {
+    it('sets every required stream parameter and the token query parameter', () => {
         const url = new URL(buildTranscodeUrl(baseTranscodeOptions));
 
         expect(url.origin).toBe('http://plex.test:32400');
-        expect(url.pathname).toBe('/video/:/transcode/universal/start.m3u8');
+        expect(url.pathname).toBe('/video/:/transcode/universal/start.mkv');
 
         const params = url.searchParams;
+        expect(params.get('hasMDE')).toBe('1');
         expect(params.get('path')).toBe('/library/metadata/1001');
         expect(params.get('mediaIndex')).toBe('0');
         expect(params.get('partIndex')).toBe('0');
-        expect(params.get('protocol')).toBe('hls');
+        expect(params.get('protocol')).toBe('http');
+        expect(params.get('fastSeek')).toBe('1');
+        expect(params.get('location')).toBe('lan');
         expect(params.get('directPlay')).toBe('0');
-        expect(params.get('directStream')).toBe('0');
+        expect(params.get('directStream')).toBe('1');
+        expect(params.get('directStreamVideo')).toBe('1');
+        expect(params.get('X-Plex-Client-Profile-Name')).toBe('Chrome');
+        expect(params.get('X-Plex-Client-Profile-Extra')).toContain('container=mkv');
         expect(params.get('subtitles')).toBe('burn');
         expect(params.get('subtitleStreamID')).toBe('4003');
         expect(params.get('subtitleSize')).toBe('100');
@@ -191,18 +198,19 @@ describe('buildTranscodeUrl', () => {
         expect(params.get('X-Plex-Token')).toBe('fixture-token');
     });
 
-    it('omits subtitle parameters when no subtitle stream is selected', () => {
+    it('disables subtitles when no subtitle stream is selected', () => {
         const url = new URL(
             buildTranscodeUrl({
                 ...baseTranscodeOptions,
                 quality: '4k-20',
-                subtitleStreamIndex: null,
+                subtitleStreamId: null,
                 offsetSeconds: 0
             })
         );
 
-        expect(url.searchParams.has('subtitles')).toBe(false);
-        expect(url.searchParams.has('subtitleStreamID')).toBe(false);
+        expect(url.searchParams.get('subtitles')).toBe('none');
+        expect(url.searchParams.get('subtitleStreamID')).toBe('0');
+        expect(url.searchParams.has('subtitleSize')).toBe(false);
         expect(url.searchParams.get('videoResolution')).toBe('3840x2160');
         expect(url.searchParams.get('videoBitrate')).toBe('20000');
         expect(url.searchParams.get('maxVideoBitrate')).toBe('20000');
@@ -222,7 +230,7 @@ describe('buildTranscodeUrl', () => {
                 buildTranscodeUrl({
                     ...baseTranscodeOptions,
                     quality,
-                    subtitleStreamIndex: null
+                    subtitleStreamId: null
                 })
             );
             expect(url.searchParams.get('videoResolution')).toBe(resolution);
@@ -249,6 +257,18 @@ describe('buildTranscodeUrl', () => {
                 offsetSeconds: -1
             })
         ).toThrow(/offsetSeconds/);
+    });
+});
+
+describe('buildTranscodeDecisionUrl', () => {
+    it('keeps the start query and swaps the path to decision', () => {
+        const start = buildTranscodeUrl(baseTranscodeOptions);
+        const decision = new URL(buildTranscodeDecisionUrl(start));
+
+        expect(decision.pathname).toBe('/video/:/transcode/universal/decision');
+        expect(decision.searchParams.get('session')).toBe('session-1');
+        expect(decision.searchParams.get('subtitleStreamID')).toBe('4003');
+        expect(decision.searchParams.get('subtitles')).toBe('burn');
     });
 });
 

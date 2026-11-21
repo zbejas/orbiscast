@@ -498,7 +498,7 @@ describe('PlexClient errors', () => {
 
         expect(error.code).toBe('NOT_FOUND');
         expect(error.status).toBe(404);
-        expect(error.url).toBe('http://plex.test:32400/library/metadata/999');
+        expect(error.url).toBe('http://plex.test:32400/library/metadata/999?includeMarkers=1');
     });
 
     it('maps missing MediaContainer payloads to MALFORMED_RESPONSE', async () => {

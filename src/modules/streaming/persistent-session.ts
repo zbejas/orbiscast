@@ -1,6 +1,7 @@
 import type { Readable } from 'node:stream';
 import { demux, Encoders, prepareStream, Streamer } from '@dank074/discord-video-stream';
 import { AudioStream, VideoStream } from './media-stream';
+import { appendFfmpegLine } from './ffmpeg';
 import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
 import type { StreamResult } from './index';
@@ -23,12 +24,13 @@ const VIDEO_CODECS: Record<number, VideoCodec> = {
 
 export interface PersistentStreamOptions {
     noTranscoding: boolean;
-    minimizeLatency: boolean;
     bitrateVideo: number;
     bitrateVideoMax: number;
     encoder: ReturnType<typeof Encoders.software>;
     inputOptions: string[];
     headers: Record<string, string>;
+    /** Cap the re-encode height. Discord does not need more than 1080p. */
+    maxHeight?: number;
 }
 
 interface ActiveSource {
@@ -76,13 +78,13 @@ export class PersistentStream {
 
         try {
             await this.enqueue(async () => {
-                if (this.stopped) throw new Error('Plex stream is not active');
+                if (this.stopped) throw new Error('Media stream is not active');
                 this.connection = await this.streamer.createStream();
                 await this.startSource(url, true);
             });
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            logger.error(`Plex stream failed to start: ${redactSecrets(message)}`);
+            logger.error(`Media stream failed to start: ${redactSecrets(message)}`);
             this.stopped = true;
             await this.enqueue(async () => {
                 await this.stopSource();
@@ -100,17 +102,19 @@ export class PersistentStream {
      */
     async replace(url: string): Promise<void> {
         if (!this.active) {
-            throw new Error('Plex stream is not active');
+            throw new Error('Media stream is not active');
         }
         await this.enqueue(async () => {
             if (!this.connection || this.stopped || !this.options) {
-                throw new Error('Plex stream is not active');
+                throw new Error('Media stream is not active');
             }
             this.swapping = true;
-            logger.info('Replacing Plex source and keeping the Discord stream open');
+            logger.info('Replacing media source and keeping the Discord stream open');
             try {
                 await this.stopSource();
                 await this.startSource(url, false);
+                this.videoStream?.resumePacing();
+                this.audioStream?.resumePacing();
             } catch (error) {
                 this.stopped = true;
                 await this.stopSource();
@@ -127,12 +131,24 @@ export class PersistentStream {
 
     pause(): boolean {
         if (!this.source) return false;
-        return this.source.process.kill('SIGSTOP');
+        this.videoStream?.pausePacing();
+        this.audioStream?.pausePacing();
+        if (!this.source.process.kill('SIGSTOP')) {
+            this.videoStream?.resumePacing();
+            this.audioStream?.resumePacing();
+            return false;
+        }
+        return true;
     }
 
     resume(): boolean {
         if (!this.source) return false;
-        return this.source.process.kill('SIGCONT');
+        if (!this.source.process.kill('SIGCONT')) {
+            return false;
+        }
+        this.videoStream?.resumePacing();
+        this.audioStream?.resumePacing();
+        return true;
     }
 
     async stop(): Promise<void> {
@@ -163,7 +179,7 @@ export class PersistentStream {
     }
 
     private async startSource(url: string, initial: boolean): Promise<void> {
-        if (!this.options) throw new Error('Plex stream options are missing');
+        if (!this.options) throw new Error('Media stream options are missing');
         const connection = this.connection;
         if (!connection) throw new Error('Discord stream connection is not active');
 
@@ -172,7 +188,8 @@ export class PersistentStream {
             url,
             {
                 noTranscoding: this.options.noTranscoding,
-                minimizeLatency: this.options.minimizeLatency,
+                width: -2,
+                height: this.options.maxHeight ?? -2,
                 bitrateVideo: this.options.bitrateVideo,
                 bitrateVideoMax: this.options.bitrateVideoMax,
                 videoCodec: 'H264',
@@ -183,6 +200,16 @@ export class PersistentStream {
             abort.signal
         );
         const ffmpeg = prepared.promise as FfmpegProcess;
+        const ffmpegLog: string[] = [];
+        let ffmpegTailLogged = false;
+        const logFfmpegTail = () => {
+            if (ffmpegTailLogged || ffmpegLog.length === 0) return;
+            ffmpegTailLogged = true;
+            logger.error(
+                `Last media FFmpeg output:\n${ffmpegLog.map(line => redactSecrets(line)).join('\n')}`
+            );
+        };
+        prepared.command.on('stderr', (line: string) => appendFfmpegLine(ffmpegLog, line));
         ffmpeg.catch(() => {
             // Mark the rejection handled until the source exists.
         });
@@ -193,10 +220,17 @@ export class PersistentStream {
                 throw new Error('No video stream in media');
             }
             if (this.stopped || this.connection !== connection) {
-                throw new Error('Plex stream is not active');
+                throw new Error('Media stream is not active');
             }
 
             const codec = VIDEO_CODECS[Number(demuxed.video.codec)] ?? 'H264';
+            const fps = Math.max(
+                1,
+                Math.round(demuxed.video.framerate_num / Math.max(1, demuxed.video.framerate_den))
+            );
+            logger.info(
+                `Media video: ${codec} ${demuxed.video.width}x${demuxed.video.height} at ${fps} fps`
+            );
             if (initial) {
                 this.videoCodec = codec;
                 connection.setPacketizer(codec);
@@ -204,21 +238,15 @@ export class PersistentStream {
                 connection.mediaConnection.setVideoAttributes(true, {
                     width: demuxed.video.width,
                     height: demuxed.video.height,
-                    fps: Math.max(
-                        1,
-                        Math.round(
-                            demuxed.video.framerate_num /
-                                Math.max(1, demuxed.video.framerate_den)
-                        )
-                    ),
+                    fps,
                 });
                 this.videoStream = new VideoStream(connection);
             } else if (codec !== this.videoCodec) {
-                throw new Error('Plex source changed its video codec');
+                throw new Error('Media source changed its video codec');
             }
 
             const videoStream = this.videoStream;
-            if (!videoStream) throw new Error('Plex video stream is not active');
+            if (!videoStream) throw new Error('Media video stream is not active');
 
             if (demuxed.audio) {
                 this.audioStream ??= new AudioStream(connection);
@@ -249,6 +277,7 @@ export class PersistentStream {
             ffmpeg.catch((error: unknown) => {
                 if (!abort.signal.aborted) {
                     source.error ??= String(error);
+                    logFfmpegTail();
                 }
             });
             source.video.once('end', finish);
@@ -272,6 +301,7 @@ export class PersistentStream {
             } catch {
                 // The aborted FFmpeg process is expected to fail.
             }
+            logFfmpegTail();
             throw error;
         }
     }

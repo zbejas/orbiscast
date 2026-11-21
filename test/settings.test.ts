@@ -29,9 +29,13 @@ describe('settings service', () => {
         const publicSettings = settings.getPublic();
 
         expect(publicSettings.auth.enabled).toBe(false);
-        expect(publicSettings.plex.channelName).toBe('Plex');
-        expect(publicSettings.plex.defaultQuality).toBe('1080p-8');
+        expect(settings.getPlexConfig().channelName).toBe('Plex');
+        expect(settings.getPlexConfig().defaultQuality).toBe('1080p-8');
         expect(publicSettings.stream.bitrateVideo).toBe(5000);
+        expect(publicSettings.playback).toEqual({
+            autoplayNextEpisode: false,
+            autoSkipIntro: false,
+        });
         expect(publicSettings.logLevel).toBe('info');
         expect(settings.getPlexClientIdentifier()).toMatch(/[0-9a-f-]{36}/);
     });
@@ -60,6 +64,7 @@ describe('settings service', () => {
     it('persists updates across instances', () => {
         settings.update({
             stream: { bitrateVideo: 9000, minimizeLatency: false },
+            playback: { autoplayNextEpisode: true, autoSkipIntro: true },
             ui: { timezone: 'Europe/Ljubljana', logLevel: 'debug' },
             auth: { enabled: true },
         });
@@ -69,9 +74,34 @@ describe('settings service', () => {
 
         expect(publicSettings.stream.bitrateVideo).toBe(9000);
         expect(publicSettings.stream.minimizeLatency).toBe(false);
+        expect(publicSettings.playback).toEqual({
+            autoplayNextEpisode: true,
+            autoSkipIntro: true,
+        });
         expect(publicSettings.timezone).toBe('Europe/Ljubljana');
         expect(publicSettings.logLevel).toBe('debug');
         expect(publicSettings.auth.enabled).toBe(true);
+    });
+
+    it('updates playback preferences without resetting the other toggle', () => {
+        settings.update({ playback: { autoplayNextEpisode: true, autoSkipIntro: true } });
+        settings.update({ playback: { autoplayNextEpisode: false } });
+
+        expect(settings.getPlayback()).toEqual({
+            autoplayNextEpisode: false,
+            autoSkipIntro: true,
+        });
+    });
+
+    it('persists the media source tab order in settings', () => {
+        settings.setMediaSourceOrder([7, 3, 7, -1, 0]);
+        expect(settings.getUi().mediaSourceOrder).toEqual([7, 3]);
+
+        settings.update({ ui: { timezone: 'UTC' } });
+        expect(settings.getUi().mediaSourceOrder).toEqual([7, 3]);
+
+        const reloaded = new SettingsService(connection.db, loadOrCreateKeys(dir));
+        expect(reloaded.getUi().mediaSourceOrder).toEqual([7, 3]);
     });
 
     it('rejects invalid quality values', () => {

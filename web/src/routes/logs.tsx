@@ -151,7 +151,7 @@ export default function LogsPage() {
                                     type="search"
                                     value={search}
                                     onChange={(event) => setSearch(event.target.value)}
-                                    placeholder="Voice, Plex, source, error"
+                                    placeholder="Voice, media, source, error"
                                     className="pl-8"
                                 />
                             </div>

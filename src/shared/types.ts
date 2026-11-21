@@ -1,4 +1,15 @@
-export type PlaybackMode = 'idle' | 'placeholder' | 'iptv' | 'plex';
+export type PlaybackMode = 'idle' | 'placeholder' | 'iptv' | 'media';
+
+export type MediaSourceKind = 'plex' | 'jellyfin';
+
+export type MediaQuality = '720p-4' | '1080p-8' | '1080p-12' | '4k-20';
+
+/** Kept as an alias for the Plex modules that still use the old name. */
+export type PlexQuality = MediaQuality;
+
+export type MediaLibraryType = 'movie' | 'show' | 'artist' | 'photo' | 'unknown';
+
+export type MediaItemType = 'movie' | 'show' | 'season' | 'episode';
 
 export interface PlaybackStateDto {
     mode: PlaybackMode;
@@ -16,6 +27,10 @@ export interface PlaybackStateDto {
     viewers: number;
     paused: boolean;
     queueItemId: number | null;
+    /** Media source that owns the active on-demand item or placeholder. */
+    sourceId: number | null;
+    sourceName: string | null;
+    sourceKind: MediaSourceKind | null;
 }
 
 export interface SourceDto {
@@ -41,7 +56,7 @@ export interface ChannelDto {
     group: string | null;
     tvgId: string | null;
     visible: boolean;
-    kind: 'iptv' | 'plex';
+    kind: 'iptv' | 'plex' | 'jellyfin';
     nowPlaying: string | null;
     next: string | null;
 }
@@ -80,6 +95,16 @@ export interface GuildDto {
 
 export type ConnectionState = 'offline' | 'connecting' | 'online' | 'error';
 
+export type StreamerJoinState = 'idle' | 'joining' | 'partial' | 'joined' | 'error';
+
+export interface StreamerJoinDto {
+    state: StreamerJoinState;
+    guildId: string | null;
+    guildName: string | null;
+    fallbackInviteUrl: string | null;
+    error: string | null;
+}
+
 export interface DiscordStatusDto {
     bot: ConnectionState;
     streamer: ConnectionState;
@@ -87,34 +112,46 @@ export interface DiscordStatusDto {
     streamerTag: string | null;
     error: string | null;
     guilds: GuildDto[];
+    /** OAuth2 URL that adds the bot to a server. Null until the bot is online. */
+    botInviteUrl: string | null;
+    /** Guilds the streaming account is a member of. */
+    streamerGuildIds: string[];
+    streamerJoin: StreamerJoinDto;
 }
 
-export type PlexQuality = '720p-4' | '1080p-8' | '1080p-12' | '4k-20';
-
-export interface PlexConfigDto {
+export interface MediaSourceDto {
+    id: number;
+    kind: MediaSourceKind;
+    name: string;
     serverUrl: string;
     tokenSet: boolean;
     tokenLast4: string | null;
+    userId: string | null;
+    userName: string | null;
     channelName: string;
     idleMinutes: number;
     emptyGraceSeconds: number;
-    defaultQuality: PlexQuality;
+    defaultQuality: MediaQuality;
+    enabled: boolean;
     connected: boolean;
     error: string | null;
+    libraryCount: number;
+    enabledLibraryCount: number;
 }
 
-export interface PlexLibraryDto {
+export interface MediaLibraryDto {
+    sourceId: number;
     key: string;
     title: string;
-    type: string;
+    type: MediaLibraryType;
     enabled: boolean;
 }
 
-export interface PlexItemDto {
-    ratingKey: string;
-    key: string;
+export interface MediaItemDto {
+    sourceId: number;
+    itemId: string;
     libraryKey: string;
-    type: 'movie' | 'show' | 'season' | 'episode';
+    type: MediaItemType;
     title: string;
     showTitle: string | null;
     seasonNumber: number | null;
@@ -125,7 +162,7 @@ export interface PlexItemDto {
     summary: string | null;
 }
 
-export interface PlexStreamDto {
+export interface MediaStreamDto {
     id: number;
     index: number | null;
     type: 'audio' | 'subtitle' | 'video';
@@ -137,17 +174,26 @@ export interface PlexStreamDto {
     burnable: boolean;
 }
 
-export interface PlexItemDetailDto extends PlexItemDto {
-    streams: PlexStreamDto[];
+export interface MediaItemDetailDto extends MediaItemDto {
+    /** Show that owns this episode, for series navigation. */
+    showItemId: string | null;
+    /** Season that owns this episode. */
+    seasonItemId: string | null;
+    /** Intro marker when the provider exposes one. */
+    intro: { startMs: number; endMs: number } | null;
+    streams: MediaStreamDto[];
 }
 
 export type QueueStatus = 'queued' | 'playing' | 'played' | 'failed';
 
 export interface QueueItemDto {
     id: number;
+    sourceId: number;
+    sourceName: string;
+    sourceKind: MediaSourceKind;
     position: number;
     status: QueueStatus;
-    ratingKey: string;
+    itemId: string;
     type: 'movie' | 'episode';
     title: string;
     showTitle: string | null;
@@ -155,9 +201,35 @@ export interface QueueItemDto {
     episodeNumber: number | null;
     durationMs: number | null;
     thumbUrl: string | null;
-    quality: PlexQuality;
+    quality: MediaQuality;
     subtitleMode: 'auto' | 'off' | number;
     error: string | null;
+}
+
+/**
+ * Saved playback progress for one movie or episode. The WebUI uses this to
+ * offer resume from where the operator stopped watching.
+ */
+export interface MediaHistoryDto {
+    id: number;
+    sourceId: number;
+    sourceName: string;
+    sourceKind: MediaSourceKind;
+    itemId: string;
+    type: 'movie' | 'episode';
+    title: string;
+    showTitle: string | null;
+    seasonNumber: number | null;
+    episodeNumber: number | null;
+    durationMs: number | null;
+    thumbUrl: string | null;
+    positionMs: number;
+    completed: boolean;
+    quality: MediaQuality;
+    subtitleMode: 'auto' | 'off' | number;
+    playedAt: number;
+    /** True for a synthetic next-episode recommendation, not a saved position. */
+    recommended?: boolean;
 }
 
 export interface SettingsDto {
@@ -172,11 +244,11 @@ export interface SettingsDto {
         disableTranscode: boolean;
         defaultStreamTimeout: number;
     };
-    plex: {
-        channelName: string;
-        idleMinutes: number;
-        emptyGraceSeconds: number;
-        defaultQuality: PlexQuality;
+    playback: {
+        /** Queue the next episode when the current one ends. */
+        autoplayNextEpisode: boolean;
+        /** Skip a Plex intro marker when playback reaches it. */
+        autoSkipIntro: boolean;
     };
     auth: {
         enabled: boolean;
@@ -187,9 +259,12 @@ export interface SetupStatusDto {
     needsSetup: boolean;
     discordConfigured: boolean;
     discordValid: boolean;
+    /** True when the bot and the streaming account share at least one server. */
+    guildReady: boolean;
+    botInviteUrl: string | null;
     sourcesConfigured: boolean;
-    plexConfigured: boolean;
-    plexValid: boolean;
+    mediaConfigured: boolean;
+    mediaValid: boolean;
     authEnabled: boolean;
 }
 

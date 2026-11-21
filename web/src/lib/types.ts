@@ -1,4 +1,4 @@
-import type { ChannelDto, LogLineDto, PlexQuality, ProgrammeDto, SettingsDto } from '@shared/types';
+import type { ChannelDto, LogLineDto, MediaQuality, ProgrammeDto, SettingsDto } from '@shared/types';
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 export type LogLevelFilter = LogLevel | 'all';
@@ -58,35 +58,44 @@ export interface SaveSourceInput {
 }
 
 export interface EnqueueInput {
-    ratingKey: string;
-    type: 'movie' | 'episode';
-    title: string;
-    showTitle: string | null;
-    seasonNumber: number | null;
-    episodeNumber: number | null;
-    durationMs: number | null;
-    quality: PlexQuality;
+    sourceId: number;
+    itemId: string;
+    quality: MediaQuality;
     subtitleMode: SubtitleMode;
 }
 
-export interface StartPlexInput {
-    ratingKey: string;
-    quality: PlexQuality;
+export interface StartMediaInput {
+    sourceId: number;
+    itemId: string;
+    quality: MediaQuality;
     subtitleMode: SubtitleMode;
     guildId: string;
     voiceChannelId: string;
     /** Present when the item is already in the queue. */
     queueItemId?: number | null;
+    /** Ignore saved progress and start from the beginning. */
+    startOver?: boolean;
 }
 
 export interface StartPlaceholderInput {
+    sourceId: number;
     guildId: string;
     voiceChannelId: string;
 }
 
-export interface SavePlexConfigInput {
+export type MediaSourceKind = 'plex' | 'jellyfin';
+
+export interface SaveMediaSourceInput {
+    id?: number;
+    kind: MediaSourceKind;
+    name: string;
     serverUrl: string;
     token?: string;
+    channelName: string;
+    idleMinutes: number;
+    emptyGraceSeconds: number;
+    defaultQuality: MediaQuality;
+    enabled: boolean;
 }
 
 export interface DiscordTokensInput {

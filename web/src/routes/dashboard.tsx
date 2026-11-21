@@ -22,9 +22,12 @@ import {
     ChannelMark,
     EmptyState,
     ErrorState,
+    Field,
     PageHeader,
     Poster,
+    ProgressBar,
     SeekBar,
+    Select,
     Skeleton,
     StatusPill,
     buttonStyles,
@@ -36,10 +39,13 @@ import {
     useNow,
     usePausePlayback,
     usePlayback,
-    usePlexConfig,
-    usePlexQueue,
+    useCurrentMediaItem,
+    useMediaHistory,
+    useMediaQueue,
+    useMediaSources,
     useResumePlayback,
     useSeekPlayback,
+    useSetSubtitle,
     useSkipPlayback,
     useSources,
     useStopPlayback,
@@ -57,6 +63,11 @@ import { playbackPositionMs } from '@/lib/playback';
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'The request did not complete. Try again.';
+}
+
+function toSubtitleMode(value: string): 'auto' | 'off' | number {
+    if (value === 'auto' || value === 'off') return value;
+    return Number(value);
 }
 
 type PlaybackMutation = ReturnType<typeof useStopPlayback>;
@@ -79,11 +90,11 @@ function PosterSlot({ playback }: { playback: PlaybackStateDto }) {
             </div>
         );
     }
-    if (playback.mode === 'plex') {
+    if (playback.mode === 'media') {
         return (
             <Poster
-                title={playback.title ?? 'Plex'}
-                seed={playback.title ?? 'plex'}
+                title={playback.title ?? 'On demand'}
+                seed={playback.title ?? 'media'}
                 src={playback.posterUrl}
                 showTitle={false}
                 className="w-[84px] shrink-0 rounded-lg border border-border sm:w-[124px]"
@@ -108,13 +119,18 @@ function PosterSlot({ playback }: { playback: PlaybackStateDto }) {
 
 function LivePlaybackCard() {
     const playback = usePlayback();
-    const queue = usePlexQueue();
-    const plexConfig = usePlexConfig();
+    const queue = useMediaQueue();
+    const mediaSources = useMediaSources();
     const stop = useStopPlayback();
     const pause = usePausePlayback();
     const resume = useResumePlayback();
     const seek = useSeekPlayback();
     const skip = useSkipPlayback();
+    const setSubtitle = useSetSubtitle();
+    const currentItem = useCurrentMediaItem(
+        playback.data?.mode === 'media',
+        playback.data?.queueItemId ?? null
+    );
     const toast = useToast();
     const now = useNow(1_000);
 
@@ -150,10 +166,14 @@ function LivePlaybackCard() {
     const queueItem: QueueItemDto | undefined = queue.data?.find(
         (item) => item.id === state.queueItemId
     );
+    const activeSource = mediaSources.data?.find((source) => source.id === state.sourceId);
     const elapsed = playbackPositionMs(state, now);
     const duration = state.durationMs ?? queueItem?.durationMs ?? 0;
     const shownElapsed = duration > 0 ? Math.min(elapsed, duration) : elapsed;
-    const tone = state.mode === 'iptv' ? 'live' : state.mode === 'plex' ? 'plex' : 'neutral';
+    const subtitleStreams =
+        currentItem.data?.streams.filter((stream) => stream.type === 'subtitle') ?? [];
+    const subtitleValue = queueItem ? String(queueItem.subtitleMode) : 'auto';
+    const tone = state.mode === 'iptv' ? 'live' : state.mode === 'media' ? 'plex' : 'neutral';
 
     const run = (action: PlaybackMutation, title: string, description?: string) => {
         action.mutate(undefined, {
@@ -187,7 +207,7 @@ function LivePlaybackCard() {
                         aria-hidden="true"
                         className={cn(
                             'size-1.5 rounded-full',
-                            state.mode === 'iptv' || state.mode === 'plex'
+                            state.mode === 'iptv' || state.mode === 'media'
                                 ? state.paused
                                     ? 'bg-warn'
                                     : 'oc-live-dot bg-live'
@@ -199,13 +219,13 @@ function LivePlaybackCard() {
                     <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
                         {state.mode === 'idle' ? 'Playback' : 'Now playing'}
                     </span>
-                    <StatusPill tone={tone} pulse={state.mode === 'iptv' || (state.mode === 'plex' && !state.paused)}>
+                    <StatusPill tone={tone} pulse={state.mode === 'iptv' || (state.mode === 'media' && !state.paused)}>
                         {state.mode === 'iptv'
                             ? 'IPTV'
-                            : state.mode === 'plex'
+                            : state.mode === 'media'
                               ? state.paused
                                   ? 'Paused'
-                                  : 'Plex'
+                                  : 'On demand'
                               : state.mode === 'placeholder'
                                 ? 'Placeholder'
                                 : 'Idle'}
@@ -228,13 +248,13 @@ function LivePlaybackCard() {
                                     Nothing is playing
                                 </h2>
                                 <p className="mt-1.5 max-w-lg text-sm leading-relaxed text-text-muted">
-                                    The streamer is connected and waiting. Start a Plex item or open the guide to find
+                                    The streamer is connected and waiting. Start a media item or open the guide to find
                                     something to watch.
                                 </p>
                                 <div className="mt-4 flex flex-wrap gap-2">
-                                    <Link to="/plex" className={buttonStyles({ variant: 'primary' })}>
+                                    <Link to="/media" className={buttonStyles({ variant: 'primary' })}>
                                         <Film size={15} aria-hidden="true" />
-                                        Open Plex
+                                        Open media
                                     </Link>
                                     <Link to="/channels" className={buttonStyles({ variant: 'secondary' })}>
                                         Browse channels
@@ -259,12 +279,12 @@ function LivePlaybackCard() {
                                     </MetaItem>
                                     {state.mode === 'placeholder' ? (
                                         <MetaItem icon={Clock}>
-                                            Leaves after {plexConfig.data?.idleMinutes ?? 20} min idle
+                                            Leaves after {activeSource?.idleMinutes ?? 20} min idle
                                         </MetaItem>
                                     ) : null}
                                 </div>
 
-                                {state.mode === 'plex' && duration > 0 ? (
+                                {state.mode === 'media' && duration > 0 ? (
                                     <div className="mt-4 max-w-xl">
                                         <SeekBar
                                             positionMs={shownElapsed}
@@ -280,15 +300,63 @@ function LivePlaybackCard() {
                                     </div>
                                 ) : null}
 
+                                {state.mode === 'media' ? (
+                                    <Field
+                                        label="Subtitles"
+                                        htmlFor="dashboard-subtitles"
+                                        className="mt-3 max-w-xs"
+                                        hint="Changes apply to the live stream."
+                                    >
+                                        <Select
+                                            id="dashboard-subtitles"
+                                            value={subtitleValue}
+                                            disabled={setSubtitle.isPending}
+                                            onChange={(event) =>
+                                                setSubtitle.mutate(
+                                                    toSubtitleMode(event.target.value),
+                                                    {
+                                                        onSuccess: () =>
+                                                            toast({
+                                                                title: 'Subtitles changed',
+                                                                tone: 'success',
+                                                            }),
+                                                        onError: (error) =>
+                                                            toast({
+                                                                title: 'Subtitle change failed',
+                                                                description: errorMessage(error),
+                                                                tone: 'error',
+                                                            }),
+                                                    }
+                                                )
+                                            }
+                                        >
+                                            <option value="auto">Auto (match the file)</option>
+                                            <option value="off">Off</option>
+                                            {subtitleStreams.map((stream) => (
+                                                <option
+                                                    key={stream.id}
+                                                    value={stream.id}
+                                                    disabled={!stream.burnable}
+                                                >
+                                                    {stream.displayTitle ??
+                                                        stream.language ??
+                                                        `Track ${stream.id}`}
+                                                    {stream.burnable ? '' : ' (unavailable)'}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                    </Field>
+                                ) : null}
+
                                 {state.mode === 'placeholder' ? (
                                     <p className="mt-4 max-w-xl text-sm leading-relaxed text-text-muted">
-                                        This virtual channel shows the OrbisCast placeholder until you queue a Plex
+                                        This virtual channel shows the OrbisCast placeholder until you queue a media
                                         item. It is replaceable at any time.
                                     </p>
                                 ) : null}
 
                                 <div className="mt-4 flex flex-wrap gap-2">
-                                    {state.mode === 'plex' ? (
+                                    {state.mode === 'media' ? (
                                         <>
                                             {state.paused ? (
                                                 <button
@@ -332,13 +400,13 @@ function LivePlaybackCard() {
                                         Stop
                                     </button>
                                     {state.mode === 'iptv' ? (
-                                        <Link to="/guide" className={buttonStyles({ variant: 'ghost' })}>
+                                        <Link to="/iptv?tab=guide" className={buttonStyles({ variant: 'ghost' })}>
                                             Open guide
                                             <ArrowRight size={14} aria-hidden="true" />
                                         </Link>
                                     ) : null}
                                     {state.mode === 'placeholder' ? (
-                                        <Link to="/plex" className={buttonStyles({ variant: 'secondary' })}>
+                                        <Link to="/media" className={buttonStyles({ variant: 'secondary' })}>
                                             Open queue
                                         </Link>
                                     ) : null}
@@ -353,7 +421,7 @@ function LivePlaybackCard() {
 }
 
 function UpNextCard() {
-    const queue = usePlexQueue();
+    const queue = useMediaQueue();
     const pending = queue.data
         ?.filter((item) => item.status === 'queued')
         .sort((a, b) => a.position - b.position) ?? [];
@@ -371,7 +439,7 @@ function UpNextCard() {
                     ) : null}
                 </div>
                 <Link
-                    to="/plex"
+                    to="/media"
                     className="inline-flex items-center gap-1 rounded text-xs font-medium text-blurple-text hover:text-[#a5acff]"
                 >
                     Open queue
@@ -398,10 +466,10 @@ function UpNextCard() {
                         compact
                         icon={ListPlus}
                         title="The queue is empty"
-                        description="Choose a movie or episode in Plex and add it to the queue."
+                        description="Choose a movie or episode in the media library and add it to the queue."
                         action={
-                            <Link to="/plex" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
-                                Browse Plex
+                            <Link to="/media" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
+                                Browse media
                             </Link>
                         }
                     />
@@ -414,7 +482,7 @@ function UpNextCard() {
                                 </span>
                                 <Poster
                                     title={item.title}
-                                    seed={item.ratingKey}
+                                    seed={item.itemId}
                                     src={item.thumbUrl}
                                     showTitle={false}
                                     className="h-12 w-8 shrink-0 rounded border border-border"
@@ -437,7 +505,7 @@ function UpNextCard() {
                 {failed.length > 0 ? (
                     <p className="mt-3 flex items-start gap-1.5 border-t border-border pt-3 text-[11px] leading-relaxed text-danger">
                         <TriangleExclamationPoint size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
-                        {failed.length} queue item{failed.length === 1 ? '' : 's'} failed in Plex. Open the queue to
+                        {failed.length} queue item{failed.length === 1 ? '' : 's'} failed in the media library. Open the queue to
                         review.
                     </p>
                 ) : null}
@@ -451,20 +519,129 @@ function UpNextCard() {
     );
 }
 
+function ContinueWatchingCard() {
+    const history = useMediaHistory(4);
+    const entries = history.data ?? [];
+
+    if (!history.isPending && entries.length === 0) {
+        return null;
+    }
+
+    return (
+        <section className="rounded-xl border border-border bg-surface">
+            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+                <div className="flex items-baseline gap-2">
+                    <h2 className="inline-flex items-center gap-1.5 text-sm font-semibold text-text">
+                        <Clock size={14} aria-hidden="true" className="text-plex" />
+                        Continue watching
+                    </h2>
+                    {history.data ? (
+                        <span className="font-mono text-[11px] tabular-nums text-text-muted">
+                            {entries.length}
+                        </span>
+                    ) : null}
+                </div>
+                <Link
+                    to="/media"
+                    className="inline-flex items-center gap-1 rounded text-xs font-medium text-blurple-text hover:text-[#a5acff]"
+                >
+                    Open media
+                    <ArrowRight size={13} aria-hidden="true" />
+                </Link>
+            </div>
+            {history.isPending ? (
+                <div className="space-y-3 px-4 py-4" aria-hidden="true">
+                    {[0, 1].map((index) => (
+                        <div key={index} className="flex items-center gap-3">
+                            <Skeleton className="h-12 w-8 shrink-0" />
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                                <Skeleton className="h-3.5 w-2/3" />
+                                <Skeleton className="h-3 w-1/2" />
+                                <Skeleton className="h-1 w-full" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : history.isError ? (
+                <ErrorState compact error={history.error} onRetry={() => void history.refetch()} />
+            ) : (
+                <ul className="divide-y divide-border">
+                    {entries.map((entry) => {
+                        const duration = entry.durationMs ?? 0;
+                        const recommended = entry.recommended === true;
+                        return (
+                            <li key={entry.id}>
+                                <Link
+                                    to={`/media?source=${entry.sourceId}&item=${encodeURIComponent(entry.itemId)}&play=1`}
+                                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blurple/60"
+                                >
+                                    <Poster
+                                        title={entry.title}
+                                        seed={entry.itemId}
+                                        src={entry.thumbUrl}
+                                        showTitle={false}
+                                        className="h-12 w-8 shrink-0 rounded border border-border"
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium text-text">
+                                            {entry.title}
+                                            {recommended ? (
+                                                <span className="ml-2 inline-flex rounded-full border border-plex/40 bg-plex/10 px-1.5 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-[0.08em] text-plex">
+                                                    Up next
+                                                </span>
+                                            ) : null}
+                                        </p>
+                                        <p className="truncate text-[11px] text-text-muted">
+                                            {entry.type === 'episode'
+                                                ? `${entry.showTitle ?? 'Show'} · S${entry.seasonNumber ?? 1} E${entry.episodeNumber ?? 1}`
+                                                : `Movie · ${entry.sourceName}`}
+                                        </p>
+                                        {duration > 0 && !recommended ? (
+                                            <div className="mt-1.5 flex items-center gap-2">
+                                                <ProgressBar
+                                                    value={entry.positionMs}
+                                                    max={duration}
+                                                    tone="plex"
+                                                    label={`${entry.title} progress`}
+                                                    className="h-1"
+                                                />
+                                                <span className="shrink-0 font-mono text-[10px] tabular-nums text-text-muted">
+                                                    {formatElapsed(entry.positionMs)}
+                                                </span>
+                                            </div>
+                                        ) : recommended ? (
+                                            <p className="mt-1 text-[10px] text-text-faint">
+                                                Next episode · starts from the beginning
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                    <span className="shrink-0 text-xs font-medium text-blurple-text">
+                                        {recommended ? 'Play next' : 'Resume'}
+                                    </span>
+                                </Link>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+        </section>
+    );
+}
+
 function ConnectionBar() {
     const discord = useDiscordStatus();
-    const plex = usePlexConfig();
+    const media = useMediaSources();
 
-    if (discord.isError || plex.isError) {
+    if (discord.isError || media.isError) {
         return (
             <section className="rounded-xl border border-border bg-surface">
                 <ErrorState
                     compact
                     title="Connection status unavailable"
-                    error={discord.error ?? plex.error}
+                    error={discord.error ?? media.error}
                     onRetry={() => {
                         void discord.refetch();
-                        void plex.refetch();
+                        void media.refetch();
                     }}
                 />
             </section>
@@ -479,7 +656,8 @@ function ConnectionBar() {
             : discord.data?.streamer === 'error'
               ? 'danger'
               : 'neutral';
-    const plexTone = plex.data?.connected ? 'plex' : plex.data?.error ? 'danger' : 'neutral';
+    const mediaSource = media.data?.find((source) => source.enabled) ?? media.data?.[0];
+    const mediaTone = mediaSource?.connected ? 'plex' : mediaSource?.error ? 'danger' : 'neutral';
 
     return (
         <section className="rounded-xl border border-border bg-surface">
@@ -513,21 +691,21 @@ function ConnectionBar() {
                 <div className="flex items-start justify-between gap-3 px-4 py-3">
                     <div className="min-w-0">
                         <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
-                            Plex
+                            Media
                         </dt>
                         <dd className="mt-1 truncate text-sm text-text">
-                            {plex.isPending
+                            {media.isPending
                                 ? 'Checking'
-                                : plex.data?.connected
-                                  ? (plex.data.channelName ?? 'Connected')
+                                : mediaSource
+                                  ? `${mediaSource.kind === 'jellyfin' ? 'Jellyfin' : 'Plex'} · ${mediaSource.name}`
                                   : 'Not configured'}
                         </dd>
                         <dd className="mt-1 truncate text-[11px] text-text-muted">
-                            {plex.data?.serverUrl ?? 'Set the server in Settings'}
+                            {mediaSource?.serverUrl ?? 'Add a source on the media page'}
                         </dd>
                     </div>
-                    <StatusPill tone={plexTone}>
-                        {plex.data?.connected ? 'connected' : plex.data?.error ? 'error' : 'offline'}
+                    <StatusPill tone={mediaTone}>
+                        {mediaSource?.connected ? 'connected' : mediaSource?.error ? 'error' : 'offline'}
                     </StatusPill>
                 </div>
             </dl>
@@ -550,7 +728,7 @@ function SourceHealthCard() {
             <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
                 <h2 className="text-sm font-semibold text-text">Source health</h2>
                 <Link
-                    to="/sources"
+                    to="/iptv"
                     className="inline-flex items-center gap-1 rounded text-xs font-medium text-blurple-text hover:text-[#a5acff]"
                 >
                     Manage
@@ -575,7 +753,7 @@ function SourceHealthCard() {
                     title="No sources yet"
                     description="Add an M3U playlist to start building the channel list."
                     action={
-                        <Link to="/sources" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
+                        <Link to="/iptv" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
                             Add a source
                         </Link>
                     }
@@ -692,9 +870,9 @@ export default function DashboardPage() {
                 meta="One streamer, one stream"
                 actions={
                     <span className="hidden sm:inline-flex">
-                        <Link to="/plex" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
+                        <Link to="/media" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
                             <Film size={14} aria-hidden="true" />
-                            Open Plex
+                            Open media
                         </Link>
                     </span>
                 }
@@ -704,6 +882,7 @@ export default function DashboardPage() {
                     <LivePlaybackCard />
                     <UpNextCard />
                 </div>
+                <ContinueWatchingCard />
                 <ConnectionBar />
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     <SourceHealthCard />

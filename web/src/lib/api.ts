@@ -3,11 +3,12 @@ import type {
     DiscordStatusDto,
     GuildDto,
     LogLineDto,
+    MediaHistoryDto,
+    MediaItemDetailDto,
+    MediaItemDto,
+    MediaLibraryDto,
+    MediaSourceDto,
     PlaybackStateDto,
-    PlexConfigDto,
-    PlexItemDetailDto,
-    PlexItemDto,
-    PlexLibraryDto,
     QueueItemDto,
     SettingsDto,
     SetupStatusDto,
@@ -26,10 +27,11 @@ import type {
     GuideResponse,
     LogPage,
     LogQuery,
-    SavePlexConfigInput,
+    SaveMediaSourceInput,
     SaveSourceInput,
+    StartMediaInput,
     StartPlaceholderInput,
-    StartPlexInput,
+    SubtitleMode,
 } from './types';
 
 const API_BASE = '/api';
@@ -155,6 +157,7 @@ export const api = {
                 method: 'PATCH',
                 body: JSON.stringify({ ids, visible }),
             }),
+        media: () => request<ChannelDto[]>('/channels/media'),
     },
 
     guide: {
@@ -180,44 +183,97 @@ export const api = {
         },
     },
 
-    plex: {
-        config: () => request<PlexConfigDto>('/plex/config'),
-        updateConfig: (input: SavePlexConfigInput) =>
-            request<PlexConfigDto>('/plex/config', { method: 'PUT', body: JSON.stringify(input) }),
-        libraries: () => request<PlexLibraryDto[]>('/plex/libraries'),
-        setLibraryEnabled: (key: string, enabled: boolean) =>
-            request<PlexLibraryDto[]>(`/plex/libraries/${encodeURIComponent(key)}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ enabled }),
+    media: {
+        sources: () => request<MediaSourceDto[]>('/media/sources'),
+        reorderSources: (ids: number[]) =>
+            request<MediaSourceDto[]>('/media/sources/order', {
+                method: 'POST',
+                body: JSON.stringify({ ids }),
             }),
-        items: (libraryKey: string, search: string) => {
+        createSource: (input: SaveMediaSourceInput) =>
+            request<MediaSourceDto>('/media/sources', { method: 'POST', body: JSON.stringify(input) }),
+        updateSource: (input: SaveMediaSourceInput) =>
+            request<MediaSourceDto>(`/media/sources/${input.id}`, {
+                method: 'PATCH',
+                body: JSON.stringify(input),
+            }),
+        removeSource: (id: number) => request<void>(`/media/sources/${id}`, { method: 'DELETE' }),
+        validateSource: (id: number) =>
+            request<MediaSourceDto>(`/media/sources/${id}/validate`, { method: 'POST' }),
+        libraries: (sourceId: number) =>
+            request<MediaLibraryDto[]>(`/media/sources/${sourceId}/libraries`),
+        setLibraryEnabled: (sourceId: number, key: string, enabled: boolean) =>
+            request<MediaLibraryDto[]>(
+                `/media/sources/${sourceId}/libraries/${encodeURIComponent(key)}`,
+                { method: 'PATCH', body: JSON.stringify({ enabled }) }
+            ),
+        items: (sourceId: number, libraryKey: string, search: string) => {
             const params = new URLSearchParams({ library: libraryKey });
             if (search.trim()) params.set('search', search.trim());
-            return request<PlexItemDto[]>(`/plex/items?${params.toString()}`);
+            return request<MediaItemDto[]>(`/media/sources/${sourceId}/items?${params.toString()}`);
         },
-        item: (ratingKey: string) => request<PlexItemDetailDto>(`/plex/items/${encodeURIComponent(ratingKey)}`),
-        children: (ratingKey: string) =>
-            request<PlexItemDto[]>(`/plex/items/${encodeURIComponent(ratingKey)}/children`),
-        queue: () => request<QueueItemDto[]>('/plex/queue'),
+        item: (sourceId: number, itemId: string) =>
+            request<MediaItemDetailDto>(
+                `/media/items/${sourceId}/${encodeURIComponent(itemId)}`
+            ),
+        children: (sourceId: number, itemId: string) =>
+            request<MediaItemDto[]>(
+                `/media/items/${sourceId}/${encodeURIComponent(itemId)}/children`
+            ),
+        queue: () => request<QueueItemDto[]>('/media/queue'),
+        currentItem: () => request<MediaItemDetailDto | null>('/media/playback/item'),
+        setSubtitle: (mode: SubtitleMode) =>
+            request<{ ok: boolean; message: string }>('/media/playback/subtitle', {
+                method: 'POST',
+                body: JSON.stringify({ mode }),
+            }),
+        history: (limit = 12) => request<MediaHistoryDto[]>(`/media/history?limit=${limit}`),
+        removeHistory: (id: number) => request<void>(`/media/history/${id}`, { method: 'DELETE' }),
         enqueue: (input: EnqueueInput) =>
-            request<QueueItemDto>('/plex/queue', { method: 'POST', body: JSON.stringify(input) }),
-        remove: (id: number) => request<void>(`/plex/queue/${id}`, { method: 'DELETE' }),
+            request<QueueItemDto>('/media/queue', { method: 'POST', body: JSON.stringify(input) }),
+        remove: (id: number) => request<void>(`/media/queue/${id}`, { method: 'DELETE' }),
         move: (id: number, direction: 'up' | 'down') =>
-            request<QueueItemDto[]>(`/plex/queue/${id}/move`, {
+            request<QueueItemDto[]>(`/media/queue/${id}/move`, {
                 method: 'POST',
                 body: JSON.stringify({ direction }),
             }),
-        shuffle: () => request<QueueItemDto[]>('/plex/queue/shuffle', { method: 'POST' }),
-        clear: () => request<void>('/plex/queue', { method: 'DELETE' }),
+        shuffle: () => request<QueueItemDto[]>('/media/queue/shuffle', { method: 'POST' }),
+        clear: () => request<void>('/media/queue', { method: 'DELETE' }),
         play: (id: number, input: { guildId: string; voiceChannelId: string }) =>
-            request<PlaybackStateDto>(`/plex/queue/${id}/play`, {
+            request<PlaybackStateDto>(`/media/queue/${id}/play`, {
                 method: 'POST',
                 body: JSON.stringify(input),
             }),
-        start: (input: StartPlexInput) =>
-            request<PlaybackStateDto>('/plex/play', { method: 'POST', body: JSON.stringify(input) }),
+        start: (input: StartMediaInput) =>
+            request<PlaybackStateDto>('/media/play', { method: 'POST', body: JSON.stringify(input) }),
         placeholder: (input: StartPlaceholderInput) =>
-            request<PlaybackStateDto>('/plex/placeholder', { method: 'POST', body: JSON.stringify(input) }),
+            request<PlaybackStateDto>(`/media/sources/${input.sourceId}/placeholder`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    guildId: input.guildId,
+                    voiceChannelId: input.voiceChannelId,
+                }),
+            }),
+        enqueueSeason: (input: {
+            sourceId: number;
+            seasonId: string;
+            quality: string;
+            subtitleMode: string | number;
+        }) =>
+            request<{ items: QueueItemDto[] }>('/media/queue/season', {
+                method: 'POST',
+                body: JSON.stringify(input),
+            }),
+        enqueueShow: (input: {
+            sourceId: number;
+            showId: string;
+            quality: string;
+            subtitleMode: string | number;
+        }) =>
+            request<{ items: QueueItemDto[] }>('/media/queue/show', {
+                method: 'POST',
+                body: JSON.stringify(input),
+            }),
     },
 
     discord: {
@@ -227,6 +283,11 @@ export const api = {
             request<DiscordStatusDto>('/discord/tokens', { method: 'PUT', body: JSON.stringify(input) }),
         validate: () => request<DiscordStatusDto>('/discord/validate', { method: 'POST' }),
         reconnect: () => request<DiscordStatusDto>('/discord/reconnect', { method: 'POST' }),
+        joinStreamer: (guildId?: string) =>
+            request<DiscordStatusDto>('/discord/streamer/join', {
+                method: 'POST',
+                body: JSON.stringify(guildId ? { guildId } : {}),
+            }),
         setRoles: (guildId: string, roleIds: string[]) =>
             request<GuildDto>(`/discord/guilds/${encodeURIComponent(guildId)}/roles`, {
                 method: 'PUT',
@@ -248,7 +309,7 @@ export const api = {
                 method: 'PATCH',
                 body: JSON.stringify({
                     stream: settings.stream,
-                    plex: settings.plex,
+                    playback: settings.playback,
                     auth: settings.auth,
                     ui: {
                         timezone: settings.timezone,
@@ -257,6 +318,11 @@ export const api = {
                         trustedOrigins: settings.trustedOrigins,
                     },
                 }),
+            }),
+        updatePlayback: (playback: Partial<SettingsDto['playback']>) =>
+            request<SettingsDto>('/settings', {
+                method: 'PATCH',
+                body: JSON.stringify({ playback }),
             }),
     },
 

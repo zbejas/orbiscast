@@ -25,7 +25,7 @@ RUN npm run build && npm prune --omit=dev
 FROM node:22-trixie-slim
 
 # FFmpeg with libzmq (for the azmq audio filter used by discord-video-stream)
-# and libx264 (for the generated Plex placeholder clip).
+# and libx264 (for the generated media placeholder clip).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
@@ -48,7 +48,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 # Metadata labels
 LABEL maintainer="Zbejas <info@zbejas.io>"
-LABEL description="A Discord IPTV and Plex streaming bot with a WebUI."
+LABEL description="A Discord IPTV and media streaming bot with a WebUI."
 LABEL org.opencontainers.image.source="https://github.com/zbejas/orbiscast"
 LABEL org.opencontainers.image.documentation="https://github.com/zbejas/orbiscast/blob/master/README.md"
 LABEL org.opencontainers.image.authors="Zbejas"

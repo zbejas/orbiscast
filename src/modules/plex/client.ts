@@ -6,6 +6,7 @@ import type {
     PlexItemType,
     PlexLibrary,
     PlexLibraryType,
+    PlexMarker,
     PlexMedia,
     PlexMediaPart,
     PlexRawItem,
@@ -235,7 +236,8 @@ export class PlexClient {
     async getItem(ratingKey: string): Promise<PlexItemDetail> {
         const key = requirePathSegment(ratingKey, 'ratingKey');
         const container = await this.requestContainer(
-            `/library/metadata/${encodeURIComponent(key)}`
+            `/library/metadata/${encodeURIComponent(key)}`,
+            { includeMarkers: 1 }
         );
         const metadata = readMetadata(container);
         const raw = metadata[0];
@@ -535,7 +537,16 @@ export class PlexClient {
             directors: tagNames(raw.Director),
             writers: tagNames(raw.Writer),
             media,
-            streams: flattenStreams(media)
+            streams: flattenStreams(media),
+            showRatingKey:
+                base.type === 'episode'
+                    ? toStringOrNull(raw.grandparentRatingKey)
+                    : base.type === 'season'
+                      ? toStringOrNull(raw.parentRatingKey)
+                      : null,
+            seasonRatingKey:
+                base.type === 'episode' ? toStringOrNull(raw.parentRatingKey) : null,
+            markers: normalizeMarkers(raw.Marker)
         };
     }
 
@@ -669,6 +680,20 @@ function tagNames(tags: PlexRawTag[] | undefined): string[] {
     return tags
         .map((tag) => tag.tag)
         .filter((tag): tag is string => typeof tag === 'string' && tag.length > 0);
+}
+
+function normalizeMarkers(markers: PlexRawItem['Marker']): PlexMarker[] {
+    if (!Array.isArray(markers)) {
+        return [];
+    }
+    return markers.map((marker) => {
+        const type = marker.type === 'intro' || marker.type === 'credits' ? marker.type : 'unknown';
+        return {
+            type,
+            startMs: toNumber(marker.startTimeOffset),
+            endMs: toNumber(marker.endTimeOffset)
+        };
+    });
 }
 
 function normalizeLibraryType(value: string | undefined): PlexLibraryType {

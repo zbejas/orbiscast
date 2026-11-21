@@ -2,7 +2,7 @@
 
 ## Overview
 
-OrbisCast runs as one Node process that serves the WebUI, the API, the Discord clients, the IPTV schedulers, and Plex playback. Docker is the supported deployment. All state lives in a single data directory, so backup and recovery are file operations plus a small admin CLI for auth lockout.
+OrbisCast runs as one Node process that serves the WebUI, the API, the Discord clients, the IPTV schedulers, and Plex or Jellyfin playback. Docker is the supported deployment. All state lives in a single data directory, so backup and recovery are file operations plus a small admin CLI for auth lockout.
 
 ## Key files
 
@@ -23,7 +23,7 @@ OrbisCast runs as one Node process that serves the WebUI, the API, the Discord c
 npm start                                   # tsx src/index.ts, data/ in the working directory
 node dist/index.js --port 3000              # compiled server
 node dist/index.js --data-dir /srv/orbiscast
-node dist/index.js --test-mode              # no Discord, IPTV refresh, or Plex validation
+node dist/index.js --test-mode              # no Discord, IPTV refresh, or media validation
 ```
 
 - `PORT` is the only environment override. `--port` wins.
@@ -37,10 +37,10 @@ data/
   orbiscast.db        SQLite database, plus -wal and -shm while running
   keys.json           AES-256-GCM key and Better Auth secret, mode 0600
   logs/app.log        Winston log, rotated at 10 MB, five files kept
-  cache/              IPTV downloads and the generated Plex placeholder clip
+  cache/              IPTV downloads and the generated media placeholder clip
 ```
 
-`keys.json` is created on first boot. Losing it makes stored Discord and Plex tokens unrecoverable. Back up the whole directory, not just the database.
+`keys.json` is created on first boot. Losing it makes stored Discord and media server tokens unrecoverable. Back up the whole directory, not just the database.
 
 ### Docker
 
@@ -79,7 +79,7 @@ A failed migration leaves the old database intact because Drizzle wraps each mig
 ### Resource limits
 
 - Only one real stream can run. One self-bot can join only one voice channel.
-- Plex transcoding uses the Plex server's CPU or GPU, not the OrbisCast container.
+- Plex and Jellyfin transcoding use the media server's CPU or GPU, not the OrbisCast container.
 - A large IPTV playlist can use noticeable memory while parsing and writing. The download cap is 50 MB.
 
 ### Logs
@@ -129,12 +129,12 @@ npm run admin -- auth status --data-dir=/srv/orbiscast
 - **One token set at a time.** Editing Discord tokens reconnects both clients. Do not run a second instance with the same tokens.
 - **The data volume is secret.** It contains encrypted provider tokens, the encryption key, source URLs, and session data.
 - **WAL files belong to the database.** Copy the whole data directory or stop the app first.
-- **The placeholder clip is generated.** The first Plex placeholder start runs FFmpeg and may take a few seconds.
+- **The placeholder clip is generated.** The first media placeholder start runs FFmpeg and may take a few seconds.
 - **Test mode is not a sandbox.** It skips external clients but still writes to the data directory you pass.
 
 ## Related docs
 
 - [WebUI and API](webui.md) - routes, auth, and SSE
 - [Database](database.md) - schema and migrations
-- [Plex](plex.md) - transcode sessions and proxy
+- [Media sources](media.md) - provider transcode sessions and proxy
 - [IPTV](iptv.md) - source refresh and cache
