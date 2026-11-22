@@ -12,12 +12,12 @@ import { useShell } from './shell-context';
 export type StatusTone = 'neutral' | 'live' | 'plex' | 'danger' | 'warn' | 'blurple';
 
 const PILL_TONES: Record<StatusTone, string> = {
-    neutral: 'border-border bg-raised text-text-muted',
-    live: 'border-live/30 bg-live/10 text-live',
-    plex: 'border-plex/30 bg-plex/10 text-plex',
-    danger: 'border-danger/30 bg-danger/10 text-danger',
-    warn: 'border-warn/30 bg-warn/10 text-warn',
-    blurple: 'border-blurple/40 bg-blurple/10 text-blurple-text',
+    neutral: 'border-outline-variant bg-surface-container-high text-text-muted',
+    live: 'border-live/30 bg-live/12 text-live',
+    plex: 'border-plex/30 bg-plex/12 text-plex',
+    danger: 'border-danger/30 bg-danger/12 text-danger',
+    warn: 'border-warn/30 bg-warn/12 text-warn',
+    blurple: 'border-blurple/40 bg-primary-container text-on-primary-container',
 };
 
 const DOT_TONES: Record<StatusTone, string> = {
@@ -37,6 +37,10 @@ interface StatusPillProps {
     className?: string;
 }
 
+/**
+ * Material 3 assist chip. The label always carries the status, so color is
+ * reinforcement rather than the only signal.
+ */
 export function StatusPill({
     tone = 'neutral',
     children,
@@ -47,7 +51,7 @@ export function StatusPill({
     return (
         <span
             className={cn(
-                'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium leading-5',
+                'oc-chip oc-type-label inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border px-3',
                 PILL_TONES[tone],
                 className
             )}
@@ -55,7 +59,7 @@ export function StatusPill({
             {dot ? (
                 <span
                     aria-hidden="true"
-                    className={cn('size-1.5 shrink-0 rounded-full', DOT_TONES[tone], pulse && 'oc-live-dot')}
+                    className={cn('size-2 shrink-0 rounded-full', DOT_TONES[tone], pulse && 'oc-live-dot')}
                 />
             ) : null}
             {children}
@@ -98,29 +102,45 @@ interface PageHeaderProps {
     actions?: ReactNode;
 }
 
+/**
+ * Top app bar. Desktop keeps a single 64px row. When the page actions cannot
+ * fit beside the title, they wrap once as a group and scroll internally rather
+ * than squeezing the h1. The title never truncates and the live chip stays pinned.
+ */
 export function PageHeader({ title, meta, actions }: PageHeaderProps) {
     const { openNav } = useShell();
     usePageTitle(title);
+    const hasActions = actions !== undefined && actions !== null && actions !== false;
 
     return (
-        <header className="sticky top-0 z-30 flex min-h-[52px] flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-bg px-3 py-2 md:px-6">
-            <IconButton
-                label="Open navigation"
-                onClick={openNav}
-                className="-ml-1 md:hidden"
-            >
-                <Menu size={18} aria-hidden="true" />
-            </IconButton>
-            <div className="flex min-w-0 flex-1 items-baseline gap-3">
-                <h1 className="truncate text-[17px] font-semibold tracking-[-0.012em] text-text">{title}</h1>
+        <header className="oc-app-bar sticky top-0 z-30 flex min-h-16 flex-wrap items-center gap-x-2 gap-y-2 px-2 py-2 md:gap-x-3 md:px-6">
+            <div className="flex min-w-0 max-w-full flex-none items-center gap-2 md:gap-2.5">
+                <IconButton
+                    label="Open navigation"
+                    onClick={openNav}
+                    className="-ml-1 shrink-0 md:hidden"
+                >
+                    <Menu size={19} aria-hidden="true" />
+                </IconButton>
+                <h1 className="oc-type-title shrink-0 whitespace-nowrap text-text">{title}</h1>
                 {meta ? (
-                    <p className="hidden min-w-0 truncate text-xs text-text-muted sm:block">{meta}</p>
+                    <p className="oc-type-meta hidden min-w-0 truncate text-text-muted lg:block">{meta}</p>
                 ) : null}
             </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                {actions}
-                <LiveStatusPill />
-            </div>
+            {hasActions ? (
+                <div className="ml-auto flex min-w-0 max-w-full items-center gap-1.5 md:gap-2">
+                    <div className="oc-app-bar-actions flex min-w-0 items-center gap-1 overflow-x-auto md:gap-2">
+                        {actions}
+                    </div>
+                    <div className="shrink-0">
+                        <LiveStatusPill />
+                    </div>
+                </div>
+            ) : (
+                <div className="ml-auto shrink-0">
+                    <LiveStatusPill />
+                </div>
+            )}
         </header>
     );
 }
@@ -146,16 +166,20 @@ export function EmptyState({
         <div
             className={cn(
                 'flex flex-col items-center justify-center text-center',
-                compact ? 'px-4 py-7' : 'px-5 py-12',
+                compact ? 'px-4 py-8' : 'px-5 py-12',
                 className
             )}
         >
-            {Icon ? <Icon size={26} aria-hidden="true" className="mb-3 text-text-faint" /> : null}
-            <h2 className="text-[15px] font-semibold text-text">{title}</h2>
-            {description ? (
-                <p className="mt-1.5 max-w-md text-sm leading-relaxed text-text-muted">{description}</p>
+            {Icon ? (
+                <span className="oc-icon-well mb-4" aria-hidden="true">
+                    <Icon size={24} />
+                </span>
             ) : null}
-            {action ? <div className="mt-4 flex flex-wrap items-center justify-center gap-2">{action}</div> : null}
+            <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-text">{title}</h2>
+            {description ? (
+                <p className="mt-2 max-w-md text-sm leading-relaxed text-text-muted">{description}</p>
+            ) : null}
+            {action ? <div className="mt-5 flex flex-wrap items-center justify-center gap-2">{action}</div> : null}
         </div>
     );
 }
@@ -182,17 +206,19 @@ export function ErrorState({
             role="alert"
             className={cn(
                 'flex flex-col items-center justify-center text-center',
-                compact ? 'px-4 py-7' : 'px-5 py-12'
+                compact ? 'px-4 py-8' : 'px-5 py-12'
             )}
         >
-            <TriangleExclamationPoint size={26} aria-hidden="true" className="mb-3 text-danger" />
-            <h2 className="text-[15px] font-semibold text-text">{title}</h2>
-            <p className="mt-1.5 max-w-md text-sm leading-relaxed text-text-muted">{detail}</p>
+            <span className="oc-icon-well oc-icon-well-danger mb-4" aria-hidden="true">
+                <TriangleExclamationPoint size={24} />
+            </span>
+            <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-text">{title}</h2>
+            <p className="mt-2 max-w-md text-sm leading-relaxed text-text-muted">{detail}</p>
             {onRetry ? (
                 <Button
                     variant="secondary"
                     size="sm"
-                    className="mt-4"
+                    className="mt-5"
                     icon={<RefreshCw size={14} aria-hidden="true" />}
                     onClick={onRetry}
                 >
@@ -204,7 +230,7 @@ export function ErrorState({
 }
 
 export function Skeleton({ className }: { className?: string }) {
-    return <div aria-hidden="true" className={cn('animate-pulse rounded-md bg-white/[0.06]', className)} />;
+    return <div aria-hidden="true" className={cn('oc-skeleton rounded-md', className)} />;
 }
 
 interface ProgressBarProps {
@@ -232,11 +258,11 @@ export function ProgressBar({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={indeterminate ? undefined : Math.round(ratio * 100)}
-            className={cn('h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]', className)}
+            className={cn('h-1 w-full overflow-hidden rounded-full bg-text/10', className)}
         >
             <div
                 className={cn(
-                    'h-full rounded-full transition-[width] duration-500 ease-out',
+                    'h-full rounded-full transition-[width] duration-200 ease-[cubic-bezier(0.2,0,0,1)]',
                     tone === 'plex' ? 'bg-plex' : 'bg-blurple',
                     indeterminate && 'oc-progress-indeterminate'
                 )}
@@ -269,9 +295,9 @@ export function Notice({ tone = 'info', title, children, action, icon, className
     return (
         <div
             role={tone === 'danger' ? 'alert' : 'status'}
-            className={cn('flex items-start gap-3 rounded-lg border p-3', NOTICE_TONES[tone], className)}
+            className={cn('flex items-start gap-3 rounded-lg border p-3.5', NOTICE_TONES[tone], className)}
         >
-            <Icon size={17} aria-hidden="true" className="mt-0.5 shrink-0" />
+            <Icon size={18} aria-hidden="true" className="mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
                 {title ? <p className="text-sm font-medium leading-5">{title}</p> : null}
                 <div className={cn('text-xs leading-relaxed', title && 'mt-1', 'text-text-muted')}>

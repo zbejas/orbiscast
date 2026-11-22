@@ -135,11 +135,11 @@ function SourceLibraries({ source }: { source: MediaSourceDto }) {
     const pendingKey = setLibrary.isPending ? setLibrary.variables?.key : undefined;
 
     return (
-        <div className="border-t border-border px-4 py-4">
+        <div className="border-t border-border/50 px-5 py-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <div>
                     <h3 className="text-sm font-semibold text-text">Libraries</h3>
-                    <p className="mt-0.5 text-[11px] text-text-muted">
+                    <p className="mt-0.5 text-xs text-text-muted">
                         Only movie and TV show libraries are playable.
                     </p>
                 </div>
@@ -178,19 +178,19 @@ function SourceLibraries({ source }: { source: MediaSourceDto }) {
                     description="Check the source connection, then test the source again."
                 />
             ) : (
-                <ul className="mt-2 divide-y divide-border">
+                <ul className="mt-3 divide-y divide-border/50 border-t border-border/50">
                     {list.map((library) => {
                         const playable = isPlayableLibrary(library);
                         return (
                             <li
                                 key={library.key}
-                                className="flex items-start justify-between gap-4 py-3 last:pb-0"
+                                className="flex items-start justify-between gap-4 rounded-[16px] px-2 py-3 transition-colors duration-200 hover:bg-white/[0.04]"
                             >
                                 <div className="min-w-0">
                                     <p className="truncate text-sm font-medium text-text">
                                         {library.title}
                                     </p>
-                                    <p className="mt-0.5 text-[11px] uppercase tracking-[0.06em] text-text-faint">
+                                    <p className="mt-0.5 text-[11px] text-text-faint">
                                         {libraryTypeLabel(library.type)}
                                         {playable
                                             ? library.enabled
@@ -344,12 +344,12 @@ function SourceForm({
     };
 
     return (
-        <section className="rounded-xl border border-border bg-surface">
-            <div className="border-b border-border px-4 py-3">
-                <h2 id="media-source-form-title" className="text-sm font-semibold text-text">
+        <section className="rounded-[28px] border border-border/60 bg-surface">
+            <div className="border-b border-border/50 px-5 py-4">
+                <h2 id="media-source-form-title" className="text-base font-semibold tracking-[-0.01em] text-text">
                     {source ? `Edit ${source.name}` : 'Add media source'}
                 </h2>
-                <p className="mt-0.5 text-xs text-text-muted">
+                <p className="mt-1 text-xs leading-relaxed text-text-muted">
                     Plex and Jellyfin servers are saved separately. Each one gets a virtual Discord
                     channel.
                 </p>
@@ -567,7 +567,7 @@ function SourceForm({
                     </Notice>
                 ) : null}
 
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-4">
                     <div className="flex items-center gap-2">
                         {source ? (
                             <>
@@ -620,23 +620,23 @@ function SourceCard({
     const status = sourceStatus(source);
 
     return (
-        <section className="rounded-xl border border-border bg-surface">
-            <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4">
+        <section className="rounded-[28px] border border-border/60 bg-surface">
+            <div className="flex flex-col gap-4 px-5 py-5 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="truncate text-base font-semibold text-text">{source.name}</h2>
+                        <h2 className="truncate text-base font-semibold tracking-[-0.01em] text-text">{source.name}</h2>
                         <StatusPill tone={status.tone}>{status.label}</StatusPill>
-                        <span className="rounded border border-border bg-raised px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.06em] text-text-muted">
-                            {source.kind}
+                        <span className="rounded-full border border-border/60 bg-raised/60 px-2 py-0.5 text-[11px] font-medium text-text-muted">
+                            {source.kind === 'jellyfin' ? 'Jellyfin' : 'Plex'}
                         </span>
                     </div>
-                    <p className="mt-1 truncate text-xs text-text-muted">{source.serverUrl}</p>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-muted">
-                        <span>{source.channelName}</span>
-                        <span>
+                    <p className="mt-1.5 truncate text-xs text-text-muted">{source.serverUrl}</p>
+                    <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] text-text-muted">
+                        <span className="rounded-full bg-raised/50 px-2.5 py-1">{source.channelName}</span>
+                        <span className="rounded-full bg-raised/50 px-2.5 py-1">
                             {source.enabledLibraryCount}/{source.libraryCount} libraries
                         </span>
-                        <span>{qualityLabel(source.defaultQuality)}</span>
+                        <span className="rounded-full bg-raised/50 px-2.5 py-1">{qualityLabel(source.defaultQuality)}</span>
                     </div>
                     {source.error ? (
                         <p className="mt-2 text-xs leading-relaxed text-danger">{source.error}</p>
@@ -706,7 +706,7 @@ function SourceCard({
             </div>
 
             {confirmRemove ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-danger/25 bg-danger/[0.06] px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-danger/25 bg-danger/[0.07] px-5 py-3.5">
                     <p className="min-w-0 flex-1 text-xs leading-relaxed text-danger">
                         Remove {source.name} and its libraries, queue entries, and saved playback
                         history? The server itself is not changed.
@@ -769,26 +769,44 @@ export default function MediaSourcesPage() {
                 }
                 actions={
                     <>
-                        <Link
-                            to="/media"
-                            className={buttonStyles({ variant: 'secondary', size: 'sm' })}
-                        >
-                            <ArrowLeft size={14} aria-hidden="true" />
-                            Back to media
-                        </Link>
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            icon={<Plus size={14} aria-hidden="true" />}
-                            onClick={() => setEditor({ source: null })}
-                        >
-                            Add source
-                        </Button>
+                        <span className="hidden sm:inline-flex">
+                            <Link
+                                to="/media"
+                                className={buttonStyles({ variant: 'secondary', size: 'sm' })}
+                            >
+                                <ArrowLeft size={14} aria-hidden="true" />
+                                Back to media
+                            </Link>
+                        </span>
+                        <span className="hidden sm:inline-flex">
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                icon={<Plus size={14} aria-hidden="true" />}
+                                onClick={() => setEditor({ source: null })}
+                            >
+                                Add source
+                            </Button>
+                        </span>
                     </>
                 }
             />
 
-            <div className="oc-page-enter mx-auto w-full max-w-[1100px] space-y-4 p-3 sm:p-5 xl:p-6">
+            <div className="mx-auto w-full max-w-[1100px] space-y-5 p-3 sm:p-5 xl:p-6">
+                <div className="flex items-center justify-between gap-2 sm:hidden">
+                    <Link to="/media" className={buttonStyles({ variant: 'ghost', size: 'sm' })}>
+                        <ArrowLeft size={14} aria-hidden="true" />
+                        Back to media
+                    </Link>
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        icon={<Plus size={14} aria-hidden="true" />}
+                        onClick={() => setEditor({ source: null })}
+                    >
+                        Add source
+                    </Button>
+                </div>
                 {adding ? (
                     <SourceForm
                         source={null}
@@ -802,7 +820,7 @@ export default function MediaSourcesPage() {
                         {[0, 1].map((index) => (
                             <div
                                 key={index}
-                                className="space-y-3 rounded-xl border border-border bg-surface p-4"
+                                className="space-y-3 rounded-[28px] border border-border/60 bg-surface p-5"
                             >
                                 <Skeleton className="h-5 w-48" />
                                 <Skeleton className="h-3.5 w-72" />
@@ -811,27 +829,31 @@ export default function MediaSourcesPage() {
                         ))}
                     </div>
                 ) : sources.isError ? (
-                    <ErrorState
-                        title="Media sources could not load"
-                        error={sources.error}
-                        onRetry={() => void sources.refetch()}
-                    />
+                    <section className="rounded-[28px] border border-border/60 bg-surface">
+                        <ErrorState
+                            title="Media sources could not load"
+                            error={sources.error}
+                            onRetry={() => void sources.refetch()}
+                        />
+                    </section>
                 ) : list.length === 0 && !adding ? (
-                    <EmptyState
-                        icon={Server}
-                        title="No media sources"
-                        description="Add a Plex or Jellyfin server to browse libraries and open a virtual channel in Discord."
-                        action={
-                            <Button
-                                variant="primary"
-                                size="sm"
-                                icon={<Plus size={13} aria-hidden="true" />}
-                                onClick={() => setEditor({ source: null })}
-                            >
-                                Add media source
-                            </Button>
-                        }
-                    />
+                    <section className="rounded-[28px] border border-border/60 bg-surface">
+                        <EmptyState
+                            icon={Server}
+                            title="No media sources"
+                            description="Add a Plex or Jellyfin server to browse libraries and open a virtual channel in Discord."
+                            action={
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    icon={<Plus size={13} aria-hidden="true" />}
+                                    onClick={() => setEditor({ source: null })}
+                                >
+                                    Add media source
+                                </Button>
+                            }
+                        />
+                    </section>
                 ) : (
                     <div className="space-y-3">
                         {list.map((source) =>

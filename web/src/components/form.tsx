@@ -53,7 +53,7 @@ export function Field({
             <label
                 htmlFor={controlId}
                 className={cn(
-                    'mb-1.5 flex items-center gap-1 text-xs font-medium text-text-muted',
+                    'mb-1.5 flex items-center gap-1 text-xs font-medium tracking-[0.012em] text-text-muted',
                     hideLabel && 'sr-only',
                     labelClassName
                 )}
@@ -83,7 +83,7 @@ export function Field({
 }
 
 const CONTROL_BASE =
-    'w-full rounded-md border bg-bg text-sm text-text transition-colors placeholder:text-text-faint disabled:cursor-not-allowed disabled:opacity-50';
+    'oc-field w-full rounded-md border border-outline bg-surface-container-low text-sm text-text transition-[border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.2,0,0,1)] placeholder:text-text-faint focus:border-blurple focus:bg-surface-container disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-outline';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
     invalid?: boolean;
@@ -100,8 +100,8 @@ export function Input({ className, id, invalid, ...props }: InputProps) {
             aria-describedby={props['aria-describedby'] ?? field?.describedBy}
             className={cn(
                 CONTROL_BASE,
-                'h-9 px-3',
-                isInvalid ? 'border-danger' : 'border-border focus:border-blurple',
+                'h-11 px-3.5',
+                isInvalid ? 'border-danger focus:border-danger' : 'border-outline',
                 className
             )}
         />
@@ -123,17 +123,17 @@ export function Select({ className, id, invalid, children, ...props }: SelectPro
                 aria-describedby={props['aria-describedby'] ?? field?.describedBy}
                 className={cn(
                     CONTROL_BASE,
-                    'h-9 appearance-none pl-3 pr-9',
-                    isInvalid ? 'border-danger' : 'border-border focus:border-blurple',
+                    'h-11 appearance-none pl-3.5 pr-10',
+                    isInvalid ? 'border-danger focus:border-danger' : 'border-outline',
                     className
                 )}
             >
                 {children}
             </select>
             <ChevronDown
-                size={14}
+                size={16}
                 aria-hidden="true"
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
+                className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-text-muted"
             />
         </div>
     );
@@ -154,15 +154,16 @@ export function Textarea({ className, id, invalid, ...props }: TextareaProps) {
             aria-describedby={props['aria-describedby'] ?? field?.describedBy}
             className={cn(
                 CONTROL_BASE,
-                'min-h-20 resize-y px-3 py-2 leading-relaxed',
-                isInvalid ? 'border-danger' : 'border-border focus:border-blurple',
+                'min-h-24 resize-y px-3.5 py-3 leading-relaxed',
+                isInvalid ? 'border-danger focus:border-danger' : 'border-outline',
                 className
             )}
         />
     );
 }
 
-interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {    label?: ReactNode;
+interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
+    label?: ReactNode;
     description?: ReactNode;
     inputRef?: Ref<HTMLInputElement>;
 }
@@ -172,7 +173,7 @@ export function Checkbox({ label, description, className, inputRef, ...props }: 
         return (
             <label
                 className={cn(
-                    'oc-checkbox-target inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded',
+                    'oc-checkbox-target inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-xs',
                     className
                 )}
             >

@@ -104,6 +104,25 @@ describe('settings service', () => {
         expect(reloaded.getUi().mediaSourceOrder).toEqual([7, 3]);
     });
 
+    it('keeps three recent voice channels without duplicates', () => {
+        settings.setRecentVoiceChannels([
+            { guildId: 'g1', guildName: 'Guild 1', channelId: 'c1', channelName: 'General' },
+            { guildId: 'g1', guildName: 'Guild 1', channelId: 'c2', channelName: 'Cinema' },
+            { guildId: 'g1', guildName: 'Guild 1', channelId: 'c1', channelName: 'General' },
+            { guildId: 'g2', guildName: 'Guild 2', channelId: 'c3', channelName: 'Voice' },
+            { guildId: 'g2', guildName: 'Guild 2', channelId: 'c4', channelName: 'Extra' },
+        ]);
+
+        expect(settings.getPublic().recentVoiceChannels).toEqual([
+            { guildId: 'g1', guildName: 'Guild 1', channelId: 'c1', channelName: 'General' },
+            { guildId: 'g1', guildName: 'Guild 1', channelId: 'c2', channelName: 'Cinema' },
+            { guildId: 'g2', guildName: 'Guild 2', channelId: 'c3', channelName: 'Voice' },
+        ]);
+
+        const reloaded = new SettingsService(connection.db, loadOrCreateKeys(dir));
+        expect(reloaded.getPublic().recentVoiceChannels).toHaveLength(3);
+    });
+
     it('rejects invalid quality values', () => {
         expect(() => settings.update({ plex: { defaultQuality: '8k' as never } })).toThrow();
     });

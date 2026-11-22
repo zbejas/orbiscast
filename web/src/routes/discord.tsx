@@ -128,13 +128,13 @@ function GuildAccess({
         <details
             open={open}
             onToggle={(event) => setOpen(event.currentTarget.open)}
-            className="group border-b border-border last:border-b-0"
+            className="group border-b border-border/50 last:border-b-0"
         >
-            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.02] [&::-webkit-details-marker]:hidden">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors duration-200 hover:bg-raised/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blurple/70 [&::-webkit-details-marker]:hidden">
                 <ChannelMark name={guild.name} size="sm" />
                 <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-text">{guild.name}</p>
-                    <p className="truncate font-mono text-[10px] text-text-faint">{guild.id}</p>
+                    <p className="truncate font-mono text-[11px] text-text-faint">{guild.id}</p>
                 </div>
                 <div className="hidden shrink-0 text-right text-[11px] text-text-muted sm:block">
                     <p>
@@ -161,7 +161,7 @@ function GuildAccess({
                 )}
                 <fieldset>
                     <legend className="sr-only">Roles allowed to control playback in {guild.name}</legend>
-                    <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-1 rounded-[20px] bg-bg/30 p-2 sm:grid-cols-2 xl:grid-cols-3">
                         {guild.roles.map((role) => {
                             const checked = guild.allowedRoleIds.includes(role.id);
                             return (
@@ -213,12 +213,12 @@ function ConnectionCard({ status }: { status: DiscordStatusDto }) {
         },
     ];
     return (
-        <section className="rounded-xl border border-border bg-surface">
-            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold text-text">Connection</h2>
-                <span className="text-[11px] text-text-muted">One streamer, one stream</span>
+        <section className="rounded-[28px] border border-border/60 bg-surface">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 px-5 py-4">
+                <h2 className="text-base font-semibold tracking-[-0.01em] text-text">Connection</h2>
+                <span className="rounded-full bg-raised/60 px-2.5 py-1 text-[11px] text-text-muted">One streamer, one stream</span>
             </div>
-            <dl className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+            <dl className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
                 {rows.map((row) => {
                     const tone =
                         row.state === 'online'
@@ -229,9 +229,12 @@ function ConnectionCard({ status }: { status: DiscordStatusDto }) {
                                 ? 'warn'
                                 : 'neutral';
                     return (
-                        <div key={row.label} className="flex items-start justify-between gap-3 px-4 py-3">
+                        <div
+                            key={row.label}
+                            className="flex items-start justify-between gap-3 rounded-[20px] bg-raised/40 px-4 py-4"
+                        >
                             <div className="min-w-0">
-                                <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
+                                <dt className="text-[11px] font-medium text-text-muted">
                                     {row.label}
                                 </dt>
                                 <dd className="mt-1 truncate text-sm text-text">
@@ -245,7 +248,7 @@ function ConnectionCard({ status }: { status: DiscordStatusDto }) {
                 })}
             </dl>
             {status.error ? (
-                <div className="border-t border-border p-3">
+                <div className="border-t border-border/50 p-4">
                     <Notice tone="danger" title="Discord reported an error">
                         {status.error}
                     </Notice>
@@ -320,11 +323,11 @@ function InviteCard({
               : 'Partially ready';
 
     return (
-        <section id="servers" className="rounded-xl border border-border bg-surface">
-            <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border px-4 py-3">
+        <section id="servers" className="rounded-[28px] border border-border/60 bg-surface">
+            <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border/50 px-5 py-4">
                 <div>
-                    <h2 className="text-sm font-semibold text-text">Servers</h2>
-                    <p className="mt-0.5 text-[11px] text-text-muted">
+                    <h2 className="text-base font-semibold tracking-[-0.01em] text-text">Servers</h2>
+                    <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-text-muted">
                         Add the bot once. It invites the streaming account to the same servers with your saved
                         token.
                     </p>
@@ -334,7 +337,7 @@ function InviteCard({
                 </StatusPill>
             </div>
 
-            <div className="space-y-4 p-4">
+            <div className="space-y-4 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center gap-2">
                     {invite ? (
                         <a
@@ -376,7 +379,7 @@ function InviteCard({
                             'Join a voice channel and run /stream.',
                         ].map((text, index) => (
                             <li key={text} className="flex gap-2">
-                                <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-raised text-[10px] font-medium text-text">
+                                <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-raised text-[11px] font-medium text-text">
                                     {index + 1}
                                 </span>
                                 <span>{text}</span>
@@ -384,15 +387,15 @@ function InviteCard({
                         ))}
                     </ol>
                 ) : (
-                    <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                    <ul className="space-y-1 rounded-[20px] bg-bg/30 p-1">
                         {status.guilds.map((guild) => {
                             const inGuild = joined.has(guild.id);
                             return (
-                                <li key={guild.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+                                <li key={guild.id} className="flex flex-wrap items-center gap-3 rounded-[16px] px-3 py-3 transition-colors duration-200 hover:bg-raised/40">
                                     <ChannelMark name={guild.name} size="sm" />
                                     <div className="min-w-0 flex-1">
                                         <p className="truncate text-xs font-medium text-text">{guild.name}</p>
-                                        <p className="truncate text-[10px] text-text-faint">
+                                        <p className="truncate text-[11px] text-text-faint">
                                             {inGuild
                                                 ? 'The streaming account can join voice here.'
                                                 : 'The streaming account is not in this server yet.'}
@@ -441,7 +444,7 @@ function InviteCard({
                 ) : null}
 
                 {join.fallbackInviteUrl ? (
-                    <div className="rounded-lg border border-border bg-raised px-3 py-2.5">
+                    <div className="rounded-[20px] bg-raised/60 px-4 py-3.5">
                         <p className="text-[11px] font-medium text-text">Fallback invite</p>
                         <p className="mt-0.5 text-[11px] leading-relaxed text-text-muted">
                             If Discord blocks the automatic join, open this link while logged in as the streaming
@@ -575,29 +578,30 @@ export default function DiscordPage() {
                     <Button
                         variant="secondary"
                         size="sm"
+                        aria-label="Reconnect"
                         icon={<RefreshCw size={14} aria-hidden="true" />}
                         loading={reconnect.isPending}
                         onClick={reconnectStreamer}
                     >
-                        Reconnect
+                        <span className="hidden sm:inline">Reconnect</span>
                     </Button>
                 }
             />
-            <div className="oc-page-enter mx-auto w-full max-w-[1600px] space-y-4 p-3 sm:p-5 xl:p-6">
+            <div className="mx-auto w-full max-w-[1600px] space-y-5 p-3 sm:p-5 xl:p-6">
                 <Notice tone="danger" title="The streamer token is a self-bot credential">
                     Discord does not permit self-bots. Using one can get the account banned. Keep both tokens private.
                     OrbisCast stores them encrypted at rest, but a screenshot or public issue can still leak them.
                 </Notice>
 
                 {status.isPending ? (
-                    <section className="rounded-xl border border-border bg-surface p-4" aria-hidden="true">
+                    <section className="rounded-[28px] border border-border/60 bg-surface p-5" aria-hidden="true">
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <Skeleton className="h-16 w-full" />
                             <Skeleton className="h-16 w-full" />
                         </div>
                     </section>
                 ) : status.isError ? (
-                    <section className="rounded-xl border border-border bg-surface">
+                    <section className="rounded-[28px] border border-border/60 bg-surface">
                         <ErrorState
                             title="Discord status could not load"
                             error={status.error}
@@ -616,11 +620,11 @@ export default function DiscordPage() {
                     />
                 ) : null}
 
-                <section id="tokens" className="rounded-xl border border-border bg-surface">
-                    <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border px-4 py-3">
+                <section id="tokens" className="rounded-[28px] border border-border/60 bg-surface">
+                    <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border/50 px-5 py-4">
                         <div>
-                            <h2 className="text-sm font-semibold text-text">Tokens</h2>
-                            <p className="mt-0.5 text-[11px] text-text-muted">
+                            <h2 className="text-base font-semibold tracking-[-0.01em] text-text">Tokens</h2>
+                            <p className="mt-0.5 text-xs leading-relaxed text-text-muted">
                                 Values are write-only. Stored tokens are shown only as a last-four hint.
                             </p>
                         </div>
@@ -628,7 +632,7 @@ export default function DiscordPage() {
                             {tokenState?.botTokenSet && tokenState?.userTokenSet ? 'Both stored' : 'Needs tokens'}
                         </StatusPill>
                     </div>
-                    <form onSubmit={submitTokens} className="space-y-4 p-4">
+                    <form onSubmit={submitTokens} className="space-y-4 p-4 sm:p-5">
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                             <TokenField
                                 id="bot-token"
@@ -659,7 +663,7 @@ export default function DiscordPage() {
                                 {tokenError}
                             </p>
                         ) : null}
-                        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+                        <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-4">
                             <Button type="submit" variant="primary" loading={saveTokens.isPending}>
                                 Save tokens
                             </Button>
@@ -678,18 +682,18 @@ export default function DiscordPage() {
                     </form>
                 </section>
 
-                <section className="overflow-hidden rounded-xl border border-border bg-surface">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+                <section className="overflow-hidden rounded-[28px] border border-border/60 bg-surface">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 px-5 py-4">
                         <div>
-                            <h2 className="text-sm font-semibold text-text">Server access</h2>
-                            <p className="mt-0.5 text-[11px] text-text-muted">
+                            <h2 className="text-base font-semibold tracking-[-0.01em] text-text">Server access</h2>
+                            <p className="mt-0.5 text-xs leading-relaxed text-text-muted">
                                 Choose which roles can start and stop playback in each server.
                             </p>
                         </div>
                     </div>
 
                     {status.isPending ? (
-                        <div className="space-y-3 p-4" aria-hidden="true">
+                        <div className="space-y-3 p-5" aria-hidden="true">
                             {[0, 1, 2].map((index) => (
                                 <Skeleton key={index} className="h-12 w-full" />
                             ))}

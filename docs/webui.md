@@ -68,7 +68,7 @@ Mutations check the `Origin` header. Same-origin requests pass. In non-productio
 
 ### Settings application
 
-`PATCH /api/settings` reloads the playback stream settings, applies the timezone to `process.env.TZ`, and reconfigures the logger level. Discord token changes validate both tokens first, then save and reconnect. Media source changes rebuild that source's provider and proxy.
+`PATCH /api/settings` reloads the playback stream settings, applies the timezone to `process.env.TZ`, and reconfigures the logger level. Discord token changes validate both tokens first, then save and reconnect. Media source changes rebuild that source's provider and proxy. `POST /api/settings/recent-voice-channels` stores up to three recent playback channels in `settings.ui.recentVoiceChannels` for the voice prompt.
 
 ### Discord onboarding
 
@@ -97,7 +97,7 @@ The status payload never contains tokens. `streamerGuildIds` lists the guilds th
 | `POST /api/media/sources/:id/validate` | Re-test the saved connection |
 | `GET /api/media/sources/:id/libraries` | List libraries |
 | `PATCH /api/media/sources/:id/libraries/:key` | Enable or disable a library |
-| `GET /api/media/sources/:id/items` | Browse or search one source |
+| `GET /api/media/sources/:id/items` | Browse or search one source. Library browse accepts `start` and `size` (max 200 per request) and returns `{ items, total, start, size }`. The WebUI walks every page up to 5,000 items, then reveals 60 at a time. |
 | `GET /api/media/items/:sourceId/:itemId` | Item detail with streams |
 | `GET /api/media/items/:sourceId/:itemId/children` | Seasons or episodes |
 | `GET /api/media/thumb/:sourceId/:itemId` | Server-side thumbnail proxy |
@@ -117,18 +117,22 @@ The old `/api/plex/*` and `/api/queue` aliases were removed. The WebUI uses the 
 
 ### WebUI behavior
 
-- The shell uses a 240px sidebar at 1024px and wider, an icon rail from 768px to 1023px, and a drawer below 768px.
+- The shell uses an 80px icon rail from 768px to 1023px, a 240px extended rail at 1024px and wider, and a drawer below 768px. Navigation is grouped into Watch (Dashboard, Media, Channels, IPTV) and System (Discord, Logs, Settings), with a 64px top app bar and a persistent now-playing mini player on desktop and mobile. The mobile mini player is a safe-area bottom bar and reserves body scroll padding so it never covers the last control.
 - When auth is enabled, the shell waits for `/api/auth/session` and redirects unauthenticated visitors to `/login`, preserving the intended path. The login page redirects back after sign-in. When auth is disabled, the login page redirects home.
-- IPTV is one page with two tabs: Sources (`/iptv`) and Guide (`/iptv?tab=guide`). The old `/sources` and `/guide` routes redirect there.
+- Settings uses a sticky Configuration rail on desktop (Streaming, Sources, General, Security) with the active panel beside it. Below 768px the rail hides and the sections stack. Deep links such as `#auth` select Security, and validation jumps to the section with errors.
 - Channels and tables use semantic tables and container queries. Tables stack below 600px.
 - Confirmation dialogs use native `<dialog>` with `showModal()`. There is no manual focus trap and no `role="dialog"`.
 - Media source add, edit, library toggles, and removal are inline on `/media/sources`, not dialogs. The playback voice prompt and destructive playback confirmations still use dialogs.
 - Toasts use `popover="manual"` and dismiss themselves after 6 seconds (10 seconds for errors). The dismiss button removes one immediately. Do not add hover-pause: toasts often appear under the pointer after a bottom-right action, which would keep them on screen. Inline errors are used for forms.
+- The queue is closed by default. Below 1280px it opens as a native right sheet with focus containment, Escape dismissal, and focus return to the Queue button. At 1280px and wider it is a sticky column beside the library.
 - The queue uses move up and move down buttons for keyboard access; drag is an enhancement. Clear removes queued, played, and failed rows but keeps the active playback row.
 - The queue panel always shows Autoplay next episode and Skip intros switches. Both write `settings.playback`. While media is playing it also shows a subtitle picker that posts to `/api/media/playback/subtitle`. The Dashboard playback card shows the same picker.
 - The media progress bar is a seek control. Dragging it restarts the provider transcode at the chosen offset through `POST /api/playback/seek`.
 - An episode detail page links its series name, and the breadcrumb links the show, to the show view. The link works when the item was opened from history and has no show key in the URL.
+- A season detail page has a Play this season action beside the poster. It uses the same voice channel prompt as Play now, queues the whole season through `POST /api/media/queue/season`, then starts episode 1. The remaining episodes stay queued in provider order.
+- The playback voice prompt shows up to three recently selected channels under Last selected and preselects the most recent one. Starting playback saves the channel through `POST /api/settings/recent-voice-channels`; duplicates are removed and the list is capped at three.
 - The Media page selects a source with a tab strip, not a dropdown. The first tab is selected by default. Drag a tab to reorder it, use the arrow buttons beside the tabs, or focus a tab and press Alt plus Left or Right Arrow. The order is stored in `settings.ui.mediaSourceOrder`.
+- The library grid reveals 60 items at a time with Load more. The client walks the paginated items endpoint up to 5,000 items, so a large library is not silently truncated at the old 200-item page cap. Provider search is still limited by the adapter search cap.
 - `/media/sources` is the Plex and Jellyfin management page. Add, edit, test, remove, and enable libraries inline. Source forms and library toggles are page sections, not dialogs. The Media nav item stays active there.
 - `/plex` redirects to `/media/sources`.
 - The Dashboard shows a Continue watching card when resumable media exists. Each row links to `/media?source=<id>&item=<id>&play=1`; the media page opens that item and the voice channel prompt automatically.
@@ -143,6 +147,7 @@ The old `/api/plex/*` and `/api/queue` aliases were removed. The WebUI uses the 
 - **Token fields are write-only:** A missing token field keeps the current token. An empty string clears it. Never return decrypted values from a route.
 - **Static path:** Express serves `web/dist` relative to `process.cwd()`. The Docker image copies it to `/app/web/dist`. In development, Vite serves the app and proxies `/api`.
 - **SPA fallback:** The fallback only handles GET requests outside `/api`. Missing builds return a 404 with the build command.
+- **Media items page:** `GET /api/media/sources/:id/items` returns `{ items, total, start, size }`. The 200 value is a per-request page size, not a library cap. The WebUI also accepts the legacy bare array while an older server is running. Do not reintroduce a total-item cap.
 - **Test mode:** `--test-mode` skips Discord login, IPTV refresh, and media validation. Playwright uses it. It does not fake playback.
 - **CSP:** Helmet allows same-origin scripts and styles, data/blob images, and same-origin connections. A new external image or font host needs a CSP change.
 - **Redaction:** Do not log full source, transcode, or media URLs. Use `redactSecrets`.

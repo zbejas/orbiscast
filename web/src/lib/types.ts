@@ -64,6 +64,13 @@ export interface EnqueueInput {
     subtitleMode: SubtitleMode;
 }
 
+export interface EnqueueSeasonInput {
+    sourceId: number;
+    seasonId: string;
+    quality: MediaQuality;
+    subtitleMode: SubtitleMode;
+}
+
 export interface StartMediaInput {
     sourceId: number;
     itemId: string;

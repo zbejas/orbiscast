@@ -41,47 +41,65 @@ const TONE_ICON = {
 } as const;
 
 const TONE_CLASS: Record<ToastTone, string> = {
-    info: 'text-blurple-text',
-    success: 'text-blurple-text',
-    error: 'text-danger',
+    info: 'text-inverse-primary',
+    success: 'text-inverse-primary',
+    error: 'text-danger-strong',
 };
 
 /** Milliseconds before a toast dismisses itself. Errors stay longer. */
 const TOAST_LIFETIME_MS = 6_000;
 const TOAST_LIFETIME_ERROR_MS = 10_000;
+/** Matches the snackbar exit transition. */
+const TOAST_EXIT_MS = 180;
 
 function ToastItem({ toast, onDismiss }: { toast: ToastRecord; onDismiss: (id: number) => void }) {
     const tone = toast.tone ?? 'info';
     const ToneIcon = TONE_ICON[tone];
+    const [closing, setClosing] = useState(false);
+    const closingRef = useRef(false);
+    const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const requestDismiss = useCallback(() => {
+        if (closingRef.current) return;
+        closingRef.current = true;
+        setClosing(true);
+        exitTimerRef.current = setTimeout(() => onDismiss(toast.id), TOAST_EXIT_MS);
+    }, [onDismiss, toast.id]);
 
     useEffect(() => {
         const timer = setTimeout(
-            () => onDismiss(toast.id),
+            requestDismiss,
             tone === 'error' ? TOAST_LIFETIME_ERROR_MS : TOAST_LIFETIME_MS
         );
         return () => clearTimeout(timer);
-    }, [onDismiss, toast.id, tone]);
+    }, [requestDismiss, tone]);
+
+    useEffect(
+        () => () => {
+            if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+        },
+        []
+    );
 
     return (
-        <div className="oc-toast flex items-start gap-3">
+        <div
+            className="oc-toast flex items-start gap-3"
+            data-state={closing ? 'closing' : 'open'}
+        >
             <ToneIcon
-                size={17}
+                size={18}
                 aria-hidden="true"
                 className={`mt-0.5 shrink-0 ${TONE_CLASS[tone]}`}
             />
             <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium leading-5 text-text">{toast.title}</p>
-                {toast.description ? (
-                    <p className="mt-1 text-xs leading-relaxed text-text-muted">
-                        {toast.description}
-                    </p>
-                ) : null}
+                <p className="oc-toast-title">{toast.title}</p>
+                {toast.description ? <p className="oc-toast-body mt-0.5">{toast.description}</p> : null}
             </div>
             <IconButton
                 label="Dismiss notification"
                 size="sm"
-                className="-mr-1 -mt-1"
-                onClick={() => onDismiss(toast.id)}
+                className="oc-toast-close -mr-1 -mt-1"
+                onClick={requestDismiss}
             >
                 <X size={14} aria-hidden="true" />
             </IconButton>

@@ -141,7 +141,7 @@ export function Poster({ title, seed, src, className, showTitle = true }: Poster
                 ) : null}
             </svg>
             )}
-            <div className="oc-poster-scrim" />
+            {showTitle ? <div className="oc-poster-scrim" /> : null}
             {showTitle ? (
                 <div className="oc-poster-meta">
                     <span className="oc-poster-title">{title}</span>

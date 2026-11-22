@@ -91,7 +91,7 @@ export function GuidePanel() {
     return (
         <>
             <div className="space-y-4">
-                <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+                <section className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-border/60 bg-surface px-3 py-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                         <button
                             type="button"
@@ -140,7 +140,7 @@ export function GuidePanel() {
                 </section>
 
                 {guide.isPending ? (
-                    <div className="space-y-3 rounded-xl border border-border bg-surface p-4" aria-hidden="true">
+                    <div className="space-y-3 rounded-[28px] border border-border/60 bg-surface p-4" aria-hidden="true">
                         <Skeleton className="h-6 w-48" />
                         <Skeleton className="h-10 w-full" />
                         {[0, 1, 2, 3, 4].map((index) => (
@@ -148,7 +148,7 @@ export function GuidePanel() {
                         ))}
                     </div>
                 ) : guide.isError ? (
-                    <section className="rounded-xl border border-border bg-surface">
+                    <section className="rounded-[28px] border border-border/60 bg-surface">
                         <ErrorState
                             title="The guide could not load"
                             message={errorMessage(guide.error)}
@@ -156,7 +156,7 @@ export function GuidePanel() {
                         />
                     </section>
                 ) : channels.length === 0 ? (
-                    <section className="rounded-xl border border-border bg-surface">
+                    <section className="rounded-[28px] border border-border/60 bg-surface">
                         <EmptyState
                             icon={Tv}
                             title="No visible channels"
@@ -169,7 +169,7 @@ export function GuidePanel() {
                         />
                     </section>
                 ) : (guide.data?.programmes.length ?? 0) === 0 ? (
-                    <section className="rounded-xl border border-border bg-surface">
+                    <section className="rounded-[28px] border border-border/60 bg-surface">
                         <EmptyState
                             icon={CalendarDays}
                             title="No guide data for this day"
@@ -183,7 +183,7 @@ export function GuidePanel() {
                     </section>
                 ) : (
                     <>
-                        <section className="overflow-hidden rounded-xl border border-border bg-surface md:hidden">
+                        <section className="overflow-hidden rounded-[28px] border border-border/60 bg-surface md:hidden">
                             <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
                                 <h2 className="text-sm font-semibold text-text">Now and next</h2>
                                 <span className="text-[11px] text-text-muted">{channels.length} channels</span>
@@ -241,13 +241,13 @@ export function GuidePanel() {
                                             )}
                                             {next ? (
                                                 <div className="mt-1.5 flex items-center gap-2 px-2.5 py-1">
-                                                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+                                                    <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
                                                         Next
                                                     </span>
                                                     <span className="min-w-0 flex-1 truncate text-xs text-text-muted">
                                                         {next.title}
                                                     </span>
-                                                    <span className="shrink-0 font-mono text-[10px] text-text-faint">
+                                                    <span className="shrink-0 font-mono text-[11px] text-text-faint">
                                                         {formatTime(next.start)}
                                                     </span>
                                                 </div>
@@ -258,7 +258,7 @@ export function GuidePanel() {
                             </ul>
                         </section>
 
-                        <section className="hidden overflow-hidden rounded-xl border border-border bg-surface md:block">
+                        <section className="hidden overflow-hidden rounded-[28px] border border-border/60 bg-surface md:block">
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
                                 <div className="flex items-center gap-2">
                                     <h2 className="text-sm font-semibold text-text">Timeline</h2>
@@ -275,7 +275,7 @@ export function GuidePanel() {
                             <div className="oc-epg-scroll">
                                 <div className="oc-epg-scroller relative">
                                     <div className="oc-epg-head grid grid-cols-[10rem_minmax(0,1fr)]">
-                                        <div className="oc-epg-channel flex h-10 items-center px-3 text-[10px] font-semibold uppercase tracking-[0.07em] text-text-muted">
+                                        <div className="oc-epg-channel flex h-10 items-center px-3 text-[11px] font-semibold uppercase tracking-[0.07em] text-text-muted">
                                             Channel
                                         </div>
                                         <div className="relative h-10">
@@ -283,7 +283,7 @@ export function GuidePanel() {
                                                 {HOURS.map((hour) => (
                                                     <div
                                                         key={hour}
-                                                        className="border-l border-border/60 pl-1.5 pt-2 font-mono text-[10px] tabular-nums text-text-faint first:border-l-0"
+                                                        className="border-l border-border/60 pl-1.5 pt-2 font-mono text-[11px] tabular-nums text-text-faint first:border-l-0"
                                                     >
                                                         {String(hour).padStart(2, '0')}:00
                                                     </div>
@@ -305,7 +305,7 @@ export function GuidePanel() {
                                                         <p className="truncate text-xs font-medium text-text">
                                                             {channel.name}
                                                         </p>
-                                                        <p className="truncate text-[10px] text-text-muted">
+                                                        <p className="truncate text-[11px] text-text-muted">
                                                             {channel.group ?? 'Ungrouped'}
                                                         </p>
                                                     </div>
@@ -354,7 +354,7 @@ export function GuidePanel() {
                                                                     {programme.title}
                                                                 </span>
                                                                 {short ? null : (
-                                                                    <span className="block truncate font-mono text-[10px] tabular-nums text-text-muted">
+                                                                    <span className="block truncate font-mono text-[11px] tabular-nums text-text-muted">
                                                                         {formatTimeRange(
                                                                             programme.start,
                                                                             programme.stop
@@ -378,7 +378,7 @@ export function GuidePanel() {
                                                 className="oc-epg-now"
                                                 style={{ left: `${nowRatio * 100}%` }}
                                             >
-                                                <span className="absolute left-1/2 top-1 -translate-x-1/2 rounded-full bg-blurple px-1.5 py-0.5 text-[9px] font-semibold uppercase leading-none tracking-[0.06em] text-white">
+                                                <span className="absolute left-1/2 top-1 -translate-x-1/2 rounded-full bg-blurple px-1.5 py-0.5 text-[11px] font-semibold uppercase leading-none tracking-[0.06em] text-white">
                                                     Now
                                                 </span>
                                             </div>

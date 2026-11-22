@@ -1,0 +1,272 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-23T00:00:00.000Z",
+  "title": "Design System: OrbisCast",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Orbital Blurple",
+        "canonical": "#5865f2",
+        "tonalRamp": ["#101233", "#1c2050", "#262b6b", "#323a8a", "#414aa8", "#515cc9", "#6570e6", "#8a93f2", "#b8bfff"]
+      },
+      "primary-container": {
+        "role": "primary",
+        "displayName": "Blurple Container",
+        "canonical": "#2b2f63",
+        "tonalRamp": ["#101233", "#1c2050", "#262b6b", "#323a8a", "#414aa8", "#515cc9", "#6570e6", "#8a93f2", "#b8bfff"]
+      },
+      "tertiary": {
+        "role": "tertiary",
+        "displayName": "Signal Amber",
+        "canonical": "#f2b544",
+        "tonalRamp": ["#2a1c03", "#3f2e00", "#5b4210", "#7c5b16", "#9d7418", "#bf8e1f", "#e0aa32", "#f2b544", "#ffd98f"]
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Deep Orbit",
+        "canonical": "#0b0911",
+        "tonalRamp": ["#0b0911", "#120f1a", "#191522", "#241e31", "#2a2438", "#302942", "#3a324d", "#453b59", "#554b63"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Console Plum",
+        "canonical": "#241e31",
+        "tonalRamp": ["#0b0911", "#120f1a", "#191522", "#241e31", "#2a2438", "#302942", "#3a324d", "#453b59", "#554b63"]
+      },
+      "on-surface": {
+        "role": "neutral",
+        "displayName": "Starlight",
+        "canonical": "#ebe4f5",
+        "tonalRamp": ["#2a2438", "#3a324d", "#554b63", "#7d7190", "#a79db5", "#b9b0c6", "#d3cade", "#ebe4f5", "#faf6ff"]
+      },
+      "live": {
+        "role": "semantic",
+        "displayName": "Live Green",
+        "canonical": "#4ade80",
+        "tonalRamp": ["#062012", "#0b3220", "#12452c", "#1a5b3a", "#227349", "#2e8f5a", "#3bb06d", "#4ade80", "#a7f3c6"]
+      },
+      "danger-strong": {
+        "role": "semantic",
+        "displayName": "Warning Rose",
+        "canonical": "#c7352d",
+        "tonalRamp": ["#2b0b0a", "#45100e", "#601713", "#7d1f1a", "#9c2821", "#b8312a", "#c7352d", "#ef746c", "#ffdad6"]
+      },
+      "scrim": {
+        "role": "neutral",
+        "displayName": "Scrim",
+        "canonical": "#040309",
+        "tonalRamp": ["#040309", "#0b0911", "#120f1a", "#191522", "#241e31", "#2a2438", "#302942", "#3a324d", "#453b59"]
+      },
+      "poster-ink": {
+        "role": "neutral",
+        "displayName": "Poster Ink",
+        "canonical": "#f4f1e8",
+        "tonalRamp": ["#2a2520", "#4a4238", "#6b6050", "#8d806a", "#ad9f86", "#c9bca5", "#e0d5c1", "#f4f1e8", "#fffdf6"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Console Display",
+        "purpose": "One anchor moment per screen, such as the idle playback hero and the login statement."
+      },
+      "title": {
+        "displayName": "Console Title",
+        "purpose": "Page titles in the app bar and the active media shelf heading."
+      },
+      "body": {
+        "displayName": "Console Body",
+        "purpose": "Descriptions, hints, and any prose longer than a line."
+      },
+      "body-small": {
+        "displayName": "Console Body Small",
+        "purpose": "Table cells, log rows, and snackbar titles."
+      },
+      "title-small": {
+        "displayName": "Console Title Small",
+        "purpose": "Empty-state and confirmation headings inside a panel."
+      },
+      "label": {
+        "displayName": "Console Label",
+        "purpose": "Controls, chips, navigation groups, and field labels."
+      },
+      "meta": {
+        "displayName": "Console Meta",
+        "purpose": "Counts, timestamps, bitrates, and identifiers. Always tabular."
+      }
+    },
+    "shadows": [
+      {
+        "name": "e1",
+        "value": "0 1px 2px rgb(0 0 0 / 0.32), 0 1px 3px 1px rgb(0 0 0 / 0.16)",
+        "purpose": "Primary buttons, table rows, and small raised controls."
+      },
+      {
+        "name": "e2",
+        "value": "0 2px 6px 2px rgb(0 0 0 / 0.24), 0 1px 2px rgb(0 0 0 / 0.3)",
+        "purpose": "Sticky surfaces and raised panels."
+      },
+      {
+        "name": "e3",
+        "value": "0 8px 24px 4px rgb(0 0 0 / 0.34), 0 2px 6px rgb(0 0 0 / 0.28)",
+        "purpose": "The mobile mini player and floating action surfaces."
+      },
+      {
+        "name": "e4",
+        "value": "0 18px 52px 6px rgb(0 0 0 / 0.42), 0 4px 14px rgb(0 0 0 / 0.3)",
+        "purpose": "Dialogs, sheets, and snackbars."
+      },
+      {
+        "name": "poster-title",
+        "value": "0 1px 6px rgb(0 0 0 / 0.6)",
+        "purpose": "Text shadow that keeps the 11px poster title readable over bright artwork. Not an elevation."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "Default easing for state transitions, hover, and focus."
+      },
+      {
+        "name": "ease-emphasized",
+        "value": "cubic-bezier(0.05, 0.7, 0.1, 1)",
+        "purpose": "Entering overlays and expanding surfaces."
+      },
+      {
+        "name": "dur-short",
+        "value": "150ms",
+        "purpose": "Color, border, and opacity state changes."
+      },
+      {
+        "name": "dur-medium",
+        "value": "220ms",
+        "purpose": "Tabs, chips, and small spatial moves."
+      },
+      {
+        "name": "dur-long",
+        "value": "360ms",
+        "purpose": "Dialog and sheet entry. Exit runs at 160ms."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1600px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one affirmative action per region: play, save, sign in, refresh.",
+      "html": "<button class=\"ds-btn-primary\">Start playback</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: #5865f2; color: #ffffff; font: 500 12px/1.35 system-ui, sans-serif; letter-spacing: 0.012em; box-shadow: 0 1px 2px rgb(0 0 0 / 0.32), 0 1px 3px 1px rgb(0 0 0 / 0.16); transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1), box-shadow 150ms cubic-bezier(0.2, 0, 0, 1); cursor: pointer; } .ds-btn-primary:hover { background: #4752c4; } .ds-btn-primary:active { background: #3d47ad; box-shadow: none; } .ds-btn-primary:focus-visible { outline: 2px solid #6d78ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Supporting actions that sit beside a primary action without competing.",
+      "html": "<button class=\"ds-btn-secondary\">Manage sources</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border: 1px solid #554b63; border-radius: 999px; background: transparent; color: #ebe4f5; font: 500 12px/1.35 system-ui, sans-serif; letter-spacing: 0.012em; transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1), border-color 150ms cubic-bezier(0.2, 0, 0, 1); cursor: pointer; } .ds-btn-secondary:hover { background: rgb(88 101 242 / 0.12); border-color: #7d7190; } .ds-btn-secondary:focus-visible { outline: 2px solid #6d78ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Confirmed destructive actions such as stopping a stream or deleting a source.",
+      "html": "<button class=\"ds-btn-danger\">Stop stream</button>",
+      "css": ".ds-btn-danger { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: #c7352d; color: #ffffff; font: 500 12px/1.35 system-ui, sans-serif; letter-spacing: 0.012em; transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1); cursor: pointer; } .ds-btn-danger:hover { background: #a52a23; } .ds-btn-danger:focus-visible { outline: 2px solid #ef746c; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Single-line input for credentials, URLs, and filters. 44px tall with a visible control boundary.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Source URL</span><input class=\"ds-input\" placeholder=\"https://example.com/playlist.m3u\" /></label>",
+      "css": ".ds-field { display: grid; gap: 6px; } .ds-field-label { color: #b9b0c6; font: 500 12px/1.35 system-ui, sans-serif; letter-spacing: 0.012em; } .ds-input { height: 44px; padding: 0 14px; border: 1px solid #7d7190; border-radius: 16px; background: #2a2438; color: #ebe4f5; font: 400 15px/1.5 system-ui, sans-serif; transition: border-color 150ms cubic-bezier(0.2, 0, 0, 1), box-shadow 150ms cubic-bezier(0.2, 0, 0, 1); } .ds-input::placeholder { color: #a79db5; } .ds-input:hover { border-color: #b9b0c6; } .ds-input:focus-visible { outline: none; border-color: #5865f2; box-shadow: 0 0 0 3px rgb(88 101 242 / 0.28); }"
+    },
+    {
+      "name": "Navigation Item",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Active rail destination: a full-round primary-container pill with an on-primary-container label.",
+      "html": "<a class=\"ds-nav-item\" href=\"#\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"3\"/><path d=\"M8 4v16M3 9h5\"/></svg><span>Media</span></a>",
+      "css": ".ds-nav-item { display: inline-flex; align-items: center; gap: 12px; height: 48px; padding: 0 16px; border-radius: 999px; background: #2b2f63; color: #dfe1ff; font: 500 12px/1.35 system-ui, sans-serif; letter-spacing: 0.012em; text-decoration: none; transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1); } .ds-nav-item:hover { background: #343a78; } .ds-nav-item:focus-visible { outline: 2px solid #6d78ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Assist Chip",
+      "kind": "chip",
+      "refersTo": "assist-chip",
+      "description": "Status and filter chips. Always carry a text label; color is reinforcement.",
+      "html": "<span class=\"ds-chip\"><span class=\"ds-chip-dot\"></span>Connected</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid #3d3549; border-radius: 999px; background: #3a324d; color: #b9b0c6; font: 500 12px/1.35 system-ui, sans-serif; letter-spacing: 0.012em; } .ds-chip-dot { width: 6px; height: 6px; border-radius: 999px; background: #4ade80; }"
+    },
+    {
+      "name": "Feature Card",
+      "kind": "card",
+      "refersTo": "feature-card",
+      "description": "The 28px tonal container that anchors a page section. Flat at rest, no nested card.",
+      "html": "<section class=\"ds-feature-card\"><h2 class=\"ds-feature-title\">Playback</h2><p class=\"ds-feature-body\">One streamer account, one voice channel, one live anchor.</p></section>",
+      "css": ".ds-feature-card { padding: 20px; border-radius: 28px; background: #241e31; } .ds-feature-title { margin: 0 0 6px; color: #ebe4f5; font: 600 24px/1.25 system-ui, sans-serif; letter-spacing: -0.02em; } .ds-feature-body { margin: 0; color: #b9b0c6; font: 400 15px/1.5 system-ui, sans-serif; }"
+    },
+    {
+      "name": "Media Card",
+      "kind": "card",
+      "refersTo": "media-card",
+      "description": "A 2:3 poster tile with the title outside the art. Hover and focus reveal the Open pill.",
+      "html": "<button class=\"ds-media-card\"><span class=\"ds-media-poster\"><img class=\"ds-media-img\" alt=\"\" src=\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='300'><rect width='200' height='300' fill='%23302942'/><circle cx='100' cy='130' r='34' fill='%235865f2'/><rect x='40' y='210' width='120' height='14' rx='7' fill='%237d7190'/></svg>\" /><span class=\"ds-media-open\">Open</span></span><span class=\"ds-media-title\">The Orbital Series</span><span class=\"ds-media-meta\">2026 · Series</span></button>",
+      "css": ".ds-media-card { display: grid; gap: 8px; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; } .ds-media-poster { position: relative; display: block; overflow: hidden; aspect-ratio: 2 / 3; border-radius: 20px; background: #302942; } .ds-media-img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 220ms cubic-bezier(0.2, 0, 0, 1); } .ds-media-title { color: #ebe4f5; font: 600 13px/1.3 system-ui, sans-serif; } .ds-media-meta { color: #b9b0c6; font: 500 11px/1.4 system-ui, sans-serif; font-variant-numeric: tabular-nums; } .ds-media-open { position: absolute; inset-inline: 8px; inset-block-end: 8px; display: inline-flex; justify-content: center; padding: 6px 10px; border-radius: 999px; background: rgb(11 9 17 / 0.8); color: #ebe4f5; font: 500 11px/1.4 system-ui, sans-serif; opacity: 0; transition: opacity 150ms cubic-bezier(0.2, 0, 0, 1); } .ds-media-card:hover .ds-media-img, .ds-media-card:focus-visible .ds-media-img { transform: scale(1.03); } .ds-media-card:hover .ds-media-open, .ds-media-card:focus-visible .ds-media-open { opacity: 1; } .ds-media-card:focus-visible { outline: 2px solid #6d78ff; outline-offset: 3px; border-radius: 20px; }"
+    },
+    {
+      "name": "Dialog",
+      "kind": "custom",
+      "refersTo": "dialog",
+      "description": "Modal surface for focused tasks and destructive confirmation. 28px radius, e4 shadow.",
+      "html": "<div class=\"ds-dialog\" role=\"dialog\" aria-modal=\"true\"><h2 class=\"ds-dialog-title\">Remove source</h2><p class=\"ds-dialog-body\">This deletes its libraries, queue entries, and saved positions.</p><div class=\"ds-dialog-actions\"><button class=\"ds-btn-secondary\">Cancel</button><button class=\"ds-btn-danger\">Remove</button></div></div>",
+      "css": ".ds-dialog { width: min(34rem, calc(100vw - 24px)); padding: 20px; border: 1px solid #4a4159; border-radius: 28px; background: #3a324d; color: #ebe4f5; box-shadow: 0 18px 52px 6px rgb(0 0 0 / 0.42), 0 4px 14px rgb(0 0 0 / 0.3); } .ds-dialog-title { margin: 0 0 8px; font: 600 24px/1.25 system-ui, sans-serif; letter-spacing: -0.02em; } .ds-dialog-body { margin: 0 0 20px; color: #b9b0c6; font: 400 15px/1.5 system-ui, sans-serif; } .ds-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; } .ds-dialog-actions .ds-btn-secondary { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border: 1px solid #554b63; border-radius: 999px; background: transparent; color: #ebe4f5; font: 500 12px/1.35 system-ui, sans-serif; cursor: pointer; } .ds-dialog-actions .ds-btn-danger { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: #c7352d; color: #ffffff; font: 500 12px/1.35 system-ui, sans-serif; cursor: pointer; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Orbital Console",
+    "overview": "OrbisCast is a dark, tonal control room for one streamer. The interface treats IPTV curation, on-demand media, and Discord voice as one continuous orbit: a quiet console around a single live playback anchor. Material 3 Expressive supplies the tonal roles, shape scale, state layers, and motion grammar. The product supplies the restraint. This is not a dashboard of equal cards. It is a console with a clear center of gravity.\n\nThe surface is built for repeated operation at a desk, with a tablet nearby and a phone in hand. Density matters, but so does the ability to see what is live, what is queued, and what needs attention without reading every label. Blurple marks action and selection. Amber is reserved for on-demand media. Green means live IPTV. Red means failure. The rest is a plum-tinted neutral field.",
+    "keyCharacteristics": [
+      "Tonal plum surfaces instead of flat panels, with one clear step between page and card.",
+      "One blurple signal for primary action, selection, and focus.",
+      "Amber reserved for Plex and Jellyfin states, progress, and the Continue watching shelf.",
+      "Full-round controls, 28px feature containers, 20px media tiles, and 16px fields.",
+      "Dense tables and media grids inside calm, generously padded surfaces.",
+      "Motion explains state and continuity. It never performs a page-load sequence."
+    ],
+    "rules": [
+      { "name": "The One Signal Rule", "body": "Blurple is for action and selection. Amber is for on-demand media. Never use both on the same element.", "section": "colors" },
+      { "name": "The Tonal Before Border Rule", "body": "Separate surfaces with a tonal step first. Outlines belong to fields, tables, and focus, not to every card.", "section": "colors" },
+      { "name": "The Amber Reservation Rule", "body": "Amber appears only when media is on demand, paused, queued, or resumable. Live IPTV uses green.", "section": "colors" },
+      { "name": "The 11px Floor Rule", "body": "Real metadata never goes below 11px. The poster title sits exactly on that floor; nothing in the chrome is smaller.", "section": "typography" },
+      { "name": "The Tabular Data Rule", "body": "Counts, timecodes, bitrates, and log lines use tabular numerals. Code and IDs use the mono stack.", "section": "typography" },
+      { "name": "The No Display Face Rule", "body": "An operating console does not need a display font. The system UI is the voice.", "section": "typography" },
+      { "name": "The Single Anchor Rule", "body": "Each page has one dominant object: live playback on Dashboard, the media shelf on Media, the curation table on Channels. Everything else supports that object.", "section": "layout" },
+      { "name": "The No Nested Card Rule", "body": "A card inside a card needs a real state boundary. Otherwise use a row, a divider, or a tonal inset.", "section": "layout" },
+      { "name": "The Flat Console Rule", "body": "Cards are flat at rest. Shadows appear for overlays, sticky surfaces, and raised controls. No glass, no colored halos, no hard offset shadows.", "section": "elevation" },
+      { "name": "The Soft Container Rule", "body": "Large surfaces use 28px corners. Only controls and dense table rows use smaller radii. Never place a 28px card inside another 28px card.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do keep the page ground and card surface on separate tonal steps.",
+      "Do use the primary container for the active navigation pill and selected tabs.",
+      "Do reserve amber for on-demand media, progress, and the media queue.",
+      "Do keep real metadata at 11px or larger and use tabular numerals for counts.",
+      "Do use the shared button, field, chip, dialog, sheet, and table components."
+    ],
+    "donts": [
+      "Don't add glass, backdrop blur, gradient text, or colored halos.",
+      "Don't nest a 28px card inside another 28px card without a state boundary.",
+      "Don't use amber for live IPTV or general actions.",
+      "Don't rely on color alone for status. Keep the text label.",
+      "Don't add page-load choreography or animate layout properties."
+    ]
+  }
+}

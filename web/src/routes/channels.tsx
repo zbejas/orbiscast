@@ -18,6 +18,7 @@ import {
     Checkbox,
     EmptyState,
     Field,
+    IconButton,
     Input,
     PageHeader,
     Select,
@@ -210,30 +211,35 @@ export default function ChannelsPage() {
         },
         {
             key: 'visible',
-            header: 'Visible',
+            header: 'Visibility',
             cell: (channel) => (
-                <Switch
-                    aria-label={`Show ${channel.name} in the channel list`}
-                    checked={channel.visible}
-                    disabled={setVisible.isPending && setVisible.variables?.id === channel.id}
-                    onChange={(event) => {
-                        const visible = event.target.checked;
-                        setVisible.mutate(
-                            { id: channel.id, visible },
-                            {
-                                onError: (error) =>
-                                    toast({
-                                        title: 'Visibility did not change',
-                                        description: errorMessage(error),
-                                        tone: 'error',
-                                    }),
-                            }
-                        );
-                    }}
-                />
+                <div className="flex items-center justify-end gap-2">
+                    <StatusPill tone={channel.visible ? 'live' : 'neutral'} dot={false}>
+                        {channel.visible ? 'Shown' : 'Hidden'}
+                    </StatusPill>
+                    <Switch
+                        aria-label={`Show ${channel.name} in the channel list`}
+                        checked={channel.visible}
+                        disabled={setVisible.isPending && setVisible.variables?.id === channel.id}
+                        onChange={(event) => {
+                            const visible = event.target.checked;
+                            setVisible.mutate(
+                                { id: channel.id, visible },
+                                {
+                                    onError: (error) =>
+                                        toast({
+                                            title: 'Visibility did not change',
+                                            description: errorMessage(error),
+                                            tone: 'error',
+                                        }),
+                                }
+                            );
+                        }}
+                    />
+                </div>
             ),
-            className: 'w-24',
-            headerClassName: 'w-24',
+            className: 'w-32',
+            headerClassName: 'w-32',
         },
     ];
 
@@ -251,7 +257,11 @@ export default function ChannelsPage() {
                 title="Channels"
                 meta={
                     channels.data
-                        ? `${formatCount(channels.data.visibleTotal)} visible of ${formatCount(channels.data.totalAll)}`
+                        ? `${formatCount(channels.data.visibleTotal)} visible of ${formatCount(channels.data.totalAll)} IPTV channels${
+                              mediaList.length > 0
+                                  ? ` · ${formatCount(mediaList.length)} on-demand`
+                                  : ''
+                          }`
                         : 'Curate what the bot exposes'
                 }
                 actions={
@@ -262,46 +272,50 @@ export default function ChannelsPage() {
                     </span>
                 }
             />
-            <div className="oc-page-enter mx-auto w-full max-w-[1600px] space-y-4 p-3 sm:p-5 xl:p-6">
-                {mediaList.map((channel) => (
-                    <section
-                        key={`media-${channel.sourceId}`}
-                        className="rounded-xl border border-plex/25 bg-plex/[0.045]"
-                    >
-                        <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-                            <div className="flex aspect-[2/3] w-10 shrink-0 items-center justify-center rounded-md border border-plex/30 bg-plex/10">
-                                <Film size={18} aria-hidden="true" className="text-plex" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <p className="text-sm font-semibold text-text">{channel.name}</p>
-                                    <StatusPill tone="plex" dot={false}>
-                                        {channel.kind === 'jellyfin' ? 'Jellyfin' : 'Plex'}
-                                    </StatusPill>
-                                    <span className="inline-flex items-center gap-1 text-[11px] text-text-muted">
-                                        <Pin size={11} aria-hidden="true" />
-                                        Pinned
-                                    </span>
+            <div className="mx-auto w-full max-w-[1600px] space-y-5 p-3 sm:p-5 xl:p-6">
+                {mediaList.length > 0 ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                        {mediaList.map((channel) => (
+                            <section
+                                key={`media-${channel.sourceId}`}
+                                className="rounded-[28px] border border-plex/25 bg-plex/[0.05]"
+                            >
+                                <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+                                    <div className="flex aspect-[2/3] w-11 shrink-0 items-center justify-center rounded-[16px] border border-plex/30 bg-plex/10">
+                                        <Film size={19} aria-hidden="true" className="text-plex" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <p className="text-base font-semibold text-text">{channel.name}</p>
+                                            <StatusPill tone="plex" dot={false}>
+                                                {channel.kind === 'jellyfin' ? 'Jellyfin' : 'Plex'}
+                                            </StatusPill>
+                                            <span className="inline-flex min-h-6 items-center gap-1 rounded-full border border-border/60 bg-raised/50 px-2 text-[11px] font-medium text-text-muted">
+                                                <Pin size={11} aria-hidden="true" />
+                                                Pinned
+                                            </span>
+                                        </div>
+                                        <p className="mt-1 text-xs leading-4 text-text-muted">
+                                            On-demand channel · {mediaState(channel.sourceId ?? 0)}
+                                        </p>
+                                    </div>
+                                    <div className="flex w-full items-center justify-end gap-2 xl:w-auto">
+                                        <span className="hidden text-[11px] text-text-muted sm:inline">Always visible</span>
+                                        <Link
+                                            to={`/media?source=${channel.sourceId ?? ''}`}
+                                            className={buttonStyles({ variant: 'secondary', size: 'sm' })}
+                                        >
+                                            <Film size={14} aria-hidden="true" />
+                                            Open media
+                                        </Link>
+                                    </div>
                                 </div>
-                                <p className="mt-0.5 truncate text-xs text-text-muted">
-                                    On-demand channel · {mediaState(channel.sourceId ?? 0)}
-                                </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="hidden text-[11px] text-text-muted sm:inline">Always visible</span>
-                                <Link
-                                    to={`/media?source=${channel.sourceId ?? ''}`}
-                                    className={buttonStyles({ variant: 'secondary', size: 'sm' })}
-                                >
-                                    <Film size={14} aria-hidden="true" />
-                                    Open media
-                                </Link>
-                            </div>
-                        </div>
-                    </section>
-                ))}
+                            </section>
+                        ))}
+                    </div>
+                ) : null}
 
-                <section className="rounded-xl border border-border bg-surface p-3">
+                <section className="rounded-[28px] border border-border/60 bg-surface p-4">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_repeat(3,minmax(0,1fr))_auto]">
                         <div className="sm:col-span-2 xl:col-span-1">
                             <Field label="Search channels" htmlFor="channel-search">
@@ -359,27 +373,46 @@ export default function ChannelsPage() {
                                 ))}
                             </Select>
                         </Field>
-                        <Field label="Visibility" htmlFor="channel-visibility">
-                            <Select
-                                id="channel-visibility"
-                                value={visibility}
-                                onChange={(event) => {
-                                    setVisibility(event.target.value as ChannelVisibilityFilter);
-                                    setPage(1);
-                                }}
-                            >
-                                <option value="all">All channels</option>
-                                <option value="visible">Visible only</option>
-                                <option value="hidden">Hidden only</option>
-                            </Select>
-                        </Field>
+                        <fieldset className="min-w-0">
+                            <legend className="mb-1.5 text-xs font-medium text-text-muted">Visibility</legend>
+                            <div className="inline-flex min-h-11 w-full items-center gap-1 rounded-full border border-border/60 bg-bg/50 p-1">
+                                {(
+                                    [
+                                        { value: 'all', label: 'All' },
+                                        { value: 'visible', label: 'Shown' },
+                                        { value: 'hidden', label: 'Hidden' },
+                                    ] as const
+                                ).map((option) => {
+                                    const selected = visibility === option.value;
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            aria-pressed={selected}
+                                            onClick={() => {
+                                                setVisibility(option.value);
+                                                setPage(1);
+                                            }}
+                                            className={cn(
+                                                'oc-control inline-flex min-h-10 flex-1 items-center justify-center rounded-full px-3 text-xs font-medium transition-[background-color,color,box-shadow] duration-200',
+                                                selected
+                                                    ? 'bg-blurple/15 text-text ring-1 ring-inset ring-blurple/25'
+                                                    : 'text-text-muted hover:bg-white/[0.05] hover:text-text'
+                                            )}
+                                        >
+                                            {option.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </fieldset>
                         <div className="flex items-end">
                             <button
                                 type="button"
                                 onClick={clearFilters}
                                 disabled={!hasFilters}
                                 className={cn(
-                                    'oc-control inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-text-muted transition-colors hover:bg-white/5 hover:text-text disabled:opacity-40',
+                                    'oc-control inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs font-medium text-text-muted transition-colors duration-200 hover:bg-white/[0.05] hover:text-text disabled:opacity-40',
                                     !hasFilters && 'pointer-events-none'
                                 )}
                             >
@@ -390,8 +423,8 @@ export default function ChannelsPage() {
                     </div>
                 </section>
 
-                <section className="overflow-hidden rounded-xl border border-border bg-surface">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+                <section className="overflow-hidden rounded-[28px] border border-border/60 bg-surface">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 px-5 py-4">
                         <div className="flex items-center gap-2 text-xs text-text-muted">
                             <ListFilter size={14} aria-hidden="true" className="text-text-faint" />
                             {channels.data ? (
@@ -410,21 +443,21 @@ export default function ChannelsPage() {
                                 <span>Loading channels</span>
                             )}
                         </div>
-                        <span className="font-mono text-[11px] tabular-nums text-text-muted">
+                        <span className="rounded-full bg-raised/60 px-2.5 py-1 font-mono text-[11px] tabular-nums text-text-muted">
                             {channels.data ? `${formatCount(channels.data.visibleTotal)} visible` : ''}
                         </span>
                     </div>
 
                     {selected.size > 0 ? (
-                        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-blurple/[0.06] px-4 py-2">
-                            <span className="mr-1 text-xs font-medium text-text">
+                        <div className="flex flex-wrap items-center gap-2 border-b border-border/50 bg-blurple/[0.07] px-4 py-3">
+                            <span className="mr-1 inline-flex min-h-8 items-center rounded-full bg-blurple/15 px-3 text-xs font-medium text-text ring-1 ring-inset ring-blurple/25">
                                 {formatCount(selected.size)} selected
                             </span>
                             <button
                                 type="button"
                                 onClick={() => runBulk(true)}
                                 disabled={bulk.isPending}
-                                className="oc-control inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-raised px-2.5 text-xs font-medium text-text hover:border-border-strong"
+                                className="oc-control inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-raised px-3 text-xs font-medium text-text transition-colors duration-200 hover:border-border-strong"
                             >
                                 <Eye size={13} aria-hidden="true" />
                                 Show
@@ -433,7 +466,7 @@ export default function ChannelsPage() {
                                 type="button"
                                 onClick={() => runBulk(false)}
                                 disabled={bulk.isPending}
-                                className="oc-control inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-raised px-2.5 text-xs font-medium text-text hover:border-border-strong"
+                                className="oc-control inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-raised px-3 text-xs font-medium text-text transition-colors duration-200 hover:border-border-strong"
                             >
                                 <EyeOff size={13} aria-hidden="true" />
                                 Hide
@@ -441,7 +474,7 @@ export default function ChannelsPage() {
                             <button
                                 type="button"
                                 onClick={() => setSelected(new Set())}
-                                className="oc-control inline-flex h-8 items-center rounded-md px-2.5 text-xs font-medium text-text-muted hover:bg-white/5 hover:text-text"
+                                className="oc-control inline-flex min-h-9 items-center rounded-full px-3 text-xs font-medium text-text-muted transition-colors duration-200 hover:bg-white/[0.05] hover:text-text"
                             >
                                 Clear selection
                             </button>
@@ -505,32 +538,31 @@ export default function ChannelsPage() {
                                 rowKey={(channel) => channel.id}
                                 rowHeaderKey="channel"
                                 isRowSelected={(channel) => selected.has(channel.id)}
+                                className="@max-[600px]:[&_tbody_tr]:rounded-[20px] @max-[600px]:[&_tbody_tr]:border-transparent @max-[600px]:[&_tbody_tr]:bg-raised/60"
                             />
-                            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 px-5 py-3">
                                 <p className="text-xs text-text-muted">
                                     Page {channels.data.page} of {totalPages}
                                 </p>
                                 <div className="flex items-center gap-1">
-                                    <button
-                                        type="button"
-                                        aria-label="Previous page"
-                                        title="Previous page"
-                                        className="oc-control oc-icon-control inline-flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-white/5 hover:text-text disabled:opacity-40"
+                                    <IconButton
+                                        label="Previous page"
+                                        size="sm"
                                         disabled={channels.data.page <= 1}
                                         onClick={() => setPage((current) => Math.max(1, current - 1))}
+                                        className="rounded-full"
                                     >
                                         <ChevronLeft size={16} aria-hidden="true" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        aria-label="Next page"
-                                        title="Next page"
-                                        className="oc-control oc-icon-control inline-flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-white/5 hover:text-text disabled:opacity-40"
+                                    </IconButton>
+                                    <IconButton
+                                        label="Next page"
+                                        size="sm"
                                         disabled={channels.data.page >= totalPages}
                                         onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                                        className="rounded-full"
                                     >
                                         <ChevronRight size={16} aria-hidden="true" />
-                                    </button>
+                                    </IconButton>
                                 </div>
                             </div>
                         </>

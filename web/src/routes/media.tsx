@@ -8,10 +8,12 @@ import {
 } from 'react';
 import {
     ArrowLeft,
+    Check,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
     ChevronUp,
+    ChevronsDown,
     Film,
     GripVertical,
     History,
@@ -40,6 +42,7 @@ import type {
     MediaQuality,
     MediaSourceDto,
     QueueItemDto,
+    RecentVoiceChannelDto,
 } from '@shared/types';
 import {
     Button,
@@ -68,6 +71,7 @@ import {
     useCurrentMediaItem,
     useDiscordStatus,
     useEnqueue,
+    useEnqueueSeason,
     useMoveQueueItem,
     usePausePlayback,
     usePlayback,
@@ -92,14 +96,18 @@ import {
     useStartMediaPlayback,
     useStopPlayback,
     useUpdatePlaybackPreferences,
+    useUpdateRecentVoiceChannels,
     useValidateMediaSource,
     useNow,
 } from '@/lib/hooks';
 import type { SubtitleMode } from '@/lib/types';
 import { cn } from '@/lib/cn';
-import { formatDuration, formatElapsed, formatPercent } from '@/lib/format';
+import { formatCount, formatDuration, formatElapsed, formatPercent } from '@/lib/format';
 import { isPlayableLibrary, QUALITY_OPTIONS, qualityLabel } from '@/lib/media';
 import { playbackPositionMs } from '@/lib/playback';
+
+const INITIAL_MEDIA_ITEMS = 60;
+const MEDIA_ITEMS_STEP = 120;
 
 type View =
     | { kind: 'library' }
@@ -111,6 +119,7 @@ type PlayTarget =
     | { kind: 'item'; item: MediaItemDetailDto; quality: MediaQuality; subtitleMode: SubtitleMode; startOver?: boolean }
     | { kind: 'history'; entry: MediaHistoryDto }
     | { kind: 'queue'; queueItem: QueueItemDto }
+    | { kind: 'season'; season: MediaItemDetailDto; quality: MediaQuality; subtitleMode: SubtitleMode }
     | { kind: 'placeholder'; sourceId: number };
 
 function errorMessage(error: unknown): string {
@@ -127,6 +136,7 @@ function targetTitle(target: PlayTarget | null): string {
     if (target.kind === 'item') return target.item.title;
     if (target.kind === 'history') return target.entry.title;
     if (target.kind === 'queue') return target.queueItem.title;
+    if (target.kind === 'season') return target.season.title;
     return 'the media channel';
 }
 
@@ -145,6 +155,9 @@ function targetMeta(target: PlayTarget): string {
         return target.queueItem.showTitle
             ? `${target.queueItem.showTitle} · S${target.queueItem.seasonNumber ?? 1} E${target.queueItem.episodeNumber ?? 1}`
             : 'Media movie';
+    }
+    if (target.kind === 'season') {
+        return `${target.season.showTitle ?? 'Show'} · Episode 1 plays, the rest queue`;
     }
     return 'Virtual channel · Placeholder';
 }
@@ -232,12 +245,13 @@ function SourceTabs({
 
     return (
         <div className="min-w-0">
-            <div className="flex items-end justify-between gap-3 border-b border-border">
+            <div className="flex flex-wrap items-center gap-2.5">
                 <div
                     role="tablist"
                     aria-label="Media sources"
                     aria-describedby={`${baseId}-hint`}
-                    className="flex min-w-0 gap-1 overflow-x-auto overflow-y-hidden"
+                    aria-orientation="horizontal"
+                    className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-full border border-outline-variant bg-surface-container p-1.5 [scrollbar-width:none]"
                 >
                     {sources.map((source, index) => {
                         const selected = source.id === active.id;
@@ -290,14 +304,14 @@ function SourceTabs({
                                 onKeyDown={(event) => handleKeyDown(event, source, index)}
                                 title={`${source.name} · ${status}. Drag to reorder.`}
                                 className={cn(
-                                    'oc-control group -mb-px inline-flex min-h-10 shrink-0 cursor-grab items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors active:cursor-grabbing',
+                                    'oc-control group inline-flex min-h-11 shrink-0 cursor-grab items-center gap-2 whitespace-nowrap rounded-full px-3.5 text-sm font-medium transition-[background-color,color,box-shadow] duration-200 active:cursor-grabbing',
                                     selected
-                                        ? 'border-blurple text-text'
-                                        : 'border-transparent text-text-muted hover:text-text',
+                                        ? 'bg-primary-container text-on-primary-container'
+                                        : 'text-text-muted hover:bg-white/[0.05] hover:text-text',
                                     dragId === source.id && 'opacity-40',
                                     overId === source.id &&
                                         dragId !== source.id &&
-                                        'bg-white/[0.05]'
+                                        'bg-white/[0.07]'
                                 )}
                             >
                                 <GripVertical
@@ -324,10 +338,10 @@ function SourceTabs({
                         );
                     })}
                 </div>
-                <div className="flex shrink-0 items-center gap-1 pb-1">
+                <div className="flex shrink-0 items-center gap-1 rounded-full border border-outline-variant bg-surface-container p-1">
                     <span
                         aria-hidden="true"
-                        className="hidden pr-1 text-[11px] text-text-faint sm:inline"
+                        className="hidden pr-1 pl-2 text-[11px] text-text-faint sm:inline"
                     >
                         Drag to reorder
                     </span>
@@ -336,6 +350,7 @@ function SourceTabs({
                         size="sm"
                         disabled={activeIndex <= 0}
                         onClick={() => moveTab(activeIndex, activeIndex - 1)}
+                        className="rounded-full"
                     >
                         <ChevronLeft size={14} aria-hidden="true" />
                     </IconButton>
@@ -344,6 +359,7 @@ function SourceTabs({
                         size="sm"
                         disabled={activeIndex < 0 || activeIndex >= sources.length - 1}
                         onClick={() => moveTab(activeIndex, activeIndex + 1)}
+                        className="rounded-full"
                     >
                         <ChevronRight size={14} aria-hidden="true" />
                     </IconButton>
@@ -387,18 +403,21 @@ function ContinueWatching({
     if (!pending && entries.length === 0) return null;
 
     return (
-        <section aria-labelledby="continue-watching-title" className="mb-4 border-b border-border pb-4">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className="flex items-baseline gap-2">
+        <section
+            aria-labelledby="continue-watching-title"
+            className="rounded-[28px] border border-border/60 bg-surface p-4 sm:p-5"
+        >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
                     <h2
                         id="continue-watching-title"
-                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-text"
+                        className="inline-flex items-center gap-1.5 text-base font-semibold tracking-[-0.01em] text-text"
                     >
-                        <History size={14} aria-hidden="true" className="text-plex" />
+                        <History size={15} aria-hidden="true" className="text-plex" />
                         Continue watching
                     </h2>
                     {pending ? null : (
-                        <span className="font-mono text-[11px] tabular-nums text-text-muted">
+                        <span className="rounded-full bg-raised/70 px-2 py-0.5 font-mono text-[11px] tabular-nums text-text-muted">
                             {entries.length}
                         </span>
                     )}
@@ -409,10 +428,10 @@ function ContinueWatching({
             </div>
 
             {pending ? (
-                <div className="mt-3 space-y-3" aria-hidden="true">
+                <div className="mt-3 grid gap-2" aria-hidden="true">
                     {[0, 1].map((index) => (
-                        <div key={index} className="flex items-center gap-3">
-                            <Skeleton className="h-14 w-9 shrink-0" />
+                        <div key={index} className="flex items-center gap-3 rounded-[20px] bg-bg/30 p-3">
+                            <Skeleton className="h-16 w-11 shrink-0 rounded-xl" />
                             <div className="min-w-0 flex-1 space-y-1.5">
                                 <Skeleton className="h-3.5 w-2/3" />
                                 <Skeleton className="h-3 w-1/2" />
@@ -422,7 +441,7 @@ function ContinueWatching({
                     ))}
                 </div>
             ) : (
-                <ul className="mt-3 divide-y divide-border">
+                <ul className="mt-3 grid gap-2">
                     {entries.map(entry => {
                         const source = sources.find(item => item.id === entry.sourceId);
                         const unavailable = !source || !source.enabled || !source.connected;
@@ -431,12 +450,12 @@ function ContinueWatching({
                         const remaining = duration > 0 ? Math.max(0, duration - entry.positionMs) : null;
                         const recommended = entry.recommended === true;
                         return (
-                            <li key={entry.id} className="py-3 first:pt-1 last:pb-1">
-                                <div className="flex items-start gap-3">
+                            <li key={entry.id} className="min-w-0 rounded-[16px] px-2 py-2.5 transition-colors duration-200 hover:bg-text/[0.04]">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                                     <button
                                         type="button"
                                         onClick={() => onOpen(entry)}
-                                        className="flex min-w-0 flex-1 items-center gap-3 rounded text-left transition-colors hover:text-blurple-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blurple/60"
+                                        className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left transition-colors duration-200 hover:text-blurple-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blurple-bright"
                                         aria-label={`Open ${entry.title}`}
                                     >
                                         <Poster
@@ -444,22 +463,22 @@ function ContinueWatching({
                                             seed={entry.itemId}
                                             src={entry.thumbUrl}
                                             showTitle={false}
-                                            className="h-14 w-9 shrink-0 rounded border border-border"
+                                            className="h-20 w-14 shrink-0 rounded-[16px] border border-border/60 sm:h-24 sm:w-16"
                                         />
                                         <span className="min-w-0 flex-1">
-                                            <span className="block truncate text-sm font-medium text-text">
+                                            <span className="line-clamp-2 block text-sm font-medium leading-5 text-text sm:text-base">
                                                 {entry.title}
                                                 {recommended ? (
-                                                    <span className="ml-2 inline-flex rounded-full border border-plex/40 bg-plex/10 px-1.5 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-[0.08em] text-plex">
+                                                    <span className="ml-2 inline-flex rounded-full border border-plex/40 bg-plex/10 px-1.5 py-0.5 align-middle text-[11px] font-semibold text-plex">
                                                         Up next
                                                     </span>
                                                 ) : null}
                                             </span>
-                                            <span className="mt-0.5 block truncate text-[11px] text-text-muted">
+                                            <span className="mt-1 block text-[11px] leading-4 text-text-muted">
                                                 {recommended ? 'Next episode · ' : ''}
                                                 {historyMeta(entry)}
                                             </span>
-                                            <span className="mt-0.5 block text-[11px] text-text-faint">
+                                            <span className="mt-0.5 block text-[11px] leading-4 text-text-faint">
                                                 {recommended
                                                     ? 'Starts from the beginning'
                                                     : `${formatElapsed(entry.positionMs)} watched${
@@ -471,27 +490,29 @@ function ContinueWatching({
                                             </span>
                                         </span>
                                     </button>
-                                    <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        icon={<Play size={12} aria-hidden="true" />}
-                                        disabled={unavailable}
-                                        onClick={() => onResume(entry)}
-                                    >
-                                        {recommended ? 'Play next' : 'Resume'}
-                                    </Button>
-                                    {recommended ? null : (
-                                        <IconButton
-                                            label={`Remove ${entry.title} from Continue watching`}
+                                    <div className="flex shrink-0 items-center gap-1 self-end sm:self-start">
+                                        <Button
                                             size="sm"
-                                            onClick={() => onRemove(entry)}
+                                            variant="secondary"
+                                            icon={<Play size={12} aria-hidden="true" />}
+                                            disabled={unavailable}
+                                            onClick={() => onResume(entry)}
                                         >
-                                            <X size={14} aria-hidden="true" />
-                                        </IconButton>
-                                    )}
+                                            {recommended ? 'Play next' : 'Resume'}
+                                        </Button>
+                                        {recommended ? null : (
+                                            <IconButton
+                                                label={`Remove ${entry.title} from Continue watching`}
+                                                size="sm"
+                                                onClick={() => onRemove(entry)}
+                                            >
+                                                <X size={14} aria-hidden="true" />
+                                            </IconButton>
+                                        )}
+                                    </div>
                                 </div>
                                 {duration > 0 && !recommended ? (
-                                    <div className="mt-2 flex items-center gap-2 pl-12">
+                                    <div className="mt-2 flex items-center gap-2 pl-[68px] sm:pl-[76px]">
                                         <ProgressBar
                                             value={entry.positionMs}
                                             max={duration}
@@ -499,7 +520,7 @@ function ContinueWatching({
                                             label={`${entry.title} progress`}
                                             className="h-1"
                                         />
-                                        <span className="w-8 shrink-0 text-right font-mono text-[10px] tabular-nums text-text-muted">
+                                        <span className="w-8 shrink-0 text-right font-mono text-[11px] tabular-nums text-text-muted">
                                             {formatPercent(progress)}
                                         </span>
                                     </div>
@@ -513,18 +534,36 @@ function ContinueWatching({
     );
 }
 
+function useIsWideMedia() {
+    const [wide, setWide] = useState(
+        () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches
+    );
+
+    useEffect(() => {
+        const query = window.matchMedia('(min-width: 1280px)');
+        const update = () => setWide(query.matches);
+        update();
+        query.addEventListener('change', update);
+        return () => query.removeEventListener('change', update);
+    }, []);
+
+    return wide;
+}
+
 function QueuePanel({
     open,
     onClose,
     onRequestQueuePlay,
     onRequestPlaceholder,
     onBrowse,
+    variant = 'column',
 }: {
     open: boolean;
     onClose: () => void;
     onRequestQueuePlay: (item: QueueItemDto) => void;
     onRequestPlaceholder: () => void;
     onBrowse: () => void;
+    variant?: 'column' | 'sheet';
 }) {
     const queue = useMediaQueue();
     const playback = usePlayback();
@@ -559,7 +598,7 @@ function QueuePanel({
         currentItem.data?.streams.filter((stream) => stream.type === 'subtitle') ?? [];
     const subtitleValue = currentQueueItem ? String(currentQueueItem.subtitleMode) : 'auto';
 
-    if (!open) return null;
+    if (!open && variant === 'column') return null;
 
     const reportError = (error: unknown) =>
         toast({
@@ -578,34 +617,40 @@ function QueuePanel({
         <aside
             id="media-queue"
             aria-labelledby="media-queue-title"
-            className="oc-panel-enter min-w-0 scroll-mt-20 rounded-xl border border-border bg-surface xl:sticky xl:top-[68px] xl:max-h-[calc(100dvh-5.25rem)] xl:overflow-y-auto"
+            className={cn(
+                'min-w-0 scroll-mt-20 bg-surface',
+                variant === 'sheet'
+                    ? 'h-full overflow-y-auto overscroll-contain'
+                    : 'oc-panel-enter rounded-[28px] border border-border/60 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto'
+            )}
         >
-            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-                <div className="flex items-baseline gap-2">
-                    <h2 id="media-queue-title" className="text-sm font-semibold text-text">
+            <div className="flex items-center justify-between gap-2 border-b border-border/50 px-5 py-4">
+                <div className="flex items-center gap-2">
+                    <h2 id="media-queue-title" className="text-base font-semibold tracking-[-0.01em] text-text">
                         Queue
                     </h2>
-                    <span className="font-mono text-[11px] tabular-nums text-text-muted">
+                    <span className="rounded-full bg-raised/70 px-2 py-0.5 font-mono text-[11px] tabular-nums text-text-muted">
                         {queued.length}
                     </span>
                 </div>
-                <IconButton label="Close queue panel" size="sm" onClick={onClose}>
+                <IconButton label="Close queue panel" size="sm" onClick={onClose} className="rounded-full">
                     <X size={15} aria-hidden="true" />
                 </IconButton>
             </div>
 
             {playback.data?.mode === 'media' && currentQueueItem ? (
-                <div className="border-b border-border px-4 py-3">
+                <div className="border-b border-border/50 p-3">
+                    <div className="rounded-[20px] bg-raised/50 p-3">
                     <div className="flex items-start gap-3">
                         <Poster
                             title={currentQueueItem.title}
                             seed={currentQueueItem.itemId}
                             src={currentQueueItem.thumbUrl}
                             showTitle={false}
-                            className="h-14 w-9 shrink-0 rounded border border-border"
+                            className="h-16 w-11 shrink-0 rounded-xl border border-border/60"
                         />
                         <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-plex">
+                            <p className="text-[11px] font-medium text-plex">
                                 {playback.data.paused ? 'Paused' : 'Playing now'}
                             </p>
                             <p className="mt-0.5 truncate text-sm font-medium text-text">
@@ -627,13 +672,13 @@ function QueuePanel({
                                 disabled={seek.isPending}
                                 label="Seek current Media item"
                             />
-                            <div className="mt-1 flex justify-between font-mono text-[10px] tabular-nums text-text-muted">
+                            <div className="mt-1 flex justify-between font-mono text-[11px] tabular-nums text-text-muted">
                                 <span>{formatElapsed(Math.min(elapsed, duration))}</span>
                                 <span>{formatDuration(duration)}</span>
                             </div>
                         </div>
                     ) : null}
-                    <div className="mt-3 space-y-3 border-t border-border pt-3">
+                    <div className="mt-3 space-y-3 border-t border-border/50 pt-3">
                         <Field
                             label="Subtitles"
                             htmlFor="current-subtitles"
@@ -668,15 +713,16 @@ function QueuePanel({
                             </Select>
                         </Field>
                     </div>
+                    </div>
                 </div>
             ) : null}
 
-            <div className="px-4 py-3">
+            <div className="px-3 py-3">
                 {queue.isPending ? (
-                    <div className="space-y-3" aria-hidden="true">
+                    <div className="space-y-3 p-1" aria-hidden="true">
                         {[0, 1, 2].map((index) => (
                             <div key={index} className="flex gap-2">
-                                <Skeleton className="h-12 w-8" />
+                                <Skeleton className="h-14 w-9 rounded-xl" />
                                 <div className="flex-1 space-y-1.5">
                                     <Skeleton className="h-3.5 w-3/4" />
                                     <Skeleton className="h-3 w-1/2" />
@@ -699,9 +745,9 @@ function QueuePanel({
                         }
                     />
                 ) : (
-                    <ol className="divide-y divide-border">
+                    <ol className="space-y-1">
                         {queued.map((item, index) => (
-                            <li key={item.id} className="flex items-start gap-2 py-2.5 first:pt-0 last:pb-0">
+                            <li key={item.id} className="flex items-start gap-2 rounded-[16px] px-1 py-2.5 transition-colors duration-200 hover:bg-raised/40">
                                 <span className="mt-1 w-4 shrink-0 text-right font-mono text-[11px] tabular-nums text-text-faint">
                                     {index + 1}
                                 </span>
@@ -710,7 +756,7 @@ function QueuePanel({
                                     seed={item.itemId}
                                     src={item.thumbUrl}
                                     showTitle={false}
-                                    className="h-12 w-8 shrink-0 rounded border border-border"
+                                    className="h-14 w-9 shrink-0 rounded-xl border border-border/60"
                                 />
                                 <div className="min-w-0 flex-1">
                                     <p className="truncate text-xs font-medium text-text">{item.title}</p>
@@ -719,7 +765,7 @@ function QueuePanel({
                                             ? `${item.showTitle} · S${item.seasonNumber} E${item.episodeNumber}`
                                             : 'Movie'}
                                     </p>
-                                    <p className="mt-0.5 font-mono text-[10px] text-text-faint">
+                                    <p className="mt-0.5 font-mono text-[11px] text-text-faint">
                                         {formatDuration(item.durationMs)} · {qualityLabel(item.quality)}
                                     </p>
                                 </div>
@@ -764,11 +810,11 @@ function QueuePanel({
                 )}
 
                 {failed.length > 0 ? (
-                    <div className="mt-3 space-y-2 border-t border-border pt-3">
+                    <div className="mt-3 space-y-2 border-t border-border/50 pt-3">
                         {failed.map((item) => (
                             <div
                                 key={item.id}
-                                className="rounded-md border border-danger/25 bg-danger/[0.06] px-2.5 py-2"
+                                className="rounded-[16px] bg-danger/[0.08] px-3 py-2.5"
                             >
                                 <div className="flex items-center justify-between gap-2">
                                     <StatusPill tone="danger">Failed</StatusPill>
@@ -790,7 +836,7 @@ function QueuePanel({
                 ) : null}
             </div>
 
-            <div className="space-y-3 border-t border-border px-4 py-3">
+            <div className="space-y-3 border-t border-border/50 px-5 py-4">
                 <Switch
                     checked={settings.data?.playback.autoplayNextEpisode ?? false}
                     disabled={!settings.data || updatePlayback.isPending}
@@ -817,7 +863,7 @@ function QueuePanel({
                 />
             </div>
 
-            <div className="space-y-2 border-t border-border p-3">
+            <div className="space-y-2 border-t border-border/50 p-3">
                 <div className="flex items-center gap-1.5">
                     <Button
                         variant="primary"
@@ -943,6 +989,71 @@ function QueuePanel({
     );
 }
 
+function QueueSheet({
+    open,
+    onClose,
+    onRequestQueuePlay,
+    onRequestPlaceholder,
+    onBrowse,
+}: {
+    open: boolean;
+    onClose: () => void;
+    onRequestQueuePlay: (item: QueueItemDto) => void;
+    onRequestPlaceholder: () => void;
+    onBrowse: () => void;
+}) {
+    const ref = useRef<HTMLDialogElement>(null);
+    const onCloseRef = useRef(onClose);
+    onCloseRef.current = onClose;
+
+    useEffect(() => {
+        const dialog = ref.current;
+        if (!dialog) return;
+        if (open) {
+            if (!dialog.open) dialog.showModal();
+        } else if (dialog.open) {
+            dialog.close();
+        }
+    }, [open]);
+
+    useEffect(() => {
+        const dialog = ref.current;
+        if (!dialog) return;
+        const handleClose = () => onCloseRef.current();
+        dialog.addEventListener('close', handleClose);
+        return () => dialog.removeEventListener('close', handleClose);
+    }, []);
+
+    useEffect(() => {
+        if (!open) return;
+        const previous = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = previous;
+        };
+    }, [open]);
+
+    return (
+        <dialog
+            ref={ref}
+            aria-labelledby="media-queue-title"
+            className="oc-panel-enter fixed inset-y-0 left-auto right-0 m-0 h-dvh max-h-none w-[min(92vw,26rem)] max-w-none border-y-0 border-r-0 border-l border-border/60 bg-surface p-0 text-text shadow-2xl [animation-duration:320ms] motion-reduce:animate-none"
+            onClick={(event) => {
+                if (event.target === ref.current) ref.current?.close();
+            }}
+        >
+            <QueuePanel
+                open={open}
+                onClose={onClose}
+                onRequestQueuePlay={onRequestQueuePlay}
+                onRequestPlaceholder={onRequestPlaceholder}
+                onBrowse={onBrowse}
+                variant="sheet"
+            />
+        </dialog>
+    );
+}
+
 function VoicePromptDialog({
     open,
     onClose,
@@ -950,6 +1061,7 @@ function VoicePromptDialog({
     guilds,
     defaultGuildId,
     defaultChannelId,
+    recentChannels,
     busy,
     error,
     onConfirm,
@@ -960,6 +1072,7 @@ function VoicePromptDialog({
     guilds: GuildDto[];
     defaultGuildId: string | null;
     defaultChannelId: string | null;
+    recentChannels: RecentVoiceChannelDto[];
     busy: boolean;
     error: string | null;
     onConfirm: (guildId: string, voiceChannelId: string) => void;
@@ -967,8 +1080,21 @@ function VoicePromptDialog({
     const channels = guilds.flatMap((guild) =>
         guild.voiceChannels.map((channel) => ({ ...channel, guildName: guild.name }))
     );
+    const recentAvailable = recentChannels
+        .flatMap((entry) => {
+            const channel = channels.find(
+                (candidate) =>
+                    candidate.guildId === entry.guildId && candidate.id === entry.channelId
+            );
+            return channel ? [{ entry, channel }] : [];
+        })
+        .slice(0, 3);
     const channelKey = channels.map((channel) => channel.id).join('|');
-    const fallback = channels.find((channel) => channel.id === defaultChannelId)?.id ?? channels[0]?.id ?? '';
+    const fallback =
+        recentAvailable[0]?.channel.id ??
+        channels.find((channel) => channel.id === defaultChannelId)?.id ??
+        channels[0]?.id ??
+        '';
     const [selected, setSelected] = useState(fallback);
 
     useEffect(() => {
@@ -1008,21 +1134,27 @@ function VoicePromptDialog({
                                         ? target.item.title
                                         : target.kind === 'history'
                                           ? target.entry.title
-                                          : target.queueItem.title
+                                          : target.kind === 'season'
+                                            ? target.season.title
+                                            : target.queueItem.title
                                 }
                                 seed={
                                     target.kind === 'item'
                                         ? target.item.itemId
                                         : target.kind === 'history'
                                           ? target.entry.itemId
-                                          : target.queueItem.itemId
+                                          : target.kind === 'season'
+                                            ? target.season.itemId
+                                            : target.queueItem.itemId
                                 }
                                 src={
                                     target.kind === 'item'
                                         ? target.item.thumbUrl
                                         : target.kind === 'history'
                                           ? target.entry.thumbUrl
-                                          : target.queueItem.thumbUrl
+                                          : target.kind === 'season'
+                                            ? target.season.thumbUrl
+                                            : target.queueItem.thumbUrl
                                 }
                                 showTitle={false}
                                 className="h-16 w-11 shrink-0 rounded border border-border"
@@ -1031,7 +1163,7 @@ function VoicePromptDialog({
                         <div className="min-w-0">
                             <p className="text-sm font-medium text-text">{targetTitle(target)}</p>
                             <p className="mt-0.5 text-xs text-text-muted">{targetMeta(target)}</p>
-                            {target.kind === 'item' ? (
+                            {target.kind === 'item' || target.kind === 'season' ? (
                                 <p className="mt-1 text-[11px] text-text-faint">
                                     {qualityLabel(target.quality)}
                                 </p>
@@ -1040,6 +1172,53 @@ function VoicePromptDialog({
                                     {qualityLabel(target.entry.quality)}
                                 </p>
                             ) : null}
+                        </div>
+                    </div>
+                ) : null}
+
+                {recentAvailable.length > 0 ? (
+                    <div className="mt-4">
+                        <p className="mb-2 text-xs font-medium text-text-muted">Last selected</p>
+                        <div className="space-y-1.5">
+                            {recentAvailable.map(({ entry, channel }, index) => {
+                                const checked = selected === channel.id;
+                                return (
+                                    <button
+                                        key={`${entry.guildId}-${entry.channelId}`}
+                                        type="button"
+                                        aria-pressed={checked}
+                                        onClick={() => setSelected(channel.id)}
+                                        className={cn(
+                                            'flex min-h-11 w-full items-center gap-2.5 rounded-md border px-3 py-2 text-left text-sm transition-colors',
+                                            checked
+                                                ? 'border-blurple bg-blurple/[0.08] text-text'
+                                                : 'border-border bg-bg text-text-muted hover:border-border-strong'
+                                        )}
+                                    >
+                                        <span
+                                            className="flex size-4 shrink-0 items-center justify-center"
+                                            aria-hidden="true"
+                                        >
+                                            {checked ? (
+                                                <Check size={14} className="text-blurple-bright" />
+                                            ) : (
+                                                <span className="size-1.5 rounded-full bg-text-faint" />
+                                            )}
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block truncate">{channel.name}</span>
+                                            <span className="block truncate text-[11px] text-text-faint">
+                                                {channel.guildName}
+                                            </span>
+                                        </span>
+                                        {index === 0 ? (
+                                            <StatusPill tone="plex" dot={false}>
+                                                Last played
+                                            </StatusPill>
+                                        ) : null}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                 ) : null}
@@ -1059,7 +1238,9 @@ function VoicePromptDialog({
                     </Notice>
                 ) : (
                     <fieldset className="mt-4">
-                        <legend className="mb-2 text-xs font-medium text-text-muted">Voice channel</legend>
+                        <legend className="mb-2 text-xs font-medium text-text-muted">
+                            {recentAvailable.length > 0 ? 'All channels' : 'Voice channel'}
+                        </legend>
                         <div className="space-y-3">
                             {guilds.map((guild) =>
                                 guild.voiceChannels.length === 0 ? null : (
@@ -1068,9 +1249,11 @@ function VoicePromptDialog({
                                             {guild.name}
                                         </p>
                                         <div className="space-y-1.5">
-                                            {guild.voiceChannels.map((channel, index) => {
+                                            {guild.voiceChannels.map((channel) => {
                                                 const checked = selected === channel.id;
-                                                const isDefaultGuild = guild.id === defaultGuildId && checked;
+                                                const isCurrent =
+                                                    channel.id === defaultChannelId &&
+                                                    channel.guildId === defaultGuildId;
                                                 return (
                                                     <label
                                                         key={channel.id}
@@ -1086,16 +1269,14 @@ function VoicePromptDialog({
                                                             name="voice-channel"
                                                             value={channel.id}
                                                             checked={checked}
-                                                            data-autofocus={
-                                                                channels[0]?.id === channel.id ? 'true' : undefined
-                                                            }
+                                                            data-autofocus={checked ? 'true' : undefined}
                                                             onChange={() => setSelected(channel.id)}
                                                             className="size-4 accent-blurple"
                                                         />
                                                         <span className="min-w-0 flex-1 truncate">
                                                             {channel.name}
                                                         </span>
-                                                        {isDefaultGuild ? (
+                                                        {isCurrent ? (
                                                             <StatusPill tone="plex" dot={false}>
                                                                 Current
                                                             </StatusPill>
@@ -1149,7 +1330,9 @@ export default function MediaPage() {
             : { kind: 'library' };
     });
     const skipViewReset = useRef(true);
-    const [queueOpen, setQueueOpen] = useState(true);
+    const [queueOpen, setQueueOpen] = useState(false);
+    const isWideMedia = useIsWideMedia();
+    const [itemLimit, setItemLimit] = useState(INITIAL_MEDIA_ITEMS);
     const [prompt, setPrompt] = useState<PlayTarget | null>(null);
     const [conflict, setConflict] = useState<PlayTarget | null>(null);
     const [promptError, setPromptError] = useState<string | null>(null);
@@ -1210,10 +1393,15 @@ export default function MediaPage() {
     const playableLibraries = libraryList.filter(isPlayableLibrary);
     const enabledLibraries = playableLibraries.filter((library) => library.enabled);
     const itemList = items.data ?? [];
+    const visibleItems = itemList.slice(0, itemLimit);
+    const remainingItems = Math.max(0, itemList.length - visibleItems.length);
     const childItems = children.data ?? [];
 
     const enqueue = useEnqueue();
+    const enqueueSeason = useEnqueueSeason();
     const stop = useStopPlayback();
+    const settings = useSettings();
+    const updateRecentChannels = useUpdateRecentVoiceChannels();
     const startMedia = useStartMediaPlayback();
     const playQueue = usePlayQueueItem();
     const placeholder = useStartPlaceholder();
@@ -1237,6 +1425,10 @@ export default function MediaPage() {
         }
         setView({ kind: 'library' });
     }, [selectedSourceId]);
+
+    useEffect(() => {
+        setItemLimit(INITIAL_MEDIA_ITEMS);
+    }, [selectedSourceId, libraryKey, deferredSearch]);
 
     const activeLibrary = libraries.data?.find((library) => library.key === libraryKey);
     const queuedCount = queue.data?.filter((item) => item.status === 'queued').length ?? 0;
@@ -1324,16 +1516,6 @@ export default function MediaPage() {
                 onSuccess: () => {
                     toast({ title: 'Added to queue', description: itemDetail?.title, tone: 'success' });
                     setQueueOpen(true);
-                    if (window.innerWidth < 1280) {
-                        const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-                            ? 'auto'
-                            : 'smooth';
-                        window.setTimeout(() => {
-                            document
-                                .getElementById('media-queue')
-                                ?.scrollIntoView({ block: 'start', behavior });
-                        }, 60);
-                    }
                 },
                 onError: (error) =>
                     toast({
@@ -1353,6 +1535,16 @@ export default function MediaPage() {
             quality,
             subtitleMode: toSubtitleMode(subtitle),
             startOver,
+        });
+    };
+
+    const playSeason = () => {
+        if (!itemDetail || itemDetail.type !== 'season') return;
+        requestPlay({
+            kind: 'season',
+            season: itemDetail,
+            quality,
+            subtitleMode: toSubtitleMode(subtitle),
         });
     };
 
@@ -1398,6 +1590,7 @@ export default function MediaPage() {
         setPromptError(null);
         try {
             let title = 'On demand';
+            let queueNote: string | undefined;
             if (prompt.kind === 'item') {
                 await startMedia.mutateAsync({
                     sourceId: prompt.item.sourceId,
@@ -1423,19 +1616,63 @@ export default function MediaPage() {
             } else if (prompt.kind === 'queue') {
                 await playQueue.mutateAsync({ id: prompt.queueItem.id, guildId, voiceChannelId });
                 title = prompt.queueItem.title;
+            } else if (prompt.kind === 'season') {
+                const queued = await enqueueSeason.mutateAsync({
+                    sourceId: prompt.season.sourceId,
+                    seasonId: prompt.season.itemId,
+                    quality: prompt.quality,
+                    subtitleMode: prompt.subtitleMode,
+                });
+                const first = queued.items[0];
+                if (!first) {
+                    throw new Error('This season has no playable episodes.');
+                }
+                await playQueue.mutateAsync({ id: first.id, guildId, voiceChannelId });
+                title = prompt.season.title;
+                queueNote =
+                    queued.items.length > 1
+                        ? `${queued.items.length - 1} more episodes queued`
+                        : undefined;
             } else {
                 await placeholder.mutateAsync({ sourceId: prompt.sourceId, guildId, voiceChannelId });
                 title = 'On demand';
             }
-            const channelName = discord.data?.guilds
-                .flatMap((guild) => guild.voiceChannels)
-                .find((channel) => channel.id === voiceChannelId)?.name;
+            const selectedChannel = discord.data?.guilds
+                .flatMap((guild) =>
+                    guild.voiceChannels.map((channel) => ({
+                        ...channel,
+                        guildName: guild.name,
+                    }))
+                )
+                .find((channel) => channel.id === voiceChannelId);
+            const channelName = selectedChannel?.name;
             toast({
                 title: prompt.kind === 'placeholder' ? 'Media channel opened' : `Playing ${title}`,
-                description: channelName ? `Started in ${channelName}` : undefined,
+                description:
+                    channelName && queueNote
+                        ? `Started in ${channelName} · ${queueNote}`
+                        : channelName
+                          ? `Started in ${channelName}`
+                          : queueNote,
                 tone: 'success',
             });
             setPrompt(null);
+            if (selectedChannel) {
+                const next = [
+                    {
+                        guildId: selectedChannel.guildId,
+                        guildName: selectedChannel.guildName,
+                        channelId: selectedChannel.id,
+                        channelName: selectedChannel.name,
+                    },
+                    ...(settings.data?.recentVoiceChannels ?? []).filter(
+                        (entry) =>
+                            entry.guildId !== selectedChannel.guildId ||
+                            entry.channelId !== selectedChannel.id
+                    ),
+                ].slice(0, 3);
+                updateRecentChannels.mutate(next);
+            }
         } catch (error) {
             setPromptError(errorMessage(error));
         } finally {
@@ -1496,28 +1733,72 @@ export default function MediaPage() {
                 }
                 actions={
                     <>
-                        <Link
-                            to="/media/sources"
-                            className={buttonStyles({ variant: 'secondary', size: 'sm' })}
-                        >
-                            <Server size={14} aria-hidden="true" />
-                            Manage sources
-                        </Link>
+                        <span className="hidden sm:inline-flex">
+                            <Link
+                                to="/media/sources"
+                                className={buttonStyles({ variant: 'secondary', size: 'sm' })}
+                            >
+                                <Server size={14} aria-hidden="true" />
+                                Manage sources
+                            </Link>
+                        </span>
                         <Button
                             variant="secondary"
                             size="sm"
+                            aria-label={`Queue, ${queuedCount} item${queuedCount === 1 ? '' : 's'}`}
                             icon={<ListOrdered size={14} aria-hidden="true" />}
                             onClick={() => setQueueOpen((current) => !current)}
                         >
-                            Queue
-                            <span className="ml-0.5 rounded bg-white/[0.08] px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
+                            <span className="hidden sm:inline">Queue</span>
+                            <span className="ml-0.5 rounded-full bg-white/[0.09] px-1.5 py-0.5 font-mono text-[11px] tabular-nums">
                                 {queuedCount}
                             </span>
                         </Button>
                     </>
                 }
             />
-            <div className="oc-page-enter mx-auto w-full max-w-[1600px] space-y-4 p-3 sm:p-5 xl:p-6">
+            <div className="mx-auto w-full max-w-[1600px] space-y-5 p-3 sm:p-5 xl:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:hidden">
+                    <p className="text-xs text-text-muted">
+                        {sourceList.length > 0
+                            ? `${sourceList.length} source${sourceList.length === 1 ? '' : 's'} · ${
+                                  sourceList.filter((source) => source.connected).length
+                              } connected`
+                            : 'Plex and Jellyfin on demand'}
+                    </p>
+                    <Link
+                        to="/media/sources"
+                        className={buttonStyles({ variant: 'ghost', size: 'sm' })}
+                    >
+                        <Server size={14} aria-hidden="true" />
+                        Manage sources
+                    </Link>
+                </div>
+                {view.kind === 'library' ? (
+                    <ContinueWatching
+                        entries={history.data ?? []}
+                        sources={sourceList}
+                        pending={history.isPending && sourceList.length > 0}
+                        onResume={(entry) => requestPlay({ kind: 'history', entry })}
+                        onOpen={openHistoryItem}
+                        onRemove={(entry) =>
+                            removeHistory.mutate(entry.id, {
+                                onSuccess: () =>
+                                    toast({
+                                        title: 'Removed from Continue watching',
+                                        description: entry.title,
+                                        tone: 'success',
+                                    }),
+                                onError: (error) =>
+                                    toast({
+                                        title: 'Could not remove the entry',
+                                        description: errorMessage(error),
+                                        tone: 'error',
+                                    }),
+                            })
+                        }
+                    />
+                ) : null}
                 {sourceList.length > 0 ? (
                     <SourceTabs
                         sources={sourceList}
@@ -1565,33 +1846,10 @@ export default function MediaPage() {
                     </Notice>
                 ) : null}
 
-                <div className={cn('grid min-w-0 grid-cols-1 gap-4', queueOpen && 'xl:grid-cols-[minmax(0,1fr)_22rem]')}>
-                    <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface">
+                <div className={cn('grid min-w-0 grid-cols-1 gap-5', isWideMedia && queueOpen && 'xl:grid-cols-[minmax(0,1fr)_22rem]')}>
+                    <section className="min-w-0 overflow-hidden rounded-[28px] border border-border/60 bg-surface">
                         {view.kind === 'library' ? (
-                            <div className="p-3 sm:p-4">
-                                <ContinueWatching
-                                    entries={history.data ?? []}
-                                    sources={sourceList}
-                                    pending={history.isPending && sourceList.length > 0}
-                                    onResume={(entry) => requestPlay({ kind: 'history', entry })}
-                                    onOpen={openHistoryItem}
-                                    onRemove={(entry) =>
-                                        removeHistory.mutate(entry.id, {
-                                            onSuccess: () =>
-                                                toast({
-                                                    title: 'Removed from Continue watching',
-                                                    description: entry.title,
-                                                    tone: 'success',
-                                                }),
-                                            onError: (error) =>
-                                                toast({
-                                                    title: 'Could not remove the entry',
-                                                    description: errorMessage(error),
-                                                    tone: 'error',
-                                                }),
-                                        })
-                                    }
-                                />
+                            <div className="p-4 sm:p-5">
                                 {mediaSources.isPending ? (
                                     <div className="space-y-4" aria-hidden="true">
                                         <Skeleton className="h-9 w-72" />
@@ -1690,17 +1948,17 @@ export default function MediaPage() {
                                             </div>
                                             <p className="text-xs text-text-muted">
                                                 {items.data
-                                                    ? `${itemList.length} item${itemList.length === 1 ? '' : 's'}`
+                                                    ? `${formatCount(visibleItems.length)} of ${formatCount(itemList.length)} item${itemList.length === 1 ? '' : 's'}`
                                                     : 'Loading library'}
                                             </p>
                                         </div>
 
                                         <div className="mt-4">
                                             {items.isPending ? (
-                                                <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
+                                                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                                                     {Array.from({ length: 12 }).map((_, index) => (
                                                         <div key={index} className="space-y-2" aria-hidden="true">
-                                                            <Skeleton className="aspect-[2/3] w-full rounded-lg" />
+                                                            <Skeleton className="aspect-[2/3] w-full rounded-[20px]" />
                                                             <Skeleton className="h-3.5 w-3/4" />
                                                             <Skeleton className="h-3 w-1/2" />
                                                         </div>
@@ -1736,21 +1994,54 @@ export default function MediaPage() {
                                                     }
                                                 />
                                             ) : (
-                                                <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-                                                    {itemList.map((item) => (
-                                                        <MediaCard
-                                                            key={item.itemId}
-                                                            item={item}
-                                                            onOpen={() => {
-                                                                if (item.type === 'show') {
-                                                                    setView({ kind: 'show', showKey: item.itemId });
-                                                                } else {
-                                                                    setView({ kind: 'item', itemKey: item.itemId });
+                                                <>
+                                                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                                                        {visibleItems.map((item) => (
+                                                            <div
+                                                                key={item.itemId}
+                                                                className="min-w-0 [contain-intrinsic-size:auto_320px] [content-visibility:auto]"
+                                                            >
+                                                                <MediaCard
+                                                                    item={item}
+                                                                    onOpen={() => {
+                                                                        if (item.type === 'show') {
+                                                                            setView({ kind: 'show', showKey: item.itemId });
+                                                                        } else {
+                                                                            setView({ kind: 'item', itemKey: item.itemId });
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    {remainingItems > 0 ? (
+                                                        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                                                            <Button
+                                                                variant="secondary"
+                                                                aria-label={`Load ${Math.min(MEDIA_ITEMS_STEP, remainingItems)} more, ${formatCount(remainingItems)} remaining`}
+                                                                icon={<ChevronDown size={14} aria-hidden="true" />}
+                                                                onClick={() =>
+                                                                    setItemLimit((current) => current + MEDIA_ITEMS_STEP)
                                                                 }
-                                                            }}
-                                                        />
-                                                    ))}
-                                                </div>
+                                                            >
+                                                                Load {formatCount(Math.min(MEDIA_ITEMS_STEP, remainingItems))} more
+                                                                <span className="rounded-full bg-white/[0.09] px-2 py-0.5 font-mono text-[11px] tabular-nums">
+                                                                    {formatCount(remainingItems)} remaining
+                                                                </span>
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                icon={<ChevronsDown size={14} aria-hidden="true" />}
+                                                                onClick={() => setItemLimit(itemList.length)}
+                                                            >
+                                                                Show all
+                                                                <span className="rounded-full bg-white/[0.09] px-2 py-0.5 font-mono text-[11px] tabular-nums">
+                                                                    {formatCount(itemList.length)}
+                                                                </span>
+                                                            </Button>
+                                                        </div>
+                                                    ) : null}
+                                                </>
                                             )}
                                         </div>
                                     </Tabs>
@@ -1758,7 +2049,7 @@ export default function MediaPage() {
                             </div>
                         ) : (
                             <div>
-                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 px-5 py-3">
                                     <Button
                                         variant="ghost"
                                         size="sm"
@@ -1818,16 +2109,43 @@ export default function MediaPage() {
                                         title="This Media item could not load"
                                     />
                                 ) : itemDetail ? (
-                                    <div className="p-4 sm:p-5">
-                                        <div className="grid grid-cols-1 gap-5 md:grid-cols-[160px_minmax(0,1fr)] xl:grid-cols-[180px_minmax(0,1fr)]">
-                                            <Poster
-                                                title={itemDetail.title}
-                                                seed={itemDetail.itemId}
-                                                src={itemDetail.thumbUrl}
-                                                className="w-full max-w-[180px] rounded-lg border border-border"
-                                            />
+                                    <div className="p-5 sm:p-6">
+                                        <div className="grid grid-cols-1 gap-5 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
+                                            <div className="flex flex-wrap items-start justify-between gap-3 md:block">
+                                                <div className="w-[46%] max-w-[200px] shrink-0 md:w-full">
+                                                    <Poster
+                                                        title={itemDetail.title}
+                                                        seed={itemDetail.itemId}
+                                                        src={itemDetail.thumbUrl}
+                                                        className="w-full rounded-[20px] border border-border/60"
+                                                    />
+                                                </div>
+                                                {itemDetail.type === 'season' ? (
+                                                    <Button
+                                                        variant="primary"
+                                                        size="sm"
+                                                        icon={<Play size={14} aria-hidden="true" />}
+                                                        onClick={playSeason}
+                                                        className="ml-auto md:hidden"
+                                                    >
+                                                        Play this season
+                                                    </Button>
+                                                ) : null}
+                                            </div>
                                             <div className="min-w-0">
-                                                <h2 className="text-[clamp(1.35rem,1.1rem+1.2vw,2rem)] font-semibold leading-tight tracking-[-0.02em] text-text">
+                                                {itemDetail.type === 'season' ? (
+                                                    <div className="mb-4 hidden md:flex md:justify-end">
+                                                        <Button
+                                                            variant="primary"
+                                                            size="sm"
+                                                            icon={<Play size={14} aria-hidden="true" />}
+                                                            onClick={playSeason}
+                                                        >
+                                                            Play this season
+                                                        </Button>
+                                                    </div>
+                                                ) : null}
+                                                <h2 className="text-[clamp(1.55rem,1.15rem+1.5vw,2.3rem)] font-semibold leading-[1.15] tracking-[-0.025em] text-text">
                                                     {itemDetail.title}
                                                 </h2>
                                                 <p className="mt-1 text-sm text-text-muted">
@@ -1956,9 +2274,9 @@ export default function MediaPage() {
                                         </div>
 
                                         {itemDetail.type === 'show' || itemDetail.type === 'season' ? (
-                                            <div className="mt-6 border-t border-border pt-4">
+                                            <div className="mt-6 border-t border-border/50 pt-5">
                                                 <div className="flex items-baseline justify-between gap-2">
-                                                    <h3 className="text-sm font-semibold text-text">
+                                                    <h3 className="text-base font-semibold text-text">
                                                         {itemDetail.type === 'show' ? 'Seasons' : 'Episodes'}
                                                     </h3>
                                                     {children.data ? (
@@ -1968,9 +2286,9 @@ export default function MediaPage() {
                                                     ) : null}
                                                 </div>
                                                 {children.isPending ? (
-                                                    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" aria-hidden="true">
+                                                    <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4" aria-hidden="true">
                                                         {[0, 1, 2, 3].map((index) => (
-                                                            <Skeleton key={index} className="aspect-[2/3] rounded-lg" />
+                                                            <Skeleton key={index} className="aspect-[2/3] rounded-[20px]" />
                                                         ))}
                                                     </div>
                                                 ) : children.isError ? (
@@ -1990,7 +2308,7 @@ export default function MediaPage() {
                                                         description="The media source returned no children for this item."
                                                     />
                                                 ) : itemDetail.type === 'show' ? (
-                                                    <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
+                                                    <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                                                         {childItems.map((seasonItem) => (
                                                             <button
                                                                 key={seasonItem.itemId}
@@ -2002,13 +2320,13 @@ export default function MediaPage() {
                                                                         seasonKey: seasonItem.itemId,
                                                                     })
                                                                 }
-                                                                className="group min-w-0 text-left"
+                                                                className="group min-w-0 rounded-[20px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blurple/70"
                                                             >
                                                                 <Poster
                                                                     title={seasonItem.title}
                                                                     seed={seasonItem.itemId}
                                                                     src={seasonItem.thumbUrl}
-                                                                    className="w-full rounded-lg border border-border transition-colors group-hover:border-border-strong"
+                                                                    className="w-full rounded-[20px] border border-border/60 transition-[border-color,box-shadow] duration-200 group-hover:border-border-strong"
                                                                 />
                                                                 <p className="mt-2 truncate text-sm font-medium text-text">
                                                                     {seasonItem.title}
@@ -2020,7 +2338,7 @@ export default function MediaPage() {
                                                         ))}
                                                     </div>
                                                 ) : (
-                                                    <ol className="mt-3 divide-y divide-border border-t border-border">
+                                                    <ol className="mt-3 divide-y divide-border/50 border-t border-border/50">
                                                         {childItems.map((episode) => (
                                                             <li key={episode.itemId}>
                                                                 <button
@@ -2033,7 +2351,7 @@ export default function MediaPage() {
                                                                             seasonKey: view.kind === 'season' ? view.seasonKey : undefined,
                                                                         })
                                                                     }
-                                                                    className="flex w-full items-start gap-3 px-1 py-3 text-left transition-colors hover:bg-white/[0.02]"
+                                                                    className="flex w-full items-start gap-3 rounded-[16px] px-2 py-3 text-left transition-colors duration-200 hover:bg-raised/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blurple/70"
                                                                 >
                                                                     <span className="w-7 shrink-0 pt-0.5 text-right font-mono text-[11px] tabular-nums text-text-faint">
                                                                         {episode.episodeNumber ?? '-'}
@@ -2067,18 +2385,39 @@ export default function MediaPage() {
                         )}
                     </section>
 
-                    <QueuePanel
-                        open={queueOpen}
-                        onClose={() => setQueueOpen(false)}
-                        onRequestQueuePlay={(item) => requestPlay({ kind: 'queue', queueItem: item })}
-                        onRequestPlaceholder={() => requestPlay({ kind: 'placeholder', sourceId })}
-                        onBrowse={() => {
-                            setQueueOpen(false);
-                            setView({ kind: 'library' });
-                        }}
-                    />
+                    {isWideMedia ? (
+                        <QueuePanel
+                            open={queueOpen}
+                            onClose={() => setQueueOpen(false)}
+                            onRequestQueuePlay={(item) => requestPlay({ kind: 'queue', queueItem: item })}
+                            onRequestPlaceholder={() => requestPlay({ kind: 'placeholder', sourceId })}
+                            onBrowse={() => {
+                                setQueueOpen(false);
+                                setView({ kind: 'library' });
+                            }}
+                        />
+                    ) : null}
                 </div>
             </div>
+
+            {!isWideMedia ? (
+                <QueueSheet
+                    open={queueOpen}
+                    onClose={() => setQueueOpen(false)}
+                    onRequestQueuePlay={(item) => {
+                        setQueueOpen(false);
+                        requestPlay({ kind: 'queue', queueItem: item });
+                    }}
+                    onRequestPlaceholder={() => {
+                        setQueueOpen(false);
+                        requestPlay({ kind: 'placeholder', sourceId });
+                    }}
+                    onBrowse={() => {
+                        setQueueOpen(false);
+                        setView({ kind: 'library' });
+                    }}
+                />
+            ) : null}
 
             <VoicePromptDialog
                 open={prompt !== null}
@@ -2090,6 +2429,7 @@ export default function MediaPage() {
                 guilds={discord.data?.guilds ?? []}
                 defaultGuildId={playback.data?.guildId ?? null}
                 defaultChannelId={playback.data?.voiceChannelId ?? null}
+                recentChannels={settings.data?.recentVoiceChannels ?? []}
                 busy={promptBusy}
                 error={promptError}
                 onConfirm={(guildId, voiceChannelId) => void confirmPlayback(guildId, voiceChannelId)}
@@ -2126,27 +2466,33 @@ export default function MediaPage() {
 
 function MediaCard({ item, onOpen }: { item: MediaItemDto; onOpen: () => void }) {
     return (
-        <button type="button" onClick={onOpen} className="group min-w-0 text-left">
-            <div className="relative overflow-hidden rounded-lg border border-border transition-colors group-hover:border-border-strong">
+        <button
+            type="button"
+            onClick={onOpen}
+            className="group w-full min-w-0 rounded-[20px] text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blurple/80"
+        >
+            <div className="relative overflow-hidden rounded-[20px] border border-border/60 transition-[border-color,box-shadow] duration-200 group-hover:border-border-strong group-focus-visible:border-blurple/70">
                 <Poster
                     title={item.title}
                     seed={item.itemId}
                     src={item.thumbUrl}
+                    showTitle={false}
                     className="w-full"
                 />
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                    <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white/95 px-3 text-xs font-semibold text-black shadow">
+                <div className="pointer-events-none absolute inset-0 rounded-[20px] bg-white/0 transition-colors duration-200 group-hover:bg-white/[0.06] group-focus-visible:bg-white/[0.06]" />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+                    <span className="inline-flex h-10 items-center gap-1.5 rounded-full bg-surface/95 px-4 text-xs font-semibold text-text ring-1 ring-border-strong">
                         <Play size={13} aria-hidden="true" />
                         Open
                     </span>
                 </div>
                 {item.type === 'show' ? (
-                    <span className="absolute left-2 top-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.06em] text-white/90">
+                    <span className="absolute left-2.5 top-2.5 rounded-full bg-bg/80 px-2 py-1 text-[11px] font-medium text-white/90">
                         Series
                     </span>
                 ) : null}
             </div>
-            <p className="mt-2 truncate text-sm font-medium leading-5 text-text">{item.title}</p>
+            <p className="mt-2.5 truncate text-sm font-medium leading-5 text-text">{item.title}</p>
             <p className="mt-0.5 text-[11px] text-text-muted">
                 {item.year ?? 'Unknown'} · {item.type === 'show' ? 'Series' : formatDuration(item.durationMs)}
             </p>

@@ -31,11 +31,11 @@ export default function IptvPage() {
     return (
         <>
             <PageHeader title="IPTV" meta="Playlists, guides, and channel data" />
-            <div className="oc-page-enter mx-auto w-full max-w-[1600px] space-y-4 p-3 sm:p-5 xl:p-6">
+            <div className="mx-auto w-full max-w-[1600px] space-y-5 p-3 sm:p-5 xl:p-6">
                 <div
                     role="tablist"
                     aria-label="IPTV sections"
-                    className="flex items-center gap-1 border-b border-border"
+                    className="inline-flex w-full max-w-xs items-center gap-1 rounded-full border border-outline-variant bg-surface-container p-1.5"
                 >
                     {TABS.map(({ id, label, icon: Icon }) => {
                         const active = tab === id;
@@ -61,13 +61,13 @@ export default function IptvPage() {
                                     );
                                 }}
                                 className={cn(
-                                    'relative -mb-px inline-flex h-10 items-center gap-2 rounded-t-md border-b-2 px-3 text-sm font-medium transition-colors',
+                                    'oc-control inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full px-3.5 text-sm font-medium transition-[background-color,color,box-shadow] duration-200',
                                     active
-                                        ? 'border-blurple text-text'
-                                        : 'border-transparent text-text-muted hover:bg-white/[0.03] hover:text-text'
+                                        ? 'bg-primary-container text-on-primary-container'
+                                        : 'text-text-muted hover:bg-white/[0.05] hover:text-text'
                                 )}
                             >
-                                <Icon size={15} aria-hidden="true" />
+                                <Icon size={16} aria-hidden="true" />
                                 {label}
                             </button>
                         );

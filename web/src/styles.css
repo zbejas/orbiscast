@@ -1,26 +1,84 @@
 @import "tailwindcss";
 
 @theme {
-    --color-bg: #0b0d12;
-    --color-bg-deep: #07090d;
-    --color-surface: #11141b;
-    --color-raised: #161a22;
-    --color-raised-2: #1b2029;
-    --color-border: #242a36;
-    --color-border-strong: #333b4a;
-    --color-text: #e6e9ef;
-    --color-text-muted: #9aa3b2;
-    --color-text-faint: #8a94a6;
+    /* Dark tonal surface roles. Plum-tinted neutrals keep the console warm. */
+    --color-bg: #0b0911;
+    --color-bg-deep: #07060b;
+    --color-surface: #241e31;
+    --color-surface-container-lowest: #120f1a;
+    --color-surface-container-low: #2a2438;
+    --color-surface-container: #302942;
+    --color-surface-container-high: #3a324d;
+    --color-surface-container-highest: #453b59;
+    --color-raised: #2a2438;
+    --color-raised-2: #302942;
+    --color-border: #3d3549;
+    --color-border-strong: #554b63;
+    --color-outline: #7d7190;
+    --color-outline-variant: #4a4159;
+    --color-text: #ebe4f5;
+    --color-text-muted: #b9b0c6;
+    --color-text-faint: #a79db5;
+
+    /* Discord blurple is primary. Hover is darkened to keep white label AA. */
     --color-blurple: #5865f2;
     --color-blurple-hover: #4752c4;
-    --color-blurple-text: #8791ff;
-    --color-plex: #e5a00d;
-    --color-live: #3ba55d;
-    --color-danger: #ed4245;
-    --color-danger-strong: #c93b3e;
-    --color-warn: #f0b232;
-    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --color-blurple-bright: #6d78ff;
+    --color-blurple-text: #c3c7ff;
+    --color-primary: #5865f2;
+    --color-on-primary: #ffffff;
+    --color-primary-container: #2b2f63;
+    --color-on-primary-container: #dfe1ff;
+
+    --color-secondary: #cfc2e6;
+    --color-on-secondary: #352f43;
+    --color-secondary-container: #3b3452;
+    --color-on-secondary-container: #e8def8;
+
+    /* Plex amber is tertiary and reserved for on-demand media states. */
+    --color-plex: #f2b544;
+    --color-tertiary: #f2b544;
+    --color-on-tertiary: #3f2e00;
+    --color-tertiary-container: #5b4210;
+    --color-on-tertiary-container: #ffdea6;
+
+    --color-live: #4ade80;
+    --color-danger: #ffb4ab;
+    --color-on-danger: #690005;
+    --color-danger-container: #93000a;
+    --color-on-danger-container: #ffdad6;
+    --color-danger-strong: #c7352d;
+    --color-warn: #ffd27a;
+    --color-error: #ffb4ab;
+    --color-on-error: #690005;
+    --color-error-container: #93000a;
+    --color-on-error-container: #ffdad6;
+
+    --color-inverse-surface: #e8e1f0;
+    --color-inverse-on-surface: #1c1820;
+    --color-inverse-primary: #3f49b3;
+    --color-scrim: #040309;
+    --color-poster-ink: #f4f1e8;
+
+    /* Material 3 shape scale: 8, 12, 16, 20, 28, 32, 40. */
+    --radius: 0.5rem;
+    --radius-xs: 0.5rem;
+    --radius-sm: 0.75rem;
+    --radius-md: 1rem;
+    --radius-lg: 1.25rem;
+    --radius-xl: 1.75rem;
+    --radius-2xl: 2rem;
+    --radius-3xl: 2.5rem;
+    --radius-4xl: 2.5rem;
+
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+        sans-serif;
     --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
+
+    --shadow-e1: 0 1px 2px rgb(0 0 0 / 0.32), 0 1px 3px 1px rgb(0 0 0 / 0.16);
+    --shadow-e2: 0 2px 6px 2px rgb(0 0 0 / 0.24), 0 1px 2px rgb(0 0 0 / 0.3);
+    --shadow-e3: 0 8px 24px 4px rgb(0 0 0 / 0.34), 0 2px 6px rgb(0 0 0 / 0.28);
+    --shadow-e4: 0 18px 52px 6px rgb(0 0 0 / 0.42), 0 4px 14px rgb(0 0 0 / 0.3);
 }
 
 :root {
@@ -31,6 +89,12 @@
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    accent-color: var(--color-blurple);
+    --oc-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --oc-ease-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1);
+    --oc-dur-short: 150ms;
+    --oc-dur-medium: 220ms;
+    --oc-dur-long: 360ms;
 }
 
 html {
@@ -44,6 +108,51 @@ body {
     min-height: 100dvh;
     background: var(--color-bg);
     color: var(--color-text);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+}
+
+/* Type roles. Prefer these over hand-written pixel sizes in route markup. */
+.oc-type-display {
+    font-size: clamp(2rem, 1.4rem + 2.2vw, 2.75rem);
+    font-weight: 600;
+    line-height: 1.08;
+    letter-spacing: -0.025em;
+}
+
+.oc-type-headline {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+}
+
+.oc-type-title {
+    font-size: clamp(1.375rem, 1.2rem + 0.3vw, 1.5rem);
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.018em;
+}
+
+.oc-type-body {
+    font-size: 0.9375rem;
+    font-weight: 400;
+    line-height: 1.5;
+}
+
+.oc-type-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: 0.012em;
+}
+
+.oc-type-meta {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0.012em;
+    font-variant-numeric: tabular-nums;
 }
 
 button,
@@ -69,7 +178,7 @@ button {
 
 * {
     scrollbar-width: thin;
-    scrollbar-color: #2f3643 transparent;
+    scrollbar-color: var(--color-border-strong) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -82,27 +191,27 @@ button {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #2f3643;
+    background: var(--color-border-strong);
     border: 2px solid transparent;
     border-radius: 999px;
     background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #3c4555;
+    background: var(--color-outline);
     border: 2px solid transparent;
     background-clip: content-box;
 }
 
 :focus-visible {
-    outline: 2px solid var(--color-blurple);
+    outline: 2px solid var(--color-blurple-bright);
     outline-offset: 2px;
 }
 
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-    outline-offset: 1px;
+    outline-offset: 2px;
 }
 
 dialog {
@@ -116,7 +225,7 @@ dialog:modal {
 dialog::backdrop {
     overflow: hidden;
     overscroll-behavior: contain;
-    background: rgb(4 6 10 / 0.74);
+    background: rgb(4 3 9 / 0.74);
 }
 
 /* Skip link */
@@ -126,19 +235,41 @@ dialog::backdrop {
     left: 0.75rem;
     z-index: 120;
     transform: translateY(-200%);
-    border-radius: 8px;
+    border-radius: 999px;
     background: var(--color-blurple);
     color: #ffffff;
-    padding: 0.55rem 0.9rem;
-    font-size: 0.8125rem;
+    padding: 0.55rem 0.95rem;
+    font-size: 0.875rem;
     font-weight: 600;
     text-decoration: none;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+    box-shadow: var(--shadow-e3);
 }
 
 .skip-link:focus-visible {
     transform: translateY(0);
     outline-color: #ffffff;
+}
+
+/* Top app bar. Solid tonal fill, no glass. */
+.oc-app-bar {
+    background: var(--color-surface-container-low);
+    box-shadow: inset 0 -1px 0 var(--color-outline-variant);
+}
+
+.oc-app-bar-actions {
+    padding: 4px;
+    margin: -4px;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.oc-app-bar-actions > * {
+    flex: none;
+}
+
+.oc-app-bar-actions::-webkit-scrollbar {
+    display: none;
 }
 
 /* Dialog surfaces */
@@ -148,21 +279,64 @@ dialog.oc-dialog {
     max-height: min(88dvh, 52rem);
     margin: auto;
     padding: 0;
-    border: 1px solid var(--color-border-strong);
-    border-radius: 14px;
-    background: var(--color-surface);
+    border: 1px solid var(--color-outline-variant);
+    border-radius: 28px;
+    background: var(--color-surface-container-high);
     color: var(--color-text);
-    box-shadow: 0 24px 64px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.4);
+    box-shadow: var(--shadow-e4);
     overflow: hidden;
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+    transition:
+        opacity var(--oc-dur-short) var(--oc-ease-standard),
+        transform var(--oc-dur-short) var(--oc-ease-standard),
+        display var(--oc-dur-short) allow-discrete,
+        overlay var(--oc-dur-short) allow-discrete;
 }
 
 dialog.oc-dialog[open] {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
+    opacity: 1;
+    transform: none;
+    transition-duration: var(--oc-dur-long);
+}
+
+@starting-style {
+    dialog.oc-dialog[open] {
+        opacity: 0;
+        transform: translateY(10px) scale(0.96);
+    }
+}
+
+dialog.oc-dialog[data-state="closing"] {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+    transition-duration: var(--oc-dur-short);
 }
 
 dialog.oc-dialog::backdrop {
-    background: rgb(4 6 10 / 0.74);
+    background: rgb(4 3 9 / 0);
+    transition:
+        background-color var(--oc-dur-short) var(--oc-ease-standard),
+        display var(--oc-dur-short) allow-discrete,
+        overlay var(--oc-dur-short) allow-discrete;
+}
+
+dialog.oc-dialog[open]::backdrop {
+    background: rgb(4 3 9 / 0.72);
+    transition-duration: var(--oc-dur-long);
+}
+
+@starting-style {
+    dialog.oc-dialog[open]::backdrop {
+        background: rgb(4 3 9 / 0);
+    }
+}
+
+dialog.oc-dialog[data-state="closing"]::backdrop {
+    background: rgb(4 3 9 / 0);
+    transition-duration: var(--oc-dur-short);
 }
 
 dialog.oc-dialog-sm {
@@ -171,6 +345,52 @@ dialog.oc-dialog-sm {
 
 dialog.oc-dialog-lg {
     --oc-dialog-width: 42rem;
+}
+
+/* Bottom sheet. Same native dialog lifecycle, docked to the bottom edge. */
+dialog.oc-sheet {
+    width: min(100vw, 40rem);
+    max-width: none;
+    max-height: min(90dvh, 52rem);
+    margin: auto auto 0;
+    border-radius: 28px 28px 0 0;
+    border-bottom: 0;
+    transform: translateY(100%);
+}
+
+dialog.oc-sheet::before {
+    content: "";
+    position: absolute;
+    top: 0.5rem;
+    left: 50%;
+    z-index: 1;
+    width: 2rem;
+    height: 0.25rem;
+    border-radius: 999px;
+    background: var(--color-outline);
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+dialog.oc-sheet[open] {
+    transform: translateY(0);
+}
+
+@starting-style {
+    dialog.oc-sheet[open] {
+        opacity: 0;
+        transform: translateY(100%);
+    }
+}
+
+dialog.oc-sheet[data-state="closing"] {
+    opacity: 0;
+    transform: translateY(100%);
+    transition-duration: 200ms;
+}
+
+dialog.oc-sheet .oc-dialog-footer {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0));
 }
 
 /* Navigation drawer */
@@ -194,36 +414,26 @@ dialog.oc-drawer[open] {
 }
 
 dialog.oc-drawer::backdrop {
-    background: rgb(4 6 10 / 0.7);
+    background: rgb(4 3 9 / 0.66);
 }
 
 .oc-drawer-sheet {
     height: 100dvh;
     width: min(86vw, 20rem);
-    background: var(--color-surface);
-    border-right: 1px solid var(--color-border);
-    box-shadow: 16px 0 48px rgb(0 0 0 / 0.45);
-    animation: oc-slide-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    background: var(--color-surface-container-high);
+    border-right: 1px solid var(--color-outline-variant);
+    border-radius: 0 28px 28px 0;
+    box-shadow: var(--shadow-e4);
+    animation: oc-slide-in 320ms var(--oc-ease-emphasized) both;
 }
 
-/* Page motion */
+/* Motion. Page loads are still. One authored moment: live state and queue continuity. */
 .oc-page-enter {
-    animation: oc-fade-up 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: none;
 }
 
 .oc-live-dot {
-    animation: oc-live-pulse 2.6s ease-in-out infinite;
-}
-
-@keyframes oc-fade-up {
-    from {
-        opacity: 0;
-        transform: translateY(5px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    animation: oc-live-breathe 2.4s var(--oc-ease-standard) infinite;
 }
 
 @keyframes oc-slide-in {
@@ -238,7 +448,7 @@ dialog.oc-drawer::backdrop {
 @keyframes oc-slide-in-right {
     from {
         opacity: 0;
-        transform: translateX(10px);
+        transform: translateX(16px);
     }
     to {
         opacity: 1;
@@ -246,17 +456,48 @@ dialog.oc-drawer::backdrop {
     }
 }
 
-.oc-panel-enter {
-    animation: oc-slide-in-right 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+@keyframes oc-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
-@keyframes oc-live-pulse {
+.oc-panel-enter {
+    animation: oc-slide-in-right var(--oc-dur-long) var(--oc-ease-emphasized) both;
+}
+
+.oc-live-dot.bg-live {
+    color: var(--color-live);
+}
+
+.oc-live-dot.bg-plex {
+    color: var(--color-plex);
+}
+
+.oc-live-dot.bg-warn {
+    color: var(--color-warn);
+}
+
+.oc-live-dot.bg-blurple {
+    color: var(--color-blurple-bright);
+}
+
+.oc-live-dot.bg-text-muted, .oc-live-dot.bg-text-faint {
+    color: var(--color-text-muted);
+}
+
+@keyframes oc-live-breathe {
     0%,
     100% {
         opacity: 1;
+        box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 42%, transparent);
     }
     50% {
-        opacity: 0.45;
+        opacity: 0.72;
+        box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 0%, transparent);
     }
 }
 
@@ -271,7 +512,7 @@ dialog.oc-drawer::backdrop {
 
 .oc-progress-indeterminate {
     width: 38%;
-    animation: oc-indeterminate 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    animation: oc-indeterminate 1.4s var(--oc-ease-emphasized) infinite;
 }
 
 /* Switch */
@@ -280,31 +521,43 @@ dialog.oc-drawer::backdrop {
     align-items: flex-start;
     gap: 0.75rem;
     cursor: pointer;
-    min-height: 1.5rem;
+    min-height: 2rem;
 }
 
 .oc-switch-track {
     position: relative;
     display: inline-block;
     flex: none;
-    width: 2.5rem;
-    height: 1.5rem;
-    margin-top: 0.0625rem;
+    width: 3.25rem;
+    height: 2rem;
+    margin-top: 0;
     border-radius: 999px;
-    border: 1px solid var(--color-border-strong);
-    background: var(--color-raised-2);
-    transition: background-color 160ms ease, border-color 160ms ease;
+    border: 1px solid var(--color-outline);
+    background: var(--color-surface-container-highest);
+    transition:
+        background-color var(--oc-dur-medium) var(--oc-ease-standard),
+        border-color var(--oc-dur-medium) var(--oc-ease-standard);
 }
 
 .oc-switch-knob {
     position: absolute;
-    top: 3px;
+    top: 50%;
     left: 3px;
-    width: 1rem;
-    height: 1rem;
+    width: 1.5rem;
+    height: 1.5rem;
     border-radius: 999px;
     background: var(--color-text-muted);
-    transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), background-color 160ms ease;
+    box-shadow: var(--shadow-e1);
+    transform: translateY(-50%);
+    transition:
+        transform var(--oc-dur-medium) var(--oc-ease-emphasized),
+        background-color var(--oc-dur-medium) var(--oc-ease-standard),
+        width var(--oc-dur-medium) var(--oc-ease-emphasized);
+}
+
+.oc-switch-track:hover .oc-switch-knob,
+.oc-switch input:checked + .oc-switch-track .oc-switch-knob {
+    width: 1.75rem;
 }
 
 .oc-switch input:checked + .oc-switch-track {
@@ -313,12 +566,12 @@ dialog.oc-drawer::backdrop {
 }
 
 .oc-switch input:checked + .oc-switch-track .oc-switch-knob {
-    transform: translateX(1rem);
-    background: #ffffff;
+    transform: translate(1rem, -50%);
+    background: var(--color-on-primary);
 }
 
 .oc-switch input:focus-visible + .oc-switch-track {
-    outline: 2px solid var(--color-blurple);
+    outline: 2px solid var(--color-blurple-bright);
     outline-offset: 2px;
 }
 
@@ -347,7 +600,17 @@ dialog.oc-drawer::backdrop {
     width: 1rem;
     height: 1rem;
     flex: none;
+    border-radius: 0.25rem;
     accent-color: var(--color-blurple);
+}
+
+/* Text fields */
+.oc-field {
+    min-height: 44px;
+}
+
+.oc-field:disabled {
+    background: var(--color-surface-container-low);
 }
 
 /* Tables */
@@ -356,11 +619,12 @@ dialog.oc-drawer::backdrop {
     container-type: inline-size;
     overflow: auto;
     max-block-size: min(70dvh, 48rem);
-    border-radius: 0;
+    border-radius: 16px;
+    background: var(--color-surface-container-low);
 }
 
 .oc-table-wrapper:focus-visible {
-    outline: 2px solid var(--color-blurple);
+    outline: 2px solid var(--color-blurple-bright);
     outline-offset: -2px;
 }
 
@@ -368,8 +632,9 @@ dialog.oc-drawer::backdrop {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    font-size: 0.8125rem;
-    line-height: 1.4;
+    font-size: 0.875rem;
+    line-height: 1.42;
+    font-variant-numeric: tabular-nums;
 }
 
 .oc-table caption {
@@ -380,23 +645,23 @@ dialog.oc-drawer::backdrop {
     position: sticky;
     inset-block-start: 0;
     z-index: 3;
-    background: var(--color-raised);
+    background: var(--color-surface-container-high);
+    box-shadow: inset 0 -1px 0 var(--color-border);
 }
 
 .oc-table thead th {
-    padding: 0.625rem 0.75rem;
+    padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--color-border);
     color: var(--color-text-muted);
     font-size: 0.6875rem;
     font-weight: 600;
-    letter-spacing: 0.055em;
-    text-transform: uppercase;
+    letter-spacing: 0.012em;
     text-align: left;
     white-space: nowrap;
 }
 
 .oc-table tbody th {
-    padding: 0.625rem 0.75rem;
+    padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--color-border);
     text-align: left;
     font-weight: 500;
@@ -405,7 +670,7 @@ dialog.oc-drawer::backdrop {
 }
 
 .oc-table tbody td {
-    padding: 0.625rem 0.75rem;
+    padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--color-border);
     vertical-align: middle;
 }
@@ -416,15 +681,20 @@ dialog.oc-drawer::backdrop {
 }
 
 .oc-table tbody tr {
-    transition: background-color 120ms ease;
+    transition: background-color var(--oc-dur-short) var(--oc-ease-standard);
 }
 
 .oc-table tbody tr:hover {
-    background: rgb(255 255 255 / 0.018);
+    background: color-mix(in srgb, var(--color-text) 4%, transparent);
 }
 
 .oc-table tbody tr[data-selected="true"] {
-    background: color-mix(in srgb, var(--color-blurple) 7%, transparent);
+    background: var(--color-primary-container);
+    box-shadow: inset 3px 0 0 var(--color-blurple);
+}
+
+.oc-table tbody tr[data-selected="true"]:hover {
+    background: color-mix(in srgb, var(--color-primary-container) 88%, var(--color-surface-container-highest));
 }
 
 .oc-table .oc-table-actions {
@@ -441,6 +711,8 @@ dialog.oc-drawer::backdrop {
     .oc-table-wrapper {
         max-block-size: none;
         overflow: visible;
+        padding: 0.25rem;
+        background: transparent;
     }
 
     .oc-table,
@@ -458,10 +730,11 @@ dialog.oc-drawer::backdrop {
 
     .oc-table tbody tr {
         margin: 0 0 0.75rem;
-        padding: 0.25rem 0.875rem;
-        border: 1px solid var(--color-border);
-        border-radius: 10px;
-        background: var(--color-raised);
+        padding: 0.375rem 1rem;
+        border: 1px solid var(--color-outline-variant);
+        border-radius: 16px;
+        background: var(--color-surface-container);
+        box-shadow: var(--shadow-e1);
     }
 
     .oc-table tbody tr:last-child {
@@ -470,17 +743,19 @@ dialog.oc-drawer::backdrop {
 
     .oc-table tbody th {
         position: static;
-        padding: 0.75rem 0 0.625rem;
+        padding: 0.8125rem 0 0.6875rem;
         border-bottom: 1px solid var(--color-border);
+        font-size: 0.9375rem;
     }
 
     .oc-table tbody td {
         display: grid;
+        width: auto;
         grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
         align-items: center;
         gap: 0.75rem;
-        padding: 0.5rem 0;
-        border-bottom: 1px solid rgb(255 255 255 / 0.045);
+        padding: 0.5625rem 0;
+        border-bottom: 1px solid color-mix(in srgb, var(--color-text) 5%, transparent);
         text-align: end;
     }
 
@@ -488,8 +763,8 @@ dialog.oc-drawer::backdrop {
         content: attr(data-label);
         color: var(--color-text-muted);
         font-size: 0.6875rem;
-        letter-spacing: 0.045em;
-        text-transform: uppercase;
+        font-weight: 500;
+        letter-spacing: 0.012em;
         text-align: start;
     }
 
@@ -517,6 +792,7 @@ dialog.oc-drawer::backdrop {
     .oc-table tbody td:not([data-label]) {
         display: block;
         padding-block: 0.5rem;
+        text-align: start;
     }
 }
 
@@ -535,16 +811,16 @@ dialog.oc-drawer::backdrop {
     position: sticky;
     inset-inline-start: 0;
     z-index: 4;
-    background: var(--color-surface);
-    border-right: 1px solid var(--color-border);
+    background: var(--color-surface-container-low);
+    border-right: 1px solid var(--color-outline-variant);
 }
 
 .oc-epg-head {
     position: sticky;
     inset-block-start: 0;
     z-index: 6;
-    background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-container-high);
+    border-bottom: 1px solid var(--color-outline-variant);
 }
 
 .oc-epg-head .oc-epg-channel {
@@ -558,41 +834,43 @@ dialog.oc-drawer::backdrop {
     z-index: 5;
     width: 2px;
     background: var(--color-blurple);
-    box-shadow: 0 0 10px color-mix(in srgb, var(--color-blurple) 55%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--color-blurple) 62%, transparent);
 }
 
 .oc-epg-programme {
     position: absolute;
     inset-block: 5px;
     overflow: hidden;
-    border: 1px solid var(--color-border);
-    border-radius: 5px;
-    background: var(--color-raised);
+    border: 1px solid var(--color-outline-variant);
+    border-radius: 8px;
+    background: var(--color-surface-container);
     color: var(--color-text);
     text-align: left;
-    padding: 0.3125rem 0.4375rem;
+    padding: 0.375rem 0.5rem;
     font-size: 0.6875rem;
     line-height: 1.25;
-    transition: background-color 120ms ease, border-color 120ms ease;
+    transition:
+        background-color var(--oc-dur-short) var(--oc-ease-standard),
+        border-color var(--oc-dur-short) var(--oc-ease-standard);
     cursor: pointer;
     min-height: 2.25rem;
 }
 
 .oc-epg-programme:hover {
-    background: var(--color-raised-2);
+    background: var(--color-surface-container-high);
     border-color: var(--color-border-strong);
 }
 
 .oc-epg-programme[data-current="true"] {
-    border-color: color-mix(in srgb, var(--color-blurple) 55%, var(--color-border));
-    background: color-mix(in srgb, var(--color-blurple) 14%, var(--color-raised));
+    border-color: color-mix(in srgb, var(--color-blurple) 55%, var(--color-outline-variant));
+    background: color-mix(in srgb, var(--color-primary-container) 72%, var(--color-surface-container));
 }
 
 /* Posters */
 .oc-poster {
     position: relative;
     overflow: hidden;
-    background: var(--oc-poster-bg, #191d25);
+    background: var(--oc-poster-bg, var(--color-surface-container));
     isolation: isolate;
     aspect-ratio: 2 / 3;
     border-radius: inherit;
@@ -618,7 +896,7 @@ dialog.oc-drawer::backdrop {
 .oc-poster-scrim {
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, rgb(4 6 10 / 0) 42%, rgb(4 6 10 / 0.82) 100%);
+    background: linear-gradient(180deg, rgb(4 3 9 / 0) 42%, rgb(4 3 9 / 0.84) 100%);
 }
 
 .oc-poster-meta {
@@ -632,11 +910,11 @@ dialog.oc-drawer::backdrop {
 }
 
 .oc-poster-title {
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
     font-weight: 650;
-    line-height: 1.15;
+    line-height: 1.18;
     letter-spacing: 0.01em;
-    color: #f4f1e8;
+    color: var(--color-poster-ink, #f4f1e8);
     text-wrap: balance;
     text-shadow: 0 1px 6px rgb(0 0 0 / 0.6);
     display: -webkit-box;
@@ -645,23 +923,15 @@ dialog.oc-drawer::backdrop {
     overflow: hidden;
 }
 
-.oc-poster-mark {
-    flex: none;
-    font-family: var(--font-mono);
-    font-size: 0.5rem;
-    letter-spacing: 0.08em;
-    color: rgb(244 241 232 / 0.62);
-}
-
 .oc-channel-mark {
     display: grid;
     place-items: center;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--oc-mark-ink) 25%, var(--color-border));
+    border: 1px solid color-mix(in srgb, var(--oc-mark-ink) 25%, var(--color-outline-variant));
     background: linear-gradient(
         145deg,
-        color-mix(in srgb, var(--oc-mark-accent) 34%, var(--color-raised)),
-        var(--color-raised)
+        color-mix(in srgb, var(--oc-mark-accent) 34%, var(--color-surface-container)),
+        var(--color-surface-container)
     );
     color: var(--oc-mark-ink, var(--color-text));
     font-weight: 700;
@@ -683,6 +953,89 @@ dialog.oc-drawer::backdrop {
     align-items: baseline;
 }
 
+/* Skeletons */
+.oc-skeleton {
+    background-image: linear-gradient(
+        100deg,
+        var(--color-surface-container-high) 18%,
+        var(--color-surface-container-highest) 42%,
+        var(--color-surface-container-high) 66%
+    );
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    animation: oc-shimmer 1.8s var(--oc-ease-standard) infinite;
+}
+
+@keyframes oc-shimmer {
+    from {
+        background-position: 180% 0;
+    }
+    to {
+        background-position: -80% 0;
+    }
+}
+
+/* Chips */
+.oc-chip {
+    min-height: 2rem;
+    transition:
+        background-color var(--oc-dur-short) var(--oc-ease-standard),
+        border-color var(--oc-dur-short) var(--oc-ease-standard),
+        color var(--oc-dur-short) var(--oc-ease-standard);
+}
+
+/* Tonal icon well for empty and error states */
+.oc-icon-well {
+    display: grid;
+    place-items: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    flex: none;
+    border: 1px solid var(--color-outline-variant);
+    border-radius: 20px;
+    background: var(--color-surface-container-high);
+    color: var(--color-blurple-text);
+}
+
+.oc-icon-well-danger {
+    border-color: color-mix(in srgb, var(--color-danger) 28%, var(--color-outline-variant));
+    background: color-mix(in srgb, var(--color-danger) 12%, var(--color-surface-container));
+    color: var(--color-danger);
+}
+
+/* Seek */
+.oc-seek {
+    position: relative;
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    border-radius: 999px;
+    touch-action: pan-y;
+}
+
+.oc-seek-thumb {
+    box-shadow: 0 0 0 3px var(--color-bg);
+    transition:
+        box-shadow var(--oc-dur-short) var(--oc-ease-standard),
+        background-color var(--oc-dur-short) var(--oc-ease-standard);
+}
+
+.oc-seek:focus-within .oc-seek-thumb {
+    box-shadow:
+        0 0 0 3px var(--color-bg),
+        0 0 0 5px var(--color-blurple-bright);
+}
+
+.oc-seek-input {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+}
+
+.oc-seek-input:focus-visible {
+    outline: none;
+}
+
 /* Toast region */
 .oc-toast-region {
     position: fixed;
@@ -695,7 +1048,7 @@ dialog.oc-drawer::backdrop {
     max-height: min(70dvh, 34rem);
     overflow: auto;
     margin: 0;
-    padding: 0;
+    padding: 0 0 env(safe-area-inset-bottom, 0);
     border: 0;
     background: transparent;
     overflow-y: auto;
@@ -711,15 +1064,57 @@ dialog.oc-drawer::backdrop {
 }
 
 .oc-toast {
-    border: 1px solid var(--color-border-strong);
-    border-radius: 10px;
-    background: var(--color-raised);
-    color: var(--color-text);
-    box-shadow: 0 16px 40px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.35);
-    padding: 0.75rem 0.875rem;
+    border: 1px solid color-mix(in srgb, var(--color-inverse-on-surface) 12%, transparent);
+    border-radius: 16px;
+    background: var(--color-inverse-surface);
+    color: var(--color-inverse-on-surface);
+    box-shadow: var(--shadow-e4);
+    padding: 0.875rem 1rem;
+    opacity: 1;
+    transform: none;
+    transition:
+        opacity var(--oc-dur-short) var(--oc-ease-standard),
+        transform var(--oc-dur-short) var(--oc-ease-standard),
+        display var(--oc-dur-short) allow-discrete,
+        overlay var(--oc-dur-short) allow-discrete;
 }
 
-/* Tooltip-like title affordances are native. Coarse pointer targets. */
+@starting-style {
+    .oc-toast {
+        opacity: 0;
+        transform: translateY(12px) scale(0.98);
+    }
+}
+
+.oc-toast[data-state="closing"] {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+    transition-duration: var(--oc-dur-short);
+}
+
+.oc-toast-title {
+    color: var(--color-inverse-on-surface);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.oc-toast-body {
+    color: color-mix(in srgb, var(--color-inverse-on-surface) 78%, transparent);
+    font-size: 0.75rem;
+    line-height: 1.5;
+}
+
+.oc-toast-close {
+    color: var(--color-inverse-on-surface);
+}
+
+.oc-toast-close:hover {
+    background: color-mix(in srgb, var(--color-inverse-on-surface) 10%, transparent);
+    color: var(--color-inverse-on-surface);
+}
+
+/* Coarse pointer targets. */
 @media (any-pointer: coarse) {
     .oc-control {
         min-height: 48px;
@@ -727,6 +1122,31 @@ dialog.oc-drawer::backdrop {
 
     .oc-icon-control {
         min-width: 48px;
+        min-height: 48px;
+    }
+
+    .oc-app-bar-actions .oc-control {
+        min-width: 44px;
+    }
+
+    .oc-button-sm {
+        min-height: 44px;
+    }
+
+    .oc-chip {
+        min-height: 44px;
+        padding-inline: 0.875rem;
+    }
+
+    .oc-field {
+        min-height: 48px;
+    }
+
+    .oc-tab {
+        min-height: 44px;
+    }
+
+    .oc-seek {
         min-height: 48px;
     }
 
@@ -757,31 +1177,51 @@ dialog.oc-drawer::backdrop {
         min-height: 48px;
     }
 
-    .oc-button-sm {
-        min-height: 40px;
+    .oc-epg-programme {
+        min-height: 44px;
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
+    html {
+        scroll-behavior: auto;
     }
 
-    .oc-page-enter {
-        animation: none;
+    /* Keep color feedback. Disable only spatial and persistent motion, one
+       case at a time; a blanket near-zero duration makes some animations
+       snap and defeats the purpose of the preference. */
+    .oc-page-enter,
+    .oc-live-dot,
+    .oc-skeleton,
+    .oc-progress-indeterminate,
+    .oc-drawer-sheet {
+        animation: none !important;
+    }
+
+    .oc-panel-enter {
+        animation: oc-fade-in 150ms linear both !important;
+    }
+
+    dialog.oc-dialog,
+    dialog.oc-dialog[open],
+    .oc-toast,
+    .oc-toast[data-state="closing"] {
+        transform: none !important;
     }
 }
 
 @media (forced-colors: active) {
     .oc-switch-track,
     .oc-poster,
-    .oc-toast {
+    .oc-toast,
+    .oc-chip,
+    .oc-icon-well,
+    .oc-table-wrapper {
         border: 1px solid CanvasText;
+    }
+
+    .oc-skeleton {
+        background: Canvas;
     }
 }
 

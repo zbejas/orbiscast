@@ -308,7 +308,7 @@ export function SourcesPanel() {
                 <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-text">{source.name}</p>
                     <p
-                        className="max-w-[26rem] truncate font-mono text-[10px] text-text-faint"
+                        className="max-w-[26rem] truncate font-mono text-[11px] text-text-faint"
                         title={source.playlistUrl}
                     >
                         {source.playlistUrl}
@@ -454,7 +454,7 @@ export function SourcesPanel() {
                     </Link>
                 </div>
 
-                <section className="overflow-hidden rounded-xl border border-border bg-surface">
+                <section className="overflow-hidden rounded-[28px] border border-border/60 bg-surface">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
                         <h2 className="text-sm font-semibold text-text">Configured sources</h2>
                         <div className="flex items-center gap-3">

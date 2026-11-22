@@ -21,6 +21,7 @@ import type {
     DiscordTokensInput,
     EnableAuthInput,
     EnqueueInput,
+    EnqueueSeasonInput,
     SaveSourceInput,
     StartMediaInput,
     StartPlaceholderInput,
@@ -325,6 +326,17 @@ export function useUpdatePlaybackPreferences() {
     return useMutation({
         mutationFn: (playback: Partial<SettingsDto['playback']>) =>
             api.settings.updatePlayback(playback),
+        onSuccess: (settings) => {
+            client.setQueryData(qk.settings, settings);
+        },
+    });
+}
+
+export function useUpdateRecentVoiceChannels() {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: (channels: SettingsDto['recentVoiceChannels']) =>
+            api.settings.updateRecentVoiceChannels(channels),
         onSuccess: (settings) => {
             client.setQueryData(qk.settings, settings);
         },
@@ -651,6 +663,16 @@ export function useEnqueue() {
     const client = useQueryClient();
     return useMutation({
         mutationFn: (input: EnqueueInput) => api.media.enqueue(input),
+        onSuccess: () => {
+            client.invalidateQueries({ queryKey: qk.mediaQueue });
+        },
+    });
+}
+
+export function useEnqueueSeason() {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: (input: EnqueueSeasonInput) => api.media.enqueueSeason(input),
         onSuccess: () => {
             client.invalidateQueries({ queryKey: qk.mediaQueue });
         },

@@ -63,6 +63,18 @@ const uiSchema = z.object({
     trustedOrigins: z.array(z.string()).default([]),
     /** Media source ids in the WebUI tab order. Unknown ids are ignored. */
     mediaSourceOrder: z.array(z.number().int().positive()).max(500).default([]),
+    /** Most recently selected playback channels, newest first. */
+    recentVoiceChannels: z
+        .array(
+            z.object({
+                guildId: z.string().min(1).max(64),
+                guildName: z.string().max(200).default(''),
+                channelId: z.string().min(1).max(64),
+                channelName: z.string().max(200).default(''),
+            })
+        )
+        .max(3)
+        .default([]),
 });
 
 const metaSchema = z.object({
@@ -224,6 +236,7 @@ export class SettingsService {
             logLevel: this.cache.ui.logLevel,
             publicUrl: this.cache.ui.publicUrl,
             trustedOrigins: this.cache.ui.trustedOrigins,
+            recentVoiceChannels: this.cache.ui.recentVoiceChannels,
             stream: { ...this.cache.stream },
             playback: { ...this.cache.playback },
             auth: { enabled: this.cache.auth.enabled },
@@ -277,6 +290,32 @@ export class SettingsService {
         this.writeSection('ui', { ...this.cache.ui, mediaSourceOrder: unique }, now);
         this.cache = this.load();
         this.events?.emit('settings', this.getPublic());
+    }
+
+    /**
+     * Persists the most recently selected playback channels, newest first.
+     * Duplicate channels are removed and the list is capped at three.
+     *
+     * @param entries - Recent guild and channel pairs
+     * @returns The stored recent channel list
+     */
+    setRecentVoiceChannels(
+        entries: UiSettings['recentVoiceChannels']
+    ): UiSettings['recentVoiceChannels'] {
+        const seen = new Set<string>();
+        const unique = entries
+            .filter(entry => {
+                const key = `${entry.guildId}:${entry.channelId}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .slice(0, 3);
+        const now = Date.now();
+        this.writeSection('ui', { ...this.cache.ui, recentVoiceChannels: unique }, now);
+        this.cache = this.load();
+        this.events?.emit('settings', this.getPublic());
+        return unique;
     }
 
     /**

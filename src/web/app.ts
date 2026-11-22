@@ -360,6 +360,26 @@ export function createApp(services: AppServices) {
         res.json(updated);
     });
 
+    app.post('/api/settings/recent-voice-channels', (req, res) => {
+        const schema = z
+            .object({
+                channels: z
+                    .array(
+                        z.object({
+                            guildId: z.string().min(1).max(64),
+                            guildName: z.string().max(200).default(''),
+                            channelId: z.string().min(1).max(64),
+                            channelName: z.string().max(200).default(''),
+                        })
+                    )
+                    .max(3),
+            })
+            .strict();
+        const input = schema.parse(req.body);
+        services.settings.setRecentVoiceChannels(input.channels);
+        res.json(services.settings.getPublic());
+    });
+
     app.get('/api/sources', (_req, res) => {
         const sources = listSources(services.db).map(source => ({
             ...source,
@@ -761,17 +781,18 @@ export function createApp(services: AppServices) {
         const search = typeof req.query.search === 'string' ? req.query.search : '';
         if (search.trim()) {
             const items = await services.media.search(sourceId, search.trim());
-            res.json(library ? items.filter(item => item.libraryKey === library) : items);
+            const filtered = library ? items.filter(item => item.libraryKey === library) : items;
+            res.json({ items: filtered, total: filtered.length, start: 0, size: filtered.length });
             return;
         }
         if (!library) {
-            res.json([]);
+            res.json({ items: [], total: 0, start: 0, size: 0 });
             return;
         }
-        const start = parseIntParam(req.query.start) ?? 0;
-        const size = Math.min(200, parseIntParam(req.query.size) ?? 200);
+        const start = Math.max(0, parseIntParam(req.query.start) ?? 0);
+        const size = Math.min(200, Math.max(1, parseIntParam(req.query.size) ?? 200));
         const page = await services.media.getLibraryItems(sourceId, library, start, size);
-        res.json(page.items);
+        res.json({ items: page.items, total: page.total, start, size });
     });
 
     app.get('/api/media/items/:sourceId/:itemId/children', async (req, res) => {

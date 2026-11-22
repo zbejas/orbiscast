@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { formatDuration, formatElapsed } from '@/lib/format';
 import { ProgressBar } from './feedback';
 
 interface SeekBarProps {
@@ -41,11 +42,11 @@ export function SeekBar({
     };
 
     return (
-        <div className="relative py-2">
+        <div className="oc-seek relative">
             <ProgressBar value={value} max={max || 1} tone="plex" label={label} />
             <span
                 aria-hidden="true"
-                className="pointer-events-none absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-plex ring-2 ring-bg"
+                className="oc-seek-thumb pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-plex"
                 style={{ left: `${max > 0 ? (value / max) * 100 : 0}%` }}
             />
             <input
@@ -56,7 +57,8 @@ export function SeekBar({
                 value={value}
                 disabled={disabled || max <= 0}
                 aria-label={label}
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                aria-valuetext={`${formatElapsed(value)} of ${formatDuration(max)}`}
+                className="oc-seek-input absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
                 onChange={(event) => setDrag(Number(event.target.value))}
                 onPointerUp={commit}
                 onPointerCancel={() => {

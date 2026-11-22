@@ -162,6 +162,14 @@ export interface MediaItemDto {
     summary: string | null;
 }
 
+/** One page of a paginated media library browse. */
+export interface MediaItemPageDto {
+    items: MediaItemDto[];
+    total: number;
+    start: number;
+    size: number;
+}
+
 export interface MediaStreamDto {
     id: number;
     index: number | null;
@@ -232,11 +240,19 @@ export interface MediaHistoryDto {
     recommended?: boolean;
 }
 
+export interface RecentVoiceChannelDto {
+    guildId: string;
+    guildName: string;
+    channelId: string;
+    channelName: string;
+}
+
 export interface SettingsDto {
     timezone: string;
     logLevel: 'error' | 'warn' | 'info' | 'debug';
     publicUrl: string;
     trustedOrigins: string[];
+    recentVoiceChannels: RecentVoiceChannelDto[];
     stream: {
         bitrateVideo: number;
         bitrateVideoMax: number;

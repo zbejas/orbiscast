@@ -57,15 +57,15 @@ export default function SetupPage() {
         return (
             <>
                 <PageHeader title="Setup" meta="First run" />
-                <div className="oc-page-enter mx-auto w-full max-w-[1100px] space-y-4 p-3 sm:p-5 xl:p-6">
-                    <div className="rounded-xl border border-border bg-surface p-5" aria-hidden="true">
+                <div className="mx-auto w-full max-w-[1100px] space-y-5 p-3 sm:p-5 xl:p-6">
+                    <div className="rounded-[28px] border border-border/60 bg-surface p-5" aria-hidden="true">
                         <Skeleton className="h-5 w-48" />
                         <Skeleton className="mt-3 h-2 w-full" />
                         <Skeleton className="mt-3 h-3 w-2/3" />
                     </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" aria-hidden="true">
                         {[0, 1, 2, 3].map((index) => (
-                            <div key={index} className="rounded-xl border border-border bg-surface p-4">
+                            <div key={index} className="rounded-[28px] border border-border/60 bg-surface p-5">
                                 <Skeleton className="h-4 w-24" />
                                 <Skeleton className="mt-3 h-5 w-40" />
                                 <Skeleton className="mt-2 h-3 w-full" />
@@ -82,8 +82,8 @@ export default function SetupPage() {
         return (
             <>
                 <PageHeader title="Setup" meta="First run" />
-                <div className="oc-page-enter mx-auto w-full max-w-[1100px] p-3 sm:p-5 xl:p-6">
-                    <section className="rounded-xl border border-border bg-surface">
+                <div className="mx-auto w-full max-w-[1100px] p-3 sm:p-5 xl:p-6">
+                    <section className="rounded-[28px] border border-border/60 bg-surface">
                         <ErrorState
                             title="Setup status could not load"
                             error={setup.error}
@@ -192,21 +192,21 @@ export default function SetupPage() {
                     </Link>
                 }
             />
-            <div className="oc-page-enter mx-auto w-full max-w-[1100px] space-y-4 p-3 sm:p-5 xl:p-6">
-                <section className="rounded-xl border border-border bg-surface p-4 sm:p-5">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="mx-auto w-full max-w-[1100px] space-y-5 p-3 sm:p-5 xl:p-6">
+                <section className="rounded-[28px] border border-border/60 bg-surface p-5 sm:p-6">
+                    <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div className="max-w-2xl">
-                            <h2 className="text-[clamp(1.25rem,1.05rem+0.9vw,1.6rem)] font-semibold tracking-[-0.015em] text-text">
+                            <h2 className="text-[clamp(1.45rem,1.1rem+1.2vw,2rem)] font-semibold leading-tight tracking-[-0.02em] text-text">
                                 Finish configuration without editing files
                             </h2>
-                            <p className="mt-1.5 text-sm leading-relaxed text-text-muted">
+                            <p className="mt-2 text-sm leading-relaxed text-text-muted">
                                 Every step is also available later in the sidebar. A required step can be skipped
                                 for now, but the WebUI will not have complete data until it is done.
                             </p>
                         </div>
-                        <div className="w-full shrink-0 sm:w-56">
+                        <div className="w-full shrink-0 rounded-[20px] bg-bg/30 p-4 sm:w-64">
                             <div className="flex items-baseline justify-between gap-2">
-                                <span className="text-2xl font-semibold tabular-nums text-text">
+                                <span className="text-3xl font-semibold tabular-nums text-text">
                                     {requiredComplete}
                                     <span className="text-sm font-normal text-text-muted"> / {requiredTotal}</span>
                                 </span>
@@ -216,9 +216,9 @@ export default function SetupPage() {
                                 value={requiredComplete}
                                 max={requiredTotal}
                                 label="Required setup completion"
-                                className="mt-2"
+                                className="mt-2.5"
                             />
-                            <p className="mt-1.5 text-[11px] text-text-muted">
+                            <p className="mt-2 text-[11px] text-text-muted">
                                 Auth is optional. {status.authEnabled ? 'It is enabled.' : 'It is off.'}
                             </p>
                         </div>
@@ -226,7 +226,7 @@ export default function SetupPage() {
                 </section>
 
                 {visibleSteps.length === 0 ? (
-                    <section className="rounded-xl border border-border bg-surface">
+                    <section className="rounded-[28px] border border-border/60 bg-surface">
                         <EmptyState
                             icon={RefreshCw}
                             title="Every step is out of the way"
@@ -244,35 +244,35 @@ export default function SetupPage() {
                         />
                     </section>
                 ) : (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                         {visibleSteps.map((step) => {
                             const Icon = step.icon;
                             return (
                                 <article
                                     key={step.id}
-                                    className="flex flex-col rounded-xl border border-border bg-surface p-4"
+                                    className="flex flex-col rounded-[28px] border border-border/60 bg-surface p-5"
                                 >
                                     <div className="flex items-center justify-between gap-2">
-                                        <Icon
-                                            size={20}
-                                            aria-hidden="true"
+                                        <span
                                             className={
                                                 step.tone === 'plex'
-                                                    ? 'text-plex'
+                                                    ? 'grid size-11 place-items-center rounded-[16px] bg-plex/10 text-plex'
                                                     : step.tone === 'live'
-                                                      ? 'text-live'
+                                                      ? 'grid size-11 place-items-center rounded-[16px] bg-live/10 text-live'
                                                       : step.tone === 'warn'
-                                                        ? 'text-warn'
-                                                        : 'text-text-faint'
+                                                        ? 'grid size-11 place-items-center rounded-[16px] bg-warn/10 text-warn'
+                                                        : 'grid size-11 place-items-center rounded-[16px] bg-raised/60 text-text-faint'
                                             }
-                                        />
+                                        >
+                                            <Icon size={20} aria-hidden="true" />
+                                        </span>
                                         <StatusPill tone={step.tone}>{step.status}</StatusPill>
                                     </div>
-                                    <h2 className="mt-3 text-sm font-semibold text-text">{step.title}</h2>
+                                    <h2 className="mt-4 text-base font-semibold tracking-[-0.01em] text-text">{step.title}</h2>
                                     <p className="mt-1.5 flex-1 text-xs leading-relaxed text-text-muted">
                                         {step.description}
                                     </p>
-                                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-3">
+                                    <div className="mt-5 flex items-center justify-between gap-2 border-t border-border/50 pt-4">
                                         <Link
                                             to={step.to}
                                             className={buttonStyles({
@@ -285,7 +285,7 @@ export default function SetupPage() {
                                         <button
                                             type="button"
                                             onClick={() => skip(step.id)}
-                                            className="oc-control inline-flex h-8 items-center rounded-md px-2 text-xs font-medium text-text-muted hover:bg-white/5 hover:text-text"
+                                            className="oc-control inline-flex min-h-9 items-center rounded-full px-3 text-xs font-medium text-text-muted transition-colors duration-200 hover:bg-white/[0.05] hover:text-text"
                                         >
                                             Skip
                                         </button>
@@ -297,20 +297,20 @@ export default function SetupPage() {
                 )}
 
                 {skippedSteps.length > 0 ? (
-                    <section className="rounded-xl border border-border bg-surface">
-                        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-                            <h2 className="text-xs font-semibold text-text">Skipped steps</h2>
+                    <section className="rounded-[28px] border border-border/60 bg-surface">
+                        <div className="flex items-center justify-between gap-2 border-b border-border/50 px-5 py-3.5">
+                            <h2 className="text-sm font-semibold text-text">Skipped steps</h2>
                             <button
                                 type="button"
                                 onClick={() => setSkipped(new Set())}
-                                className="rounded text-[11px] font-medium text-blurple-text hover:text-[#a5acff]"
+                                className="inline-flex min-h-9 items-center rounded-full px-2 text-[11px] font-medium text-blurple-text transition-colors duration-200 hover:bg-blurple/10 hover:text-[#a5acff]"
                             >
                                 Restore all
                             </button>
                         </div>
-                        <ul className="divide-y divide-border">
+                        <ul className="divide-y divide-border/50">
                             {skippedSteps.map((step) => (
-                                <li key={step.id} className="flex items-center gap-2 px-4 py-2.5">
+                                <li key={step.id} className="flex items-center gap-2 px-5 py-3">
                                     <span className="min-w-0 flex-1 truncate text-xs text-text-muted">
                                         {step.title}
                                     </span>
@@ -320,7 +320,7 @@ export default function SetupPage() {
                                     <button
                                         type="button"
                                         onClick={() => restore(step.id)}
-                                        className="rounded px-1.5 py-1 text-[11px] font-medium text-blurple-text hover:text-[#a5acff]"
+                                        className="inline-flex min-h-9 items-center rounded-full px-2 text-[11px] font-medium text-blurple-text transition-colors duration-200 hover:bg-blurple/10 hover:text-[#a5acff]"
                                     >
                                         Restore
                                     </button>
@@ -331,7 +331,7 @@ export default function SetupPage() {
                 ) : null}
 
                 {requiredComplete === requiredTotal ? (
-                    <section className="rounded-xl border border-blurple/25 bg-blurple/[0.05] px-4 py-3">
+                    <section className="rounded-[28px] border border-blurple/25 bg-blurple/[0.06] px-5 py-4">
                         <div className="flex flex-wrap items-center gap-3">
                             <ShieldCheck size={18} aria-hidden="true" className="text-blurple-text" />
                             <p className="min-w-0 flex-1 text-xs leading-relaxed text-text-muted">

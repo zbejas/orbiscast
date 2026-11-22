@@ -253,6 +253,7 @@ No required variables. `PORT` is optional. `DATA_DIR` is not read; use `--data-d
 | Task | Read |
 |---|---|
 | Product intent, users, principles | [PRODUCT.md](PRODUCT.md) |
+| Visual system, tokens, components | [DESIGN.md](DESIGN.md) |
 | WebUI direction and surface contract | [.impeccable/surfaces/webui.md](.impeccable/surfaces/webui.md) |
 | WebUI and API | [docs/webui.md](docs/webui.md) |
 | Media sources, providers, proxy, transcode, queue | [docs/media.md](docs/media.md) |

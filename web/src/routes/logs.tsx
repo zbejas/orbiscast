@@ -136,8 +136,8 @@ export default function LogsPage() {
     return (
         <>
             <PageHeader title="Logs" meta={`${formatCount(lines.length)} lines · live tail`} />
-            <div className="oc-page-enter mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-3 sm:p-5 xl:p-6">
-                <section className="rounded-xl border border-border bg-surface p-3">
+            <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 p-3 sm:p-5 xl:p-6">
+                <section className="rounded-[28px] border border-border/60 bg-surface p-4 sm:p-5">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_11rem_auto]">
                         <Field label="Search messages" htmlFor="log-search">
                             <div className="relative">
@@ -197,7 +197,7 @@ export default function LogsPage() {
                             </Button>
                         </div>
                     </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
                         <StatusPill tone={streamTone} pulse={streamTone === 'live'}>
                             {streamLabel}
                         </StatusPill>
@@ -213,7 +213,7 @@ export default function LogsPage() {
                 </section>
 
                 {logs.isError ? (
-                    <section className="rounded-xl border border-border bg-surface">
+                    <section className="rounded-[28px] border border-border/60 bg-surface">
                         <ErrorState
                             title="Logs could not load"
                             message={errorMessage(logs.error)}
@@ -221,7 +221,7 @@ export default function LogsPage() {
                         />
                     </section>
                 ) : logs.isPending ? (
-                    <div className="space-y-2 rounded-xl border border-border bg-surface p-4" aria-hidden="true">
+                    <div className="space-y-2 rounded-[28px] border border-border/60 bg-surface p-5" aria-hidden="true">
                         {Array.from({ length: 10 }).map((_, index) => (
                             <Skeleton key={index} className="h-4 w-full" />
                         ))}
@@ -232,7 +232,8 @@ export default function LogsPage() {
                         role="log"
                         aria-live="off"
                         aria-label="Log output"
-                        className="oc-log-console h-[min(64dvh,44rem)] overflow-auto rounded-xl border border-border p-3 font-mono text-[11px]"
+                        style={{ background: 'var(--color-bg-deep)' }}
+                        className="oc-log-console h-[min(64dvh,44rem)] overflow-auto rounded-[28px] border border-border/60 p-4 font-mono text-[11px]"
                     >
                         {visible.length === 0 ? (
                             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
@@ -298,7 +299,7 @@ export default function LogsPage() {
                     <button
                         type="button"
                         onClick={() => void logs.refetch()}
-                        className="inline-flex items-center gap-1 rounded text-text-muted hover:text-text"
+                        className="inline-flex min-h-9 items-center gap-1 rounded-full px-2 text-text-muted transition-colors duration-200 hover:bg-white/[0.05] hover:text-text"
                     >
                         <RefreshCw size={12} aria-hidden="true" />
                         Reload history

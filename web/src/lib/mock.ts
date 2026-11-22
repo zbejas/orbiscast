@@ -100,6 +100,7 @@ let settings: SettingsDto = {
     logLevel: 'info',
     publicUrl: '',
     trustedOrigins: [],
+    recentVoiceChannels: [],
     stream: {
         bitrateVideo: 5000,
         bitrateVideoMax: 7500,

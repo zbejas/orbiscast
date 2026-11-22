@@ -17,7 +17,7 @@ interface TabsProps {
 }
 
 /**
- * Underline tabs with roving tabindex and arrow, Home, and End navigation.
+ * Segmented Material tabs with roving tabindex and arrow, Home, and End navigation.
  */
 export function Tabs({ items, value, onChange, label, children, className }: TabsProps) {
     const baseId = useId();
@@ -48,7 +48,7 @@ export function Tabs({ items, value, onChange, label, children, className }: Tab
             <div
                 role="tablist"
                 aria-label={label}
-                className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-border"
+                className="oc-tablist flex gap-1 overflow-x-auto overflow-y-hidden rounded-full border border-outline-variant bg-surface-container p-1"
             >
                 {items.map((item, index) => {
                     const selected = item.id === active?.id;
@@ -67,10 +67,10 @@ export function Tabs({ items, value, onChange, label, children, className }: Tab
                             onClick={() => onChange(item.id)}
                             onKeyDown={(event) => handleKeyDown(event, index)}
                             className={cn(
-                                'oc-control -mb-px inline-flex min-h-10 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+                                'oc-control oc-tab inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition-[background-color,color,box-shadow] duration-200 ease-[cubic-bezier(0.2,0,0,1)]',
                                 selected
-                                    ? 'border-blurple text-text'
-                                    : 'border-transparent text-text-muted hover:text-text'
+                                    ? 'bg-primary-container text-on-primary-container shadow-e1'
+                                    : 'text-text-muted hover:bg-text/10 hover:text-text'
                             )}
                         >
                             {item.label}
@@ -84,7 +84,7 @@ export function Tabs({ items, value, onChange, label, children, className }: Tab
                     role="tabpanel"
                     id={`${baseId}-panel`}
                     aria-labelledby={`${baseId}-tab-${active.id}`}
-                    className="pt-4"
+                    className="pt-5"
                 >
                     {children}
                 </div>

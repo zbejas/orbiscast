@@ -1,4 +1,4 @@
-# dependencies (bun install)
+# dependencies
 node_modules
 
 # output
@@ -12,19 +12,18 @@ coverage
 
 # logs
 logs
-_.log
+*.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # dotenv environment variable files
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.*
+!.env.example
 
 # caches
 .eslintcache
 .cache
+.vite
 *.tsbuildinfo
 
 # IDE configurations
@@ -38,14 +37,17 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 compose.build.yml
 build
 
-# Data and cache folder
-data
-cache
+# Data and cache folders
+/data
+/cache
+
 # WebUI local data and test output
 .tmp
 test-results
 playwright-report
+blob-report
 .playwright-mcp
 .impeccable/mocks
 .impeccable/review
 .impeccable/live
+.impeccable/config.local.json

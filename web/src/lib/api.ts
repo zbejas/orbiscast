@@ -6,10 +6,12 @@ import type {
     MediaHistoryDto,
     MediaItemDetailDto,
     MediaItemDto,
+    MediaItemPageDto,
     MediaLibraryDto,
     MediaSourceDto,
     PlaybackStateDto,
     QueueItemDto,
+    RecentVoiceChannelDto,
     SettingsDto,
     SetupStatusDto,
     SourceDto,
@@ -24,6 +26,7 @@ import type {
     EnableAuthInput,
     EnableAuthResult,
     EnqueueInput,
+    EnqueueSeasonInput,
     GuideResponse,
     LogPage,
     LogQuery,
@@ -117,6 +120,85 @@ function logQueryString(query: LogQuery): string {
     return params.toString();
 }
 
+/** One provider page. The API caps a single request at 200 items. */
+const MEDIA_ITEMS_PAGE_SIZE = 200;
+/** Safety stop for unexpectedly large libraries; the grid reveals 60 at a time. */
+const MAX_MEDIA_LIBRARY_ITEMS = 5_000;
+
+interface MediaPageResult {
+    items: MediaItemDto[];
+    total: number | null;
+    start: number;
+    size: number;
+}
+
+async function fetchMediaItemsPage(
+    sourceId: number,
+    libraryKey: string,
+    search: string,
+    start: number,
+    size: number
+): Promise<MediaPageResult> {
+    const params = new URLSearchParams({
+        library: libraryKey,
+        start: String(start),
+        size: String(size),
+    });
+    if (search.trim()) params.set('search', search.trim());
+    const body = await request<MediaItemPageDto | MediaItemDto[]>(
+        `/media/sources/${sourceId}/items?${params.toString()}`
+    );
+    if (Array.isArray(body)) {
+        // Older servers return a bare array. Keep working with them while the
+        // page-object response rolls out.
+        return { items: body, total: null, start, size };
+    }
+    return {
+        items: body.items,
+        total: body.total,
+        start: body.start,
+        size: body.size,
+    };
+}
+
+/**
+ * Loads a whole library by walking provider pages. The API deliberately caps
+ * one response at 200 items; large libraries need several requests.
+ *
+ * @param sourceId - Media source id
+ * @param libraryKey - Provider library key
+ * @param search - Optional search term; a search is a single page
+ */
+async function fetchAllMediaItems(
+    sourceId: number,
+    libraryKey: string,
+    search: string
+): Promise<MediaItemDto[]> {
+    const items: MediaItemDto[] = [];
+    let total: number | null = null;
+
+    while (items.length < MAX_MEDIA_LIBRARY_ITEMS) {
+        const page = await fetchMediaItemsPage(
+            sourceId,
+            libraryKey,
+            search,
+            items.length,
+            MEDIA_ITEMS_PAGE_SIZE
+        );
+        if (page.total !== null) {
+            total = Math.min(page.total, MAX_MEDIA_LIBRARY_ITEMS);
+        }
+        if (page.items.length === 0) break;
+        items.push(...page.items);
+
+        if (search.trim()) break;
+        if (page.items.length < MEDIA_ITEMS_PAGE_SIZE) break;
+        if (total !== null && items.length >= total) break;
+    }
+
+    return items.slice(0, MAX_MEDIA_LIBRARY_ITEMS);
+}
+
 export const api = {
     playback: {
         get: () => request<PlaybackStateDto>('/playback'),
@@ -207,11 +289,8 @@ export const api = {
                 `/media/sources/${sourceId}/libraries/${encodeURIComponent(key)}`,
                 { method: 'PATCH', body: JSON.stringify({ enabled }) }
             ),
-        items: (sourceId: number, libraryKey: string, search: string) => {
-            const params = new URLSearchParams({ library: libraryKey });
-            if (search.trim()) params.set('search', search.trim());
-            return request<MediaItemDto[]>(`/media/sources/${sourceId}/items?${params.toString()}`);
-        },
+        itemsPage: fetchMediaItemsPage,
+        items: fetchAllMediaItems,
         item: (sourceId: number, itemId: string) =>
             request<MediaItemDetailDto>(
                 `/media/items/${sourceId}/${encodeURIComponent(itemId)}`
@@ -254,12 +333,7 @@ export const api = {
                     voiceChannelId: input.voiceChannelId,
                 }),
             }),
-        enqueueSeason: (input: {
-            sourceId: number;
-            seasonId: string;
-            quality: string;
-            subtitleMode: string | number;
-        }) =>
+        enqueueSeason: (input: EnqueueSeasonInput) =>
             request<{ items: QueueItemDto[] }>('/media/queue/season', {
                 method: 'POST',
                 body: JSON.stringify(input),
@@ -323,6 +397,11 @@ export const api = {
             request<SettingsDto>('/settings', {
                 method: 'PATCH',
                 body: JSON.stringify({ playback }),
+            }),
+        updateRecentVoiceChannels: (channels: RecentVoiceChannelDto[]) =>
+            request<SettingsDto>('/settings/recent-voice-channels', {
+                method: 'POST',
+                body: JSON.stringify({ channels }),
             }),
     },
 

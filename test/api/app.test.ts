@@ -286,6 +286,36 @@ describe('API', () => {
         expect(updated.body.logLevel).toBe('debug');
     });
 
+    it('remembers recent playback voice channels', async () => {
+        const updated = await request(app)
+            .post('/api/settings/recent-voice-channels')
+            .send({
+                channels: [
+                    {
+                        guildId: 'guild-1',
+                        guildName: 'Guild One',
+                        channelId: 'channel-1',
+                        channelName: 'General',
+                    },
+                    {
+                        guildId: 'guild-1',
+                        guildName: 'Guild One',
+                        channelId: 'channel-2',
+                        channelName: 'Cinema',
+                    },
+                ],
+            })
+            .expect(200);
+
+        expect(updated.body.recentVoiceChannels).toEqual([
+            { guildId: 'guild-1', guildName: 'Guild One', channelId: 'channel-1', channelName: 'General' },
+            { guildId: 'guild-1', guildName: 'Guild One', channelId: 'channel-2', channelName: 'Cinema' },
+        ]);
+
+        const reloaded = await request(app).get('/api/settings').expect(200);
+        expect(reloaded.body.recentVoiceChannels).toHaveLength(2);
+    });
+
     it('enables auth, requires a session, and disables again', async () => {
         const agent = request.agent(app);
 

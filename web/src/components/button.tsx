@@ -6,23 +6,26 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'quie
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 const BASE =
-    'oc-control inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45';
+    'oc-control inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium tracking-[0.01em] transition-[background-color,border-color,color,box-shadow,opacity] duration-200 ease-[cubic-bezier(0.2,0,0,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blurple-bright disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none';
 
 const VARIANTS: Record<ButtonVariant, string> = {
-    primary: 'bg-blurple text-white hover:bg-blurple-hover active:bg-[#3f49b3]',
+    primary: 'bg-blurple text-white shadow-e1 hover:bg-blurple-hover active:bg-[#3b46b5]',
     secondary:
-        'border border-border bg-raised text-text hover:border-border-strong hover:bg-raised-2 active:bg-raised',
-    ghost: 'text-text-muted hover:bg-white/5 hover:text-text',
-    danger: 'bg-danger-strong text-white hover:bg-[#b53235] active:bg-[#a32b2e]',
-    quiet: 'text-blurple-text hover:bg-blurple/10 hover:text-[#a5acff]',
+        'border border-outline bg-transparent text-text hover:border-blurple-text/45 hover:bg-blurple/10 active:bg-blurple/15',
+    ghost: 'text-text-muted hover:bg-text/10 hover:text-text active:bg-text/15',
+    danger: 'bg-danger-strong text-white shadow-e1 hover:bg-[#a92a23] active:bg-[#8f211b]',
+    quiet: 'text-blurple-text hover:bg-blurple/12 hover:text-[#d8dbff] active:bg-blurple/18',
 };
 
 const SIZES: Record<ButtonSize, string> = {
-    sm: 'oc-button-sm h-8 px-2.5 text-xs',
-    md: 'h-9 px-3.5',
-    lg: 'h-10 px-4',
+    sm: 'oc-button-sm h-8 px-3 text-xs',
+    md: 'h-10 px-4 text-sm',
+    lg: 'h-12 px-5 text-base',
 };
 
+/**
+ * Shared button classes for native buttons and router links.
+ */
 export function buttonStyles({
     variant = 'secondary',
     size = 'md',
@@ -60,6 +63,7 @@ export function Button({
             type={type}
             className={cn(buttonStyles({ variant, size }), fullWidth && 'w-full', className)}
             disabled={disabled || loading}
+            aria-busy={loading || undefined}
             {...props}
         >
             {loading ? (
@@ -81,8 +85,8 @@ interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const ICON_SIZES = {
     sm: 'h-8 w-8',
-    md: 'h-9 w-9',
-    lg: 'h-10 w-10',
+    md: 'h-10 w-10',
+    lg: 'h-12 w-12',
 } as const;
 
 export function IconButton({
@@ -109,6 +113,7 @@ export function IconButton({
                 className
             )}
             disabled={disabled || loading}
+            aria-busy={loading || undefined}
             {...props}
         >
             {loading ? (

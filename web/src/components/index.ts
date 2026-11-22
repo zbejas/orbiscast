@@ -2,7 +2,8 @@ export { AppShell } from './app-shell';
 export { OrbitalGlyph, Wordmark } from './brand';
 export { Button, IconButton, buttonStyles } from './button';
 export type { ButtonSize, ButtonVariant } from './button';
-export { Dialog, ConfirmDialog } from './dialog';
+export { Dialog, ConfirmDialog, Sheet } from './dialog';
+export type { SheetProps } from './dialog';
 export {
     EmptyState,
     ErrorState,

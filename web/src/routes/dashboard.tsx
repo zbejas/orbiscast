@@ -74,8 +74,8 @@ type PlaybackMutation = ReturnType<typeof useStopPlayback>;
 
 function MetaItem({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
     return (
-        <span className="inline-flex min-w-0 items-center gap-1.5">
-            <Icon size={14} aria-hidden="true" className="shrink-0 text-text-faint" />
+        <span className="inline-flex min-h-7 min-w-0 items-center gap-1.5 rounded-full border border-border/60 bg-raised/50 px-2.5 text-[11px] text-text-muted">
+            <Icon size={13} aria-hidden="true" className="shrink-0 text-text-faint" />
             <span className="truncate">{children}</span>
         </span>
     );
@@ -84,9 +84,9 @@ function MetaItem({ icon: Icon, children }: { icon: LucideIcon; children: ReactN
 function PosterSlot({ playback }: { playback: PlaybackStateDto }) {
     if (playback.mode === 'iptv') {
         return (
-            <div className="relative flex aspect-[2/3] w-[84px] shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border border-border bg-raised sm:w-[124px] sm:gap-3">
+            <div className="relative flex aspect-[2/3] w-[96px] shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-[20px] border border-live/25 bg-live/[0.06] sm:w-[132px] sm:gap-3">
                 <ChannelMark name={playback.title ?? 'Live'} size="md" className="sm:h-16 sm:w-16" />
-                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-live">Live</span>
+                <span className="text-[11px] font-semibold tracking-[0.02em] text-live">Live</span>
             </div>
         );
     }
@@ -97,22 +97,22 @@ function PosterSlot({ playback }: { playback: PlaybackStateDto }) {
                 seed={playback.title ?? 'media'}
                 src={playback.posterUrl}
                 showTitle={false}
-                className="w-[84px] shrink-0 rounded-lg border border-border sm:w-[124px]"
+                className="w-[96px] shrink-0 rounded-[20px] border border-border/60 sm:w-[132px]"
             />
         );
     }
     if (playback.mode === 'placeholder') {
         return (
-            <div className="flex aspect-[2/3] w-[84px] shrink-0 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-plex/40 bg-plex/5 px-2 text-center sm:w-[124px]">
-                <Film size={26} aria-hidden="true" className="text-plex" />
-                <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-plex">Hold</span>
+            <div className="flex aspect-[2/3] w-[96px] shrink-0 flex-col items-center justify-center gap-3 rounded-[20px] border border-dashed border-plex/35 bg-plex/[0.06] px-2 text-center sm:w-[132px]">
+                <Film size={28} aria-hidden="true" className="text-plex" />
+                <span className="text-[11px] font-medium text-plex">Placeholder</span>
             </div>
         );
     }
     return (
-        <div className="flex aspect-[2/3] w-[84px] shrink-0 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border-strong bg-bg px-2 text-center sm:w-[124px]">
-            <Radio size={22} aria-hidden="true" className="text-text-faint" />
-            <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-text-faint">Idle</span>
+        <div className="flex aspect-[2/3] w-[96px] shrink-0 flex-col items-center justify-center gap-3 rounded-[20px] border border-dashed border-border-strong bg-bg/60 px-2 text-center sm:w-[132px]">
+            <Radio size={24} aria-hidden="true" className="text-text-faint" />
+            <span className="text-[11px] font-medium text-text-faint">Idle</span>
         </div>
     );
 }
@@ -136,14 +136,14 @@ function LivePlaybackCard() {
 
     if (playback.isPending) {
         return (
-            <section className="rounded-xl border border-border bg-surface p-5">
+            <section className="rounded-[28px] border border-border/60 bg-surface p-5 sm:p-6">
                 <div className="flex gap-4">
-                    <Skeleton className="h-[170px] w-[124px]" />
+                    <Skeleton className="h-[198px] w-[132px] rounded-[20px]" />
                     <div className="flex-1 space-y-3">
                         <Skeleton className="h-3 w-24" />
-                        <Skeleton className="h-8 w-2/3" />
+                        <Skeleton className="h-9 w-2/3" />
                         <Skeleton className="h-4 w-1/3" />
-                        <Skeleton className="h-8 w-48" />
+                        <Skeleton className="h-11 w-48 rounded-full" />
                     </div>
                 </div>
             </section>
@@ -151,7 +151,7 @@ function LivePlaybackCard() {
     }
     if (playback.isError || !playback.data) {
         return (
-            <section className="rounded-xl border border-border bg-surface">
+            <section className="rounded-[28px] border border-border/60 bg-surface">
                 <ErrorState
                     compact
                     title="Playback state unavailable"
@@ -174,6 +174,26 @@ function LivePlaybackCard() {
         currentItem.data?.streams.filter((stream) => stream.type === 'subtitle') ?? [];
     const subtitleValue = queueItem ? String(queueItem.subtitleMode) : 'auto';
     const tone = state.mode === 'iptv' ? 'live' : state.mode === 'media' ? 'plex' : 'neutral';
+    const frameTone =
+        state.mode === 'iptv'
+            ? 'border-live/25'
+            : state.mode === 'media'
+              ? state.paused
+                  ? 'border-warn/30'
+                  : 'border-plex/25'
+              : state.mode === 'placeholder'
+                ? 'border-plex/20'
+                : 'border-border/60';
+    const headerTone =
+        state.mode === 'iptv'
+            ? 'bg-live/[0.05]'
+            : state.mode === 'media'
+              ? state.paused
+                  ? 'bg-warn/[0.05]'
+                  : 'bg-plex/[0.05]'
+              : state.mode === 'placeholder'
+                ? 'bg-plex/[0.04]'
+                : 'bg-raised/30';
 
     const run = (action: PlaybackMutation, title: string, description?: string) => {
         action.mutate(undefined, {
@@ -200,13 +220,23 @@ function LivePlaybackCard() {
     };
 
     return (
-        <section className="overflow-hidden rounded-xl border border-border bg-surface">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-                <div className="flex items-center gap-2">
+        <section
+            className={cn(
+                'overflow-hidden rounded-[28px] border bg-surface transition-colors duration-200',
+                frameTone
+            )}
+        >
+            <div
+                className={cn(
+                    'flex flex-wrap items-center justify-between gap-2 border-b border-border/50 px-5 py-4',
+                    headerTone
+                )}
+            >
+                <div className="flex flex-wrap items-center gap-2.5">
                     <span
                         aria-hidden="true"
                         className={cn(
-                            'size-1.5 rounded-full',
+                            'size-2 rounded-full',
                             state.mode === 'iptv' || state.mode === 'media'
                                 ? state.paused
                                     ? 'bg-warn'
@@ -216,12 +246,12 @@ function LivePlaybackCard() {
                                   : 'bg-text-faint'
                         )}
                     />
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+                    <span className="text-xs font-medium text-text-muted">
                         {state.mode === 'idle' ? 'Playback' : 'Now playing'}
                     </span>
                     <StatusPill tone={tone} pulse={state.mode === 'iptv' || (state.mode === 'media' && !state.paused)}>
                         {state.mode === 'iptv'
-                            ? 'IPTV'
+                            ? 'IPTV live'
                             : state.mode === 'media'
                               ? state.paused
                                   ? 'Paused'
@@ -232,26 +262,26 @@ function LivePlaybackCard() {
                     </StatusPill>
                 </div>
                 {state.mode !== 'idle' ? (
-                    <span className="font-mono text-[11px] tabular-nums text-text-muted">
+                    <span className="rounded-full bg-bg/40 px-2.5 py-1 font-mono text-[11px] tabular-nums text-text-muted">
                         {formatUptime(state.startedAt, now)}
                     </span>
                 ) : null}
             </div>
 
-            <div className="p-4 sm:p-5">
-                <div className="flex items-start gap-4 sm:gap-5">
+            <div className="p-5 sm:p-6">
+                <div className="flex flex-col items-start gap-5 min-[460px]:flex-row">
                     <PosterSlot playback={state} />
                     <div className="min-w-0 flex-1">
                         {state.mode === 'idle' ? (
                             <>
-                                <h2 className="text-[clamp(1.4rem,1.15rem+1.1vw,1.95rem)] font-semibold leading-tight tracking-[-0.02em] text-text">
+                                <h2 className="text-[clamp(1.65rem,1.2rem+1.6vw,2.4rem)] font-semibold leading-[1.12] tracking-[-0.025em] text-text">
                                     Nothing is playing
                                 </h2>
-                                <p className="mt-1.5 max-w-lg text-sm leading-relaxed text-text-muted">
+                                <p className="mt-2 max-w-lg text-sm leading-relaxed text-text-muted">
                                     The streamer is connected and waiting. Start a media item or open the guide to find
                                     something to watch.
                                 </p>
-                                <div className="mt-4 flex flex-wrap gap-2">
+                                <div className="mt-5 flex flex-wrap gap-2">
                                     <Link to="/media" className={buttonStyles({ variant: 'primary' })}>
                                         <Film size={15} aria-hidden="true" />
                                         Open media
@@ -263,11 +293,11 @@ function LivePlaybackCard() {
                             </>
                         ) : (
                             <>
-                                <h2 className="text-[clamp(1.4rem,1.15rem+1.1vw,1.95rem)] font-semibold leading-tight tracking-[-0.02em] text-text">
+                                <h2 className="text-[clamp(1.65rem,1.2rem+1.6vw,2.4rem)] font-semibold leading-[1.12] tracking-[-0.025em] text-text">
                                     {state.title ?? 'Playback'}
                                 </h2>
-                                <p className="mt-1 truncate text-sm text-text-muted">{state.subtitle}</p>
-                                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-muted">
+                                <p className="mt-1.5 text-sm text-text-muted">{state.subtitle}</p>
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
                                     {state.guildName ? (
                                         <MetaItem icon={MessagesSquare}>{state.guildName}</MetaItem>
                                     ) : null}
@@ -355,7 +385,7 @@ function LivePlaybackCard() {
                                     </p>
                                 ) : null}
 
-                                <div className="mt-4 flex flex-wrap gap-2">
+                                <div className="mt-5 flex flex-wrap gap-2">
                                     {state.mode === 'media' ? (
                                         <>
                                             {state.paused ? (
@@ -428,30 +458,30 @@ function UpNextCard() {
     const failed = queue.data?.filter((item) => item.status === 'failed') ?? [];
 
     return (
-        <section className="flex flex-col rounded-xl border border-border bg-surface">
-            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-                <div className="flex items-baseline gap-2">
-                    <h2 className="text-sm font-semibold text-text">Up next</h2>
+        <section className="flex flex-col rounded-[28px] border border-border/60 bg-surface xl:sticky xl:top-20 xl:self-start">
+            <div className="flex items-center justify-between gap-2 border-b border-border/50 px-5 py-4">
+                <div className="flex items-center gap-2">
+                    <h2 className="text-base font-semibold tracking-[-0.01em] text-text">Up next</h2>
                     {queue.data ? (
-                        <span className="font-mono text-[11px] tabular-nums text-text-muted">
+                        <span className="rounded-full bg-raised/70 px-2 py-0.5 font-mono text-[11px] tabular-nums text-text-muted">
                             {pending.length}
                         </span>
                     ) : null}
                 </div>
                 <Link
                     to="/media"
-                    className="inline-flex items-center gap-1 rounded text-xs font-medium text-blurple-text hover:text-[#a5acff]"
+                    className="inline-flex min-h-9 items-center gap-1 rounded-full px-2 text-xs font-medium text-blurple-text transition-colors duration-200 hover:bg-blurple/10 hover:text-[#a5acff]"
                 >
                     Open queue
                     <ArrowRight size={13} aria-hidden="true" />
                 </Link>
             </div>
-            <div className="min-h-0 flex-1 px-4 py-3">
+            <div className="min-h-0 flex-1 p-3">
                 {queue.isPending ? (
-                    <div className="space-y-3" aria-hidden="true">
+                    <div className="space-y-3 p-2" aria-hidden="true">
                         {[0, 1, 2].map((index) => (
                             <div key={index} className="flex items-center gap-3">
-                                <Skeleton className="h-12 w-8" />
+                                <Skeleton className="h-14 w-9 rounded-xl" />
                                 <div className="flex-1 space-y-1.5">
                                     <Skeleton className="h-3.5 w-3/4" />
                                     <Skeleton className="h-3 w-1/2" />
@@ -474,10 +504,13 @@ function UpNextCard() {
                         }
                     />
                 ) : (
-                    <ol className="divide-y divide-border">
+                    <ol className="space-y-1">
                         {pending.slice(0, 3).map((item, index) => (
-                            <li key={item.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                                <span className="w-3 shrink-0 text-right font-mono text-[11px] tabular-nums text-text-faint">
+                            <li
+                                key={item.id}
+                                className="flex items-center gap-3 rounded-[20px] px-2 py-3 transition-colors duration-200 hover:bg-raised/50"
+                            >
+                                <span className="w-4 shrink-0 text-right font-mono text-[11px] tabular-nums text-text-faint">
                                     {index + 1}
                                 </span>
                                 <Poster
@@ -485,7 +518,7 @@ function UpNextCard() {
                                     seed={item.itemId}
                                     src={item.thumbUrl}
                                     showTitle={false}
-                                    className="h-12 w-8 shrink-0 rounded border border-border"
+                                    className="h-14 w-9 shrink-0 rounded-xl border border-border/60"
                                 />
                                 <div className="min-w-0 flex-1">
                                     <p className="truncate text-sm font-medium text-text">{item.title}</p>
@@ -503,7 +536,7 @@ function UpNextCard() {
                     </ol>
                 )}
                 {failed.length > 0 ? (
-                    <p className="mt-3 flex items-start gap-1.5 border-t border-border pt-3 text-[11px] leading-relaxed text-danger">
+                    <p className="mx-1 mt-3 flex items-start gap-1.5 rounded-2xl bg-danger/[0.08] p-3 text-[11px] leading-relaxed text-danger">
                         <TriangleExclamationPoint size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
                         {failed.length} queue item{failed.length === 1 ? '' : 's'} failed in the media library. Open the queue to
                         review.
@@ -511,7 +544,7 @@ function UpNextCard() {
                 ) : null}
             </div>
             {pending.length > 3 ? (
-                <div className="border-t border-border px-4 py-2 text-[11px] text-text-muted">
+                <div className="border-t border-border/50 px-5 py-2.5 text-[11px] text-text-muted">
                     {pending.length - 3} more in the queue
                 </div>
             ) : null}
@@ -528,32 +561,32 @@ function ContinueWatchingCard() {
     }
 
     return (
-        <section className="rounded-xl border border-border bg-surface">
-            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-                <div className="flex items-baseline gap-2">
-                    <h2 className="inline-flex items-center gap-1.5 text-sm font-semibold text-text">
-                        <Clock size={14} aria-hidden="true" className="text-plex" />
+        <section className="rounded-[28px] border border-border/60 bg-surface">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 px-5 py-4">
+                <div className="flex items-center gap-2">
+                    <h2 className="inline-flex items-center gap-1.5 text-base font-semibold tracking-[-0.01em] text-text">
+                        <Clock size={15} aria-hidden="true" className="text-plex" />
                         Continue watching
                     </h2>
                     {history.data ? (
-                        <span className="font-mono text-[11px] tabular-nums text-text-muted">
+                        <span className="rounded-full bg-raised/70 px-2 py-0.5 font-mono text-[11px] tabular-nums text-text-muted">
                             {entries.length}
                         </span>
                     ) : null}
                 </div>
                 <Link
                     to="/media"
-                    className="inline-flex items-center gap-1 rounded text-xs font-medium text-blurple-text hover:text-[#a5acff]"
+                    className="ml-auto inline-flex min-h-9 items-center gap-1 rounded-full px-2 text-xs font-medium text-blurple-text transition-colors duration-200 hover:bg-blurple/10 hover:text-[#a5acff]"
                 >
                     Open media
                     <ArrowRight size={13} aria-hidden="true" />
                 </Link>
             </div>
             {history.isPending ? (
-                <div className="space-y-3 px-4 py-4" aria-hidden="true">
+                <div className="grid gap-2 p-3 md:grid-cols-2" aria-hidden="true">
                     {[0, 1].map((index) => (
-                        <div key={index} className="flex items-center gap-3">
-                            <Skeleton className="h-12 w-8 shrink-0" />
+                        <div key={index} className="flex items-center gap-3 rounded-[20px] bg-bg/30 p-3">
+                            <Skeleton className="h-16 w-11 shrink-0 rounded-xl" />
                             <div className="min-w-0 flex-1 space-y-1.5">
                                 <Skeleton className="h-3.5 w-2/3" />
                                 <Skeleton className="h-3 w-1/2" />
@@ -565,57 +598,69 @@ function ContinueWatchingCard() {
             ) : history.isError ? (
                 <ErrorState compact error={history.error} onRetry={() => void history.refetch()} />
             ) : (
-                <ul className="divide-y divide-border">
-                    {entries.map((entry) => {
+                <ul className="grid gap-2 p-3 md:grid-cols-2">
+                    {entries.map((entry, index) => {
                         const duration = entry.durationMs ?? 0;
                         const recommended = entry.recommended === true;
                         return (
-                            <li key={entry.id}>
+                            <li
+                                key={entry.id}
+                                className={cn(
+                                    'min-w-0',
+                                    entries.length === 1 ||
+                                        (index === entries.length - 1 && entries.length % 2 === 1)
+                                        ? 'md:col-span-2'
+                                        : 'md:col-span-1'
+                                )}
+                            >
                                 <Link
                                     to={`/media?source=${entry.sourceId}&item=${encodeURIComponent(entry.itemId)}&play=1`}
-                                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blurple/60"
+                                    className="flex h-full min-h-full flex-col gap-3 rounded-[20px] bg-bg/30 p-3 transition-colors duration-200 hover:bg-raised/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blurple-bright sm:flex-row sm:items-center"
                                 >
-                                    <Poster
-                                        title={entry.title}
-                                        seed={entry.itemId}
-                                        src={entry.thumbUrl}
-                                        showTitle={false}
-                                        className="h-12 w-8 shrink-0 rounded border border-border"
-                                    />
-                                    <div className="min-w-0 flex-1">
-                                        <p className="truncate text-sm font-medium text-text">
-                                            {entry.title}
-                                            {recommended ? (
-                                                <span className="ml-2 inline-flex rounded-full border border-plex/40 bg-plex/10 px-1.5 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-[0.08em] text-plex">
-                                                    Up next
-                                                </span>
-                                            ) : null}
-                                        </p>
-                                        <p className="truncate text-[11px] text-text-muted">
-                                            {entry.type === 'episode'
-                                                ? `${entry.showTitle ?? 'Show'} · S${entry.seasonNumber ?? 1} E${entry.episodeNumber ?? 1}`
-                                                : `Movie · ${entry.sourceName}`}
-                                        </p>
-                                        {duration > 0 && !recommended ? (
-                                            <div className="mt-1.5 flex items-center gap-2">
-                                                <ProgressBar
-                                                    value={entry.positionMs}
-                                                    max={duration}
-                                                    tone="plex"
-                                                    label={`${entry.title} progress`}
-                                                    className="h-1"
-                                                />
-                                                <span className="shrink-0 font-mono text-[10px] tabular-nums text-text-muted">
-                                                    {formatElapsed(entry.positionMs)}
-                                                </span>
-                                            </div>
-                                        ) : recommended ? (
-                                            <p className="mt-1 text-[10px] text-text-faint">
-                                                Next episode · starts from the beginning
+                                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                                        <Poster
+                                            title={entry.title}
+                                            seed={entry.itemId}
+                                            src={entry.thumbUrl}
+                                            showTitle={false}
+                                            className="h-20 w-14 shrink-0 rounded-[16px] border border-border/60 sm:h-24 sm:w-16"
+                                        />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="line-clamp-2 text-sm font-medium leading-5 text-text sm:text-base">
+                                                {entry.title}
+                                                {recommended ? (
+                                                    <span className="ml-2 inline-flex rounded-full border border-plex/40 bg-plex/10 px-1.5 py-0.5 align-middle text-[11px] font-semibold tracking-[0.02em] text-plex">
+                                                        Up next
+                                                    </span>
+                                                ) : null}
                                             </p>
-                                        ) : null}
+                                            <p className="mt-1 text-[11px] leading-4 text-text-muted">
+                                                {entry.type === 'episode'
+                                                    ? `${entry.showTitle ?? 'Show'} · S${entry.seasonNumber ?? 1} E${entry.episodeNumber ?? 1}`
+                                                    : `Movie · ${entry.sourceName}`}
+                                            </p>
+                                            {duration > 0 && !recommended ? (
+                                                <div className="mt-2 flex items-center gap-2">
+                                                    <ProgressBar
+                                                        value={entry.positionMs}
+                                                        max={duration}
+                                                        tone="plex"
+                                                        label={`${entry.title} progress`}
+                                                        className="h-1"
+                                                    />
+                                                    <span className="shrink-0 font-mono text-[11px] tabular-nums text-text-muted">
+                                                        {formatElapsed(entry.positionMs)}
+                                                    </span>
+                                                </div>
+                                            ) : recommended ? (
+                                                <p className="mt-1 text-[11px] leading-4 text-text-faint">
+                                                    Next episode · starts from the beginning
+                                                </p>
+                                            ) : null}
+                                        </div>
                                     </div>
-                                    <span className="shrink-0 text-xs font-medium text-blurple-text">
+                                    <span className="inline-flex min-h-10 shrink-0 items-center gap-1.5 self-end rounded-full bg-primary-container px-3 text-xs font-medium text-on-primary-container sm:self-auto">
+                                        <Play size={12} aria-hidden="true" />
                                         {recommended ? 'Play next' : 'Resume'}
                                     </span>
                                 </Link>
@@ -634,7 +679,7 @@ function ConnectionBar() {
 
     if (discord.isError || media.isError) {
         return (
-            <section className="rounded-xl border border-border bg-surface">
+            <section className="rounded-[28px] border border-border/60 bg-surface">
                 <ErrorState
                     compact
                     title="Connection status unavailable"
@@ -660,11 +705,11 @@ function ConnectionBar() {
     const mediaTone = mediaSource?.connected ? 'plex' : mediaSource?.error ? 'danger' : 'neutral';
 
     return (
-        <section className="rounded-xl border border-border bg-surface">
-            <dl className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                <div className="flex items-start justify-between gap-3 px-4 py-3">
+        <section className="rounded-[28px] border border-border/60 bg-surface">
+            <dl className="grid grid-cols-1 divide-y divide-border/50 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                <div className="flex items-start justify-between gap-3 px-5 py-4">
                     <div className="min-w-0">
-                        <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
+                        <dt className="text-[11px] font-medium text-text-muted">
                             Bot
                         </dt>
                         <dd className="mt-1 truncate text-sm text-text">
@@ -676,9 +721,9 @@ function ConnectionBar() {
                     </div>
                     <StatusPill tone={botTone}>{discord.data?.bot ?? 'offline'}</StatusPill>
                 </div>
-                <div className="flex items-start justify-between gap-3 px-4 py-3">
+                <div className="flex items-start justify-between gap-3 px-5 py-4">
                     <div className="min-w-0">
-                        <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
+                        <dt className="text-[11px] font-medium text-text-muted">
                             Streamer
                         </dt>
                         <dd className="mt-1 truncate text-sm text-text">
@@ -688,9 +733,9 @@ function ConnectionBar() {
                     </div>
                     <StatusPill tone={streamerTone}>{discord.data?.streamer ?? 'offline'}</StatusPill>
                 </div>
-                <div className="flex items-start justify-between gap-3 px-4 py-3">
+                <div className="flex items-start justify-between gap-3 px-5 py-4">
                     <div className="min-w-0">
-                        <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
+                        <dt className="text-[11px] font-medium text-text-muted">
                             Media
                         </dt>
                         <dd className="mt-1 truncate text-sm text-text">
@@ -724,19 +769,19 @@ function SourceHealthCard() {
     const sources = useSources();
 
     return (
-        <section className="rounded-xl border border-border bg-surface">
-            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold text-text">Source health</h2>
+        <section className="rounded-[28px] border border-border/60 bg-surface">
+            <div className="flex items-center justify-between gap-2 border-b border-border/50 px-5 py-4">
+                <h2 className="text-base font-semibold tracking-[-0.01em] text-text">Source health</h2>
                 <Link
                     to="/iptv"
-                    className="inline-flex items-center gap-1 rounded text-xs font-medium text-blurple-text hover:text-[#a5acff]"
+                    className="inline-flex min-h-9 items-center gap-1 rounded-full px-2 text-xs font-medium text-blurple-text transition-colors duration-200 hover:bg-blurple/10 hover:text-[#a5acff]"
                 >
                     Manage
                     <ArrowRight size={13} aria-hidden="true" />
                 </Link>
             </div>
             {sources.isPending ? (
-                <div className="space-y-3 px-4 py-4" aria-hidden="true">
+                <div className="space-y-3 p-4" aria-hidden="true">
                     {[0, 1, 2].map((index) => (
                         <div key={index} className="flex items-center justify-between gap-3">
                             <Skeleton className="h-4 w-1/3" />
@@ -759,17 +804,21 @@ function SourceHealthCard() {
                     }
                 />
             ) : (
-                <ul className="divide-y divide-border">
+                <ul className="space-y-1 p-2">
                     {sources.data.map((source) => {
                         const state = sourceState(source);
                         return (
-                            <li key={source.id} className="px-4 py-3">
+                            <li key={source.id} className="rounded-[20px] px-3 py-3 transition-colors duration-200 hover:bg-raised/40">
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
                                         <p className="truncate text-sm font-medium text-text">{source.name}</p>
-                                        <p className="mt-0.5 text-[11px] text-text-muted">
-                                            {formatCount(source.channelCount)} channels ·{' '}
-                                            {formatCount(source.visibleCount)} visible
+                                        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-text-muted">
+                                            <span className="rounded-full bg-raised/60 px-2 py-0.5">
+                                                {formatCount(source.channelCount)} channels
+                                            </span>
+                                            <span className="rounded-full bg-raised/60 px-2 py-0.5">
+                                                {formatCount(source.visibleCount)} visible
+                                            </span>
                                         </p>
                                     </div>
                                     <div className="flex shrink-0 flex-col items-end gap-1">
@@ -780,7 +829,7 @@ function SourceHealthCard() {
                                     </div>
                                 </div>
                                 {source.lastError ? (
-                                    <p className="mt-2 line-clamp-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-danger">
+                                    <p className="mt-2 line-clamp-2 flex items-start gap-1.5 rounded-2xl bg-danger/[0.08] p-2.5 text-[11px] leading-relaxed text-danger">
                                         <TriangleExclamationPoint
                                             size={13}
                                             aria-hidden="true"
@@ -803,19 +852,19 @@ function RecentLogsCard() {
     const items = logs.data?.items ?? [];
 
     return (
-        <section className="rounded-xl border border-border bg-surface">
-            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold text-text">Recent logs</h2>
+        <section className="rounded-[28px] border border-border/60 bg-surface">
+            <div className="flex items-center justify-between gap-2 border-b border-border/50 px-5 py-4">
+                <h2 className="text-base font-semibold tracking-[-0.01em] text-text">Recent logs</h2>
                 <Link
                     to="/logs"
-                    className="inline-flex items-center gap-1 rounded text-xs font-medium text-blurple-text hover:text-[#a5acff]"
+                    className="inline-flex min-h-9 items-center gap-1 rounded-full px-2 text-xs font-medium text-blurple-text transition-colors duration-200 hover:bg-blurple/10 hover:text-[#a5acff]"
                 >
                     Open logs
                     <ArrowRight size={13} aria-hidden="true" />
                 </Link>
             </div>
             {logs.isPending ? (
-                <div className="space-y-2.5 px-4 py-4" aria-hidden="true">
+                <div className="space-y-2.5 p-4" aria-hidden="true">
                     {[0, 1, 2, 3, 4, 5].map((index) => (
                         <Skeleton key={index} className="h-3.5 w-full" />
                     ))}
@@ -825,38 +874,43 @@ function RecentLogsCard() {
             ) : items.length === 0 ? (
                 <EmptyState compact title="No log lines yet" description="The bot has not written anything yet." />
             ) : (
-                <ol className="divide-y divide-border">
-                    {items.map((line) => (
-                        <li key={line.id} className="flex items-baseline gap-2 px-4 py-2">
-                            <span className="shrink-0 font-mono text-[10px] tabular-nums text-text-faint">
-                                {formatClock(line.timestamp)}
-                            </span>
-                            <span
-                                className={cn(
-                                    'w-9 shrink-0 font-mono text-[10px] uppercase',
-                                    line.level === 'error'
-                                        ? 'text-danger'
-                                        : line.level === 'warn'
-                                          ? 'text-warn'
-                                          : line.level === 'debug'
-                                            ? 'text-text-faint'
-                                            : 'text-text-muted'
-                                )}
+                <div className="m-2 rounded-[20px] bg-bg/40 p-1">
+                    <ol>
+                        {items.map((line) => (
+                            <li
+                                key={line.id}
+                                className="flex items-baseline gap-2 rounded-2xl px-3 py-2 transition-colors duration-150 hover:bg-white/[0.03]"
                             >
-                                {line.level}
-                            </span>
-                            <span
-                                title={line.message}
-                                className={cn(
-                                    'min-w-0 flex-1 truncate font-mono text-[11px]',
-                                    line.level === 'error' ? 'text-danger' : 'text-text-muted'
-                                )}
-                            >
-                                {line.message}
-                            </span>
-                        </li>
-                    ))}
-                </ol>
+                                <span className="shrink-0 font-mono text-[11px] tabular-nums text-text-faint">
+                                    {formatClock(line.timestamp)}
+                                </span>
+                                <span
+                                    className={cn(
+                                        'w-9 shrink-0 font-mono text-[11px] uppercase',
+                                        line.level === 'error'
+                                            ? 'text-danger'
+                                            : line.level === 'warn'
+                                              ? 'text-warn'
+                                              : line.level === 'debug'
+                                                ? 'text-text-faint'
+                                                : 'text-text-muted'
+                                    )}
+                                >
+                                    {line.level}
+                                </span>
+                                <span
+                                    title={line.message}
+                                    className={cn(
+                                        'min-w-0 flex-1 truncate font-mono text-[11px]',
+                                        line.level === 'error' ? 'text-danger' : 'text-text-muted'
+                                    )}
+                                >
+                                    {line.message}
+                                </span>
+                            </li>
+                        ))}
+                    </ol>
+                </div>
             )}
         </section>
     );
@@ -870,21 +924,21 @@ export default function DashboardPage() {
                 meta="One streamer, one stream"
                 actions={
                     <span className="hidden sm:inline-flex">
-                        <Link to="/media" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
+                        <Link to="/media" className={buttonStyles({ variant: 'primary', size: 'sm' })}>
                             <Film size={14} aria-hidden="true" />
                             Open media
                         </Link>
                     </span>
                 }
             />
-            <div className="oc-page-enter mx-auto w-full max-w-[1600px] space-y-4 p-3 sm:p-5 xl:p-6">
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.9fr)]">
+            <div className="mx-auto w-full max-w-[1600px] space-y-5 p-3 sm:p-5 xl:p-6">
+                <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.9fr)]">
                     <LivePlaybackCard />
                     <UpNextCard />
                 </div>
                 <ContinueWatchingCard />
                 <ConnectionBar />
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                     <SourceHealthCard />
                     <RecentLogsCard />
                 </div>

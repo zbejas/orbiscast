@@ -48,5 +48,13 @@ build
 .tmp
 test-results
 playwright-report
+blob-report
+.playwright-mcp
 web/node_modules
 web/dist
+
+# Tooling and project context that the image does not need
+.impeccable
+.github
+docs
+test

@@ -79,24 +79,16 @@ export default function LoginPage() {
             <a href="#main" className="skip-link">
                 Skip to sign in
             </a>
-            <div className="grid min-h-dvh grid-cols-1 bg-bg text-text lg:grid-cols-[1.1fr_0.9fr]">
-                <aside className="relative hidden overflow-hidden border-r border-border bg-surface lg:flex lg:flex-col lg:justify-between lg:p-10">
-                    <div
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-0 opacity-[0.35]"
-                        style={{
-                            backgroundImage:
-                                'linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px)',
-                            backgroundSize: '48px 48px',
-                            maskImage: 'radial-gradient(circle at 45% 45%, black, transparent 72%)',
-                        }}
-                    />
+            <div className="grid min-h-dvh grid-cols-1 bg-bg text-text lg:grid-cols-[1.05fr_0.95fr]">
+                <aside className="relative hidden overflow-hidden border-r border-border/60 bg-surface lg:flex lg:flex-col lg:justify-between lg:p-10">
                     <div className="relative">
                         <Wordmark className="text-text" />
                     </div>
                     <div className="relative flex flex-col items-start">
-                        <OrbitalGlyph size={260} className="text-blurple-text opacity-90" strokeWidth={0.9} />
-                        <p className="mt-8 max-w-md text-2xl font-semibold leading-snug tracking-[-0.02em] text-text">
+                        <span className="grid size-40 place-items-center rounded-[28px] bg-raised/40">
+                            <OrbitalGlyph size={112} className="text-blurple-text opacity-90" strokeWidth={1} />
+                        </span>
+                        <p className="mt-8 max-w-md text-[clamp(1.5rem,1.1rem+1.1vw,2rem)] font-semibold leading-snug tracking-[-0.025em] text-text">
                             One streamer, one stream. IPTV, media, and Discord in a single control surface.
                         </p>
                         <p className="mt-3 max-w-md text-sm leading-relaxed text-text-muted">
@@ -104,29 +96,28 @@ export default function LoginPage() {
                             file.
                         </p>
                     </div>
-                    <div className="relative flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-text-muted">
-                        <span>IPTV guide</span>
-                        <span aria-hidden="true" className="size-1 rounded-full bg-text-faint" />
-                        <span>Media queue</span>
-                        <span aria-hidden="true" className="size-1 rounded-full bg-text-faint" />
-                        <span>Discord voice</span>
+                    <div className="relative flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+                        <span className="rounded-full border border-border/60 bg-raised/50 px-3 py-1.5">IPTV guide</span>
+                        <span className="rounded-full border border-border/60 bg-raised/50 px-3 py-1.5">Media queue</span>
+                        <span className="rounded-full border border-border/60 bg-raised/50 px-3 py-1.5">Discord voice</span>
                     </div>
                 </aside>
 
                 <main id="main" className="flex min-h-dvh flex-col">
-                    <div className="flex flex-1 items-center justify-center px-5 py-10 sm:px-8">
-                        <div className="w-full max-w-sm">
-                            <div className="mb-8 lg:hidden">
+                    <div className="flex flex-1 items-center justify-center px-4 py-8 sm:px-8 sm:py-12">
+                        <div className="w-full max-w-md">
+                            <div className="mb-6 lg:hidden">
                                 <Wordmark className="text-text" />
                             </div>
-                            <h1 className="mt-2 text-[clamp(1.8rem,1.5rem+1.2vw,2.3rem)] font-semibold tracking-[-0.03em] text-text">
+                            <div className="rounded-[28px] border border-border/60 bg-surface p-5 sm:p-7">
+                            <h1 className="text-[clamp(1.75rem,1.45rem+1.2vw,2.25rem)] font-semibold tracking-[-0.03em] text-text">
                                 Sign in
                             </h1>
                             <p className="mt-2 text-sm leading-relaxed text-text-muted">
                                 Use the admin account for this OrbisCast instance.
                             </p>
 
-                            <form noValidate onSubmit={submit} className="mt-7 space-y-4">
+                            <form noValidate onSubmit={submit} className="mt-6 space-y-4">
                                 <Field label="Username" htmlFor="login-username" error={errors.username} required>
                                     <Input
                                         id="login-username"
@@ -195,18 +186,19 @@ export default function LoginPage() {
                                 </Button>
                             </form>
 
-                            <div className="mt-6 flex items-center justify-between gap-3 border-t border-border pt-4 text-xs">
+                            <div className="mt-6 flex items-center justify-between gap-3 border-t border-border/50 pt-4 text-xs">
                                 <span className="text-text-faint">Self-hosted by design.</span>
                                 {authEnabled ? (
-                                    <span className="text-text-muted">Admin access</span>
+                                    <span className="rounded-full bg-raised/60 px-2.5 py-1 text-text-muted">Admin access</span>
                                 ) : (
                                     <Link
                                         to="/"
-                                        className="rounded text-blurple-text hover:text-[#a5acff]"
+                                        className="rounded-full px-2 py-1 text-blurple-text transition-colors duration-200 hover:bg-blurple/10 hover:text-[#a5acff]"
                                     >
                                         Return to dashboard
                                     </Link>
                                 )}
+                            </div>
                             </div>
                         </div>
                     </div>

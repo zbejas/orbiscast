@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Film, Save } from 'lucide-react';
+import { Cog, Film, Save, Server, ShieldCheck, SlidersHorizontal, type LucideIcon } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 import type { SettingsDto } from '@shared/types';
 import {
@@ -19,6 +19,7 @@ import {
     buttonStyles,
     useToast,
 } from '@/components';
+import { cn } from '@/lib/cn';
 import {
     qk,
     useAuthConfig,
@@ -55,6 +56,22 @@ const LOG_LEVELS: Array<{ value: SettingsDto['logLevel']; label: string }> = [
     { value: 'warn', label: 'Warn' },
     { value: 'info', label: 'Info' },
     { value: 'debug', label: 'Debug' },
+];
+
+type SettingsSectionId = 'streaming' | 'sources' | 'general' | 'auth';
+
+interface SettingsSection {
+    id: SettingsSectionId;
+    label: string;
+    hint: string;
+    icon: LucideIcon;
+}
+
+const SETTINGS_SECTIONS: SettingsSection[] = [
+    { id: 'streaming', label: 'Streaming', hint: 'Encoder and playback', icon: SlidersHorizontal },
+    { id: 'sources', label: 'Sources', hint: 'Plex and Jellyfin', icon: Server },
+    { id: 'general', label: 'General', hint: 'Time, URLs, and logs', icon: Cog },
+    { id: 'auth', label: 'Security', hint: 'Password protection', icon: ShieldCheck },
 ];
 
 interface SettingsForm {
@@ -97,7 +114,10 @@ function toForm(settings: SettingsDto): SettingsForm {
     };
 }
 
-function toDto(form: SettingsForm): SettingsDto {
+function toDto(
+    form: SettingsForm,
+    recentVoiceChannels: SettingsDto['recentVoiceChannels']
+): SettingsDto {
     return {
         timezone: form.timezone,
         logLevel: form.logLevel,
@@ -106,6 +126,7 @@ function toDto(form: SettingsForm): SettingsDto {
             .split(/[\n,]/)
             .map((origin) => origin.trim())
             .filter(Boolean),
+        recentVoiceChannels,
         stream: {
             bitrateVideo: Number(form.bitrateVideo),
             bitrateVideoMax: Number(form.bitrateVideoMax),
@@ -237,15 +258,15 @@ function Section({
         <section
             id={id}
             aria-labelledby={id ? `${id}-title` : undefined}
-            className="scroll-mt-20 rounded-xl border border-border bg-surface"
+            className="scroll-mt-24 rounded-[28px] border border-border/60 bg-surface"
         >
-            <div className="border-b border-border px-4 py-3 sm:px-5">
-                <h2 id={id ? `${id}-title` : undefined} className="text-sm font-semibold text-text">
+            <div className="border-b border-border/50 px-5 py-4">
+                <h2 id={id ? `${id}-title` : undefined} className="text-base font-semibold tracking-[-0.01em] text-text">
                     {title}
                 </h2>
-                <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-text-muted">{description}</p>
+                <p className="mt-1 max-w-2xl text-xs leading-relaxed text-text-muted">{description}</p>
             </div>
-            <div className="p-4 sm:p-5">{children}</div>
+            <div className="p-5">{children}</div>
         </section>
     );
 }
@@ -267,6 +288,7 @@ export default function SettingsPage() {
     const [authConfirm, setAuthConfirm] = useState('');
     const [authErrors, setAuthErrors] = useState<AuthFormErrors>({});
     const [authError, setAuthError] = useState<string | null>(null);
+    const [activeSection, setActiveSection] = useState<SettingsSectionId>('streaming');
     const initialRef = useRef<SettingsDto | null>(null);
 
     useEffect(() => {
@@ -281,10 +303,18 @@ export default function SettingsPage() {
     useEffect(() => {
         const hash = location.hash.replace('#', '');
         if (!hash) return;
+        const section = SETTINGS_SECTIONS.find((item) => item.id === hash);
+        if (section) setActiveSection(section.id);
+        let nested = 0;
         const frame = window.requestAnimationFrame(() => {
-            document.getElementById(hash)?.scrollIntoView({ block: 'start' });
+            nested = window.requestAnimationFrame(() => {
+                document.getElementById(hash)?.scrollIntoView({ block: 'start' });
+            });
         });
-        return () => window.cancelAnimationFrame(frame);
+        return () => {
+            window.cancelAnimationFrame(frame);
+            window.cancelAnimationFrame(nested);
+        };
     }, [location.hash, formReady]);
 
     const zones = useMemo(() => {
@@ -294,7 +324,10 @@ export default function SettingsPage() {
 
     const dirty = useMemo(() => {
         if (!settings.data || !form) return false;
-        return JSON.stringify(toDto(form)) !== JSON.stringify(settings.data);
+        return (
+            JSON.stringify(toDto(form, settings.data.recentVoiceChannels)) !==
+            JSON.stringify(settings.data)
+        );
     }, [form, settings.data]);
 
     const authTransition = Boolean(form?.authEnabled && settings.data && !settings.data.auth.enabled);
@@ -302,6 +335,15 @@ export default function SettingsPage() {
     const authCheckPending = Boolean(authTransition && authConfig.isPending);
     const saving = update.isPending || enableAuth.isPending || login.isPending;
     const saveDisabled = !form || settings.isError || authCheckPending;
+
+    const selectSection = (id: SettingsSectionId) => {
+        setActiveSection(id);
+        window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+                document.getElementById(id)?.scrollIntoView({ block: 'start' });
+            });
+        });
+    };
 
     const updateField = <K extends keyof SettingsForm>(key: K, value: SettingsForm[K]) => {
         setForm((current) => (current ? { ...current, [key]: value } : current));
@@ -334,6 +376,10 @@ export default function SettingsPage() {
         setErrors(next);
         setAuthErrors(nextAuthErrors);
         if (Object.keys(next).length > 0 || Object.keys(nextAuthErrors).length > 0) {
+            const streamingError = next.bitrateVideo || next.bitrateVideoMax || next.defaultStreamTimeout;
+            if (streamingError) setActiveSection('streaming');
+            else if (Object.keys(next).length > 0) setActiveSection('general');
+            else if (Object.keys(nextAuthErrors).length > 0) setActiveSection('auth');
             window.requestAnimationFrame(() => {
                 formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
             });
@@ -343,7 +389,7 @@ export default function SettingsPage() {
 
         if (!needsNewAdmin) {
             try {
-                await update.mutateAsync(toDto(form));
+                await update.mutateAsync(toDto(form, settings.data?.recentVoiceChannels ?? []));
                 toast({ title: 'Settings saved', tone: 'success' });
             } catch (error) {
                 const message = messageOf(error);
@@ -372,7 +418,7 @@ export default function SettingsPage() {
                 password: authPassword,
             });
             queryClient.setQueryData(qk.authConfig, { enabled: true, hasUser: true });
-            await update.mutateAsync(toDto(form));
+            await update.mutateAsync(toDto(form, settings.data?.recentVoiceChannels ?? []));
             setAuthPassword('');
             setAuthConfirm('');
             setAuthErrors({});
@@ -383,6 +429,7 @@ export default function SettingsPage() {
             });
         } catch (error) {
             const message = messageOf(error);
+            setActiveSection('auth');
             setAuthError(
                 didEnable
                     ? `Authentication is enabled, but the rest of the setup did not finish. Sign in with the new account and save again. ${message}`
@@ -398,26 +445,29 @@ export default function SettingsPage() {
                 meta={dirty ? 'Unsaved changes' : 'Configuration'}
                 actions={
                     <>
-                        <StatusPill tone={dirty ? 'warn' : 'neutral'} dot={false}>
-                            {dirty ? 'Unsaved' : 'Saved'}
-                        </StatusPill>
+                        <span className="hidden sm:inline-flex">
+                            <StatusPill tone={dirty ? 'warn' : 'neutral'} dot={false}>
+                                {dirty ? 'Unsaved' : 'Saved'}
+                            </StatusPill>
+                        </span>
                         <Button
                             type="submit"
                             form="settings-form"
                             variant="primary"
                             size="sm"
+                            aria-label="Save"
                             icon={<Save size={14} aria-hidden="true" />}
                             loading={saving}
                             disabled={saveDisabled}
                         >
-                            Save
+                            <span className="hidden sm:inline">Save</span>
                         </Button>
                     </>
                 }
             />
-            <div className="oc-page-enter mx-auto w-full max-w-[980px] space-y-4 p-3 sm:p-5 xl:p-6">
+            <div className="mx-auto w-full max-w-[980px] space-y-5 p-3 sm:p-5 xl:p-6">
                 {settings.isError ? (
-                    <section className="rounded-xl border border-border bg-surface">
+                    <section className="rounded-[28px] border border-border/60 bg-surface">
                         <ErrorState
                             title="Settings could not load"
                             error={settings.error}
@@ -427,20 +477,70 @@ export default function SettingsPage() {
                 ) : settings.isPending || !form ? (
                     <div className="space-y-3" aria-hidden="true">
                         {[0, 1, 2].map((index) => (
-                            <div key={index} className="rounded-xl border border-border bg-surface p-4">
+                            <div key={index} className="rounded-[28px] border border-border/60 bg-surface p-5">
                                 <Skeleton className="h-5 w-40" />
                                 <Skeleton className="mt-2 h-3 w-2/3" />
                                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                    <Skeleton className="h-9 w-full" />
-                                    <Skeleton className="h-9 w-full" />
+                                    <Skeleton className="h-11 w-full rounded-2xl" />
+                                    <Skeleton className="h-11 w-full rounded-2xl" />
                                 </div>
                             </div>
                         ))}
                     </div>
                 ) : (
                     <>
-                    <form id="settings-form" ref={formRef} noValidate onSubmit={submit} className="space-y-4">
+                    <form id="settings-form" ref={formRef} noValidate onSubmit={submit} className="space-y-5">
+                        <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
+                            <nav aria-label="Settings sections" className="hidden md:block">
+                                <div className="space-y-1 rounded-[28px] border border-border/60 bg-surface p-2 md:sticky md:top-24">
+                                    <p className="px-3 pb-1 pt-2 text-[11px] font-medium text-text-faint">
+                                        Configuration
+                                    </p>
+                                    {SETTINGS_SECTIONS.map((section) => {
+                                        const Icon = section.icon;
+                                        const selected = activeSection === section.id;
+                                        return (
+                                            <button
+                                                key={section.id}
+                                                type="button"
+                                                aria-current={selected ? 'true' : undefined}
+                                                onClick={() => selectSection(section.id)}
+                                                className={cn(
+                                                    'group flex min-h-14 w-full items-center gap-3 rounded-[20px] px-3 py-2.5 text-left transition-[background-color,color,box-shadow] duration-200',
+                                                    selected
+                                                        ? 'bg-blurple/15 text-text ring-1 ring-inset ring-blurple/25'
+                                                        : 'text-text-muted hover:bg-white/[0.04] hover:text-text'
+                                                )}
+                                            >
+                                                <span
+                                                    aria-hidden="true"
+                                                    className={cn(
+                                                        'grid size-8 shrink-0 place-items-center rounded-xl',
+                                                        selected
+                                                            ? 'bg-blurple/20 text-blurple-text'
+                                                            : 'bg-raised/60 text-text-faint group-hover:text-text-muted'
+                                                    )}
+                                                >
+                                                    <Icon size={16} />
+                                                </span>
+                                                <span className="min-w-0">
+                                                    <span className="block truncate text-sm font-medium">
+                                                        {section.label}
+                                                    </span>
+                                                    <span className="block truncate text-[11px] text-text-faint">
+                                                        {section.hint}
+                                                    </span>
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </nav>
+
+                            <div className="min-w-0 space-y-5">
+                        <div className={cn(activeSection === 'streaming' ? 'block' : 'block md:hidden')}>
                         <Section
+                            id="streaming"
                             title="Streaming"
                             description="Encoder targets for the Discord stream. Changes apply to the next stream."
                         >
@@ -507,7 +607,7 @@ export default function SettingsPage() {
                                         required
                                     />
                                 </Field>
-                                <div className="space-y-2 sm:pt-2">
+                                <div className="space-y-2 rounded-[20px] bg-bg/30 p-3 sm:col-span-2 sm:mt-1 lg:col-span-1 lg:mt-0">
                                     <Switch
                                         checked={form.minimizeLatency}
                                         onChange={(event) =>
@@ -527,8 +627,11 @@ export default function SettingsPage() {
                                 </div>
                             </div>
                         </Section>
+                        </div>
 
+                        <div className={cn(activeSection === 'sources' ? 'block' : 'block md:hidden')}>
                         <Section
+                            id="sources"
                             title="Media sources"
                             description="Plex and Jellyfin connections, libraries, virtual channel names, idle timers, and default quality are managed on the Media page."
                         >
@@ -537,8 +640,11 @@ export default function SettingsPage() {
                                 Open Media
                             </Link>
                         </Section>
+                        </div>
 
+                        <div className={cn(activeSection === 'general' ? 'block' : 'block md:hidden')}>
                         <Section
+                            id="general"
                             title="General"
                             description="Time and log preferences for the whole process."
                         >
@@ -619,7 +725,9 @@ export default function SettingsPage() {
                                 </Field>
                             </div>
                         </Section>
+                        </div>
 
+                        <div className={cn(activeSection === 'auth' ? 'block' : 'block md:hidden')}>
                         <Section
                             id="auth"
                             title="Authentication"
@@ -652,7 +760,7 @@ export default function SettingsPage() {
                                         Reload the page before enabling authentication.
                                     </Notice>
                                 ) : needsNewAdmin ? (
-                                    <div className="mt-4 space-y-4 border-t border-border pt-4">
+                                    <div className="mt-4 space-y-4 border-t border-border/50 pt-4">
                                         <p className="text-xs leading-relaxed text-text-muted">
                                             No admin account exists yet. Create one now. If you lose this
                                             password, use the server CLI to reset the account.
@@ -757,8 +865,9 @@ export default function SettingsPage() {
                                 </Notice>
                             ) : null}
                         </Section>
+                        </div>
 
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
                             <p className="text-[11px] text-text-faint">
                                 {dirty
                                     ? 'You have unsaved changes.'
@@ -787,6 +896,8 @@ export default function SettingsPage() {
                                 >
                                     Save changes
                                 </Button>
+                            </div>
+                        </div>
                             </div>
                         </div>
                     </form>
