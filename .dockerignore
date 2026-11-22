@@ -41,3 +41,20 @@ data
 cache
 build
 
+
+# Workspace installs and build output
+**/node_modules
+**/dist
+.tmp
+test-results
+playwright-report
+blob-report
+.playwright-mcp
+web/node_modules
+web/dist
+
+# Tooling and project context that the image does not need
+.impeccable
+.github
+docs
+test

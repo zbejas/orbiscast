@@ -1,0 +1,128 @@
+{
+    "MediaContainer": {
+        "size": 3,
+        "totalSize": 3,
+        "offset": 0,
+        "librarySectionID": 20,
+        "librarySectionTitle": "Series",
+        "parentTitle": "Season 1",
+        "grandparentTitle": "Signal Garden",
+        "parentIndex": 1,
+        "Metadata": [
+            {
+                "ratingKey": "5111",
+                "key": "/library/metadata/5111",
+                "parentRatingKey": "5101",
+                "grandparentRatingKey": "5001",
+                "type": "episode",
+                "title": "First Signal",
+                "grandparentTitle": "Signal Garden",
+                "parentTitle": "Season 1",
+                "summary": "A synthetic first episode.",
+                "index": 1,
+                "parentIndex": 1,
+                "year": 2023,
+                "duration": 2400000,
+                "thumb": "/library/metadata/5111/thumb/1700001000",
+                "addedAt": 1700001000,
+                "updatedAt": 1700001100,
+                "Media": [
+                    {
+                        "id": 2101,
+                        "duration": 2400000,
+                        "bitrate": 2400,
+                        "width": 1920,
+                        "height": 1080,
+                        "aspectRatio": 1.78,
+                        "audioChannels": 2,
+                        "audioCodec": "aac",
+                        "videoCodec": "h264",
+                        "videoResolution": "1080",
+                        "container": "mkv",
+                        "videoFrameRate": "24p",
+                        "videoProfile": "high",
+                        "Part": [
+                            {
+                                "id": 3101,
+                                "key": "/library/parts/3101/1700001000/file.mkv",
+                                "duration": 2400000,
+                                "file": "/fixtures/series/Signal Garden/S01E01.mkv",
+                                "size": 720000000,
+                                "container": "mkv",
+                                "videoProfile": "high",
+                                "Stream": [
+                                    {
+                                        "id": 4101,
+                                        "streamType": 1,
+                                        "default": true,
+                                        "selected": true,
+                                        "codec": "h264",
+                                        "index": 0,
+                                        "width": 1920,
+                                        "height": 1080
+                                    },
+                                    {
+                                        "id": 4102,
+                                        "streamType": 2,
+                                        "default": true,
+                                        "selected": true,
+                                        "codec": "aac",
+                                        "index": 1,
+                                        "channels": 2
+                                    },
+                                    {
+                                        "id": 4103,
+                                        "streamType": 3,
+                                        "default": false,
+                                        "forced": false,
+                                        "selected": false,
+                                        "codec": "srt",
+                                        "index": 2,
+                                        "language": "English",
+                                        "languageTag": "en"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "ratingKey": "5112",
+                "key": "/library/metadata/5112",
+                "parentRatingKey": "5101",
+                "grandparentRatingKey": "5001",
+                "type": "episode",
+                "title": "Second Signal",
+                "grandparentTitle": "Signal Garden",
+                "parentTitle": "Season 1",
+                "summary": "A synthetic second episode.",
+                "index": 2,
+                "parentIndex": 1,
+                "year": 2023,
+                "duration": 2450000,
+                "thumb": "/library/metadata/5112/thumb/1700001200",
+                "addedAt": 1700001200,
+                "updatedAt": 1700001300
+            },
+            {
+                "ratingKey": "5113",
+                "key": "/library/metadata/5113",
+                "parentRatingKey": "5101",
+                "grandparentRatingKey": "5001",
+                "type": "episode",
+                "title": "Third Signal",
+                "grandparentTitle": "Signal Garden",
+                "parentTitle": "Season 1",
+                "summary": "A synthetic third episode.",
+                "index": 3,
+                "parentIndex": 1,
+                "year": 2023,
+                "duration": 2500000,
+                "thumb": "/library/metadata/5113/thumb/1700001400",
+                "addedAt": 1700001400,
+                "updatedAt": 1700001500
+            }
+        ]
+    }
+}

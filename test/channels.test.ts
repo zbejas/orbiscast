@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeChannelId, findChannelBySanitizedId } from '../src/utils/channels';
+import { sanitizeChannelId, findChannelBySanitizedId, formatChannelLabel } from '../src/utils/channels';
 import type { ChannelEntry } from '../src/interfaces/iptv';
 
 function channel(tvg_name: string): ChannelEntry {
@@ -37,5 +37,24 @@ describe('findChannelBySanitizedId', () => {
     it('ignores channels without a name', () => {
         const unnamed: ChannelEntry = { xui_id: 0, url: 'http://example.com/x' };
         expect(findChannelBySanitizedId([unnamed], 'anything')).toBeUndefined();
+    });
+});
+
+describe('formatChannelLabel', () => {
+    it('adds the category so same-named channels stay distinct', () => {
+        expect(formatChannelLabel('AMC', 'US | Entertainment')).toBe('AMC | US | Entertainment');
+        expect(formatChannelLabel('AMC', 'CA | Entertainment')).not.toBe(
+            formatChannelLabel('AMC', 'US | Entertainment')
+        );
+    });
+
+    it('uses the name alone when there is no category', () => {
+        expect(formatChannelLabel('BBC One HD')).toBe('BBC One HD');
+        expect(formatChannelLabel('BBC One HD', '   ')).toBe('BBC One HD');
+    });
+
+    it('keeps the result within 100 characters', () => {
+        const label = formatChannelLabel('A'.repeat(150), 'B'.repeat(150));
+        expect(label.length).toBeLessThanOrEqual(100);
     });
 });

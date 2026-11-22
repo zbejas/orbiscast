@@ -1,48 +1,141 @@
-import { config } from './utils/config';
-import { downloadCacheAndFillDb, stopIPTVRefresh } from './modules/iptv';
-import { getLogger } from './utils/logger';
-import { client } from './utils/discord';
-import { initializeStreamer, shutdownStreamer } from './modules/streaming';
+import { EventEmitter } from 'node:events';
+import { join, resolve } from 'node:path';
+import { parseArgs } from 'node:util';
+import { openDatabase, runMigrations } from './modules/database/client';
+import { loadOrCreateKeys } from './utils/crypto';
+import { SettingsService } from './modules/settings';
+import { importLegacyEnv } from './modules/setup/import-env';
+import { IptvService } from './modules/iptv/service';
+import { PlaybackEngine } from './modules/playback/engine';
+import { DiscordService } from './modules/discord/service';
+import { MediaService } from './modules/media/service';
+import { resetPlayingMediaItems } from './modules/database/repo';
+import { createApp } from './web/app';
+import { createAuthAdapter } from './web/auth';
+import { configureLogger, getLogger } from './utils/logger';
+import { configureCache } from './utils/cache';
+import { setRuntime } from './runtime';
 
 const logger = getLogger();
 
-/**
- * Initialize and start the OrbisCast application
- * Performs database setup, initializes the streamer, and logs in the Discord bot
- */
-async function startOrbisCast() {
-    try {
-        await initializeStreamer();
-        await downloadCacheAndFillDb();
-        logger.info('Attempting to log in OrbisCast...');
-        await client.login(config.DISCORD_BOT_TOKEN);
-        logger.info('OrbisCast logged in successfully');
-    } catch (err) {
-        logger.error(`Error: ${err}`);
-    }
+interface CliOptions {
+    port: number;
+    dataDir: string;
+    testMode: boolean;
+}
+
+function readOptions(): CliOptions {
+    const { values } = parseArgs({
+        options: {
+            port: { type: 'string' },
+            'data-dir': { type: 'string' },
+            'test-mode': { type: 'boolean', default: false },
+        },
+        allowPositionals: true,
+    });
+
+    const port = Number.parseInt(values.port ?? process.env.PORT ?? '3000', 10);
+    return {
+        port: Number.isFinite(port) ? port : 3000,
+        dataDir: values['data-dir'] ? resolve(values['data-dir']) : join(process.cwd(), 'data'),
+        testMode: Boolean(values['test-mode']),
+    };
 }
 
 /**
- * Graceful shutdown handler
+ * Boots the WebUI, SQLite, Discord clients, and IPTV scheduler.
  */
-async function gracefulShutdown(signal: string) {
-    logger.info(`Received ${signal}. Shutting down gracefully...`);
-    try {
-        stopIPTVRefresh();
-        await shutdownStreamer();
-        if (client.isReady()) {
-            await client.destroy();
+async function main(): Promise<void> {
+    const options = readOptions();
+    configureLogger({ dataDir: options.dataDir, level: 'info' });
+    configureCache(options.dataDir);
+
+    const connection = openDatabase(options.dataDir);
+    runMigrations(connection.db);
+
+    const keys = loadOrCreateKeys(options.dataDir);
+    const events = new EventEmitter();
+    events.setMaxListeners(100);
+
+    const settings = new SettingsService(connection.db, keys, events);
+    if (!options.testMode) {
+        importLegacyEnv({ db: connection.db, sqlite: connection.sqlite, settings, cwd: process.cwd(), dataDir: options.dataDir });
+    }
+    settings.init();
+    process.env.TZ = settings.getUi().timezone;
+    configureLogger({ dataDir: options.dataDir, level: settings.getUi().logLevel });
+
+    const iptv = new IptvService(connection.db, settings, events);
+    const playback = new PlaybackEngine(connection.db, settings, events);
+    const media = new MediaService(connection.db, settings, playback, events, options.dataDir);
+    playback.setMediaProvider(media);
+    resetPlayingMediaItems(connection.db);
+    const discord = new DiscordService(connection.db, settings, playback, iptv, events);
+    const auth = createAuthAdapter({ db: connection.db, settings });
+
+    const app = createApp({
+        dataDir: options.dataDir,
+        db: connection.db,
+        settings,
+        iptv,
+        playback,
+        media,
+        discord,
+        events,
+        auth,
+    });
+
+    setRuntime({
+        dataDir: options.dataDir,
+        sqlite: connection.sqlite,
+        db: connection.db,
+        keys,
+        settings,
+        events,
+        iptv,
+        playback,
+        discord,
+    });
+
+    const server = app.listen(options.port, '0.0.0.0', () => {
+        logger.info(`WebUI listening on http://0.0.0.0:${options.port}`);
+        logger.info(`Data directory: ${options.dataDir}`);
+    });
+
+    if (!options.testMode) {
+        void discord.start();
+        void media.initialize();
+        iptv.start();
+    } else {
+        logger.info('Test mode: Discord clients and IPTV refresh are disabled');
+    }
+
+    const shutdown = async (signal: string) => {
+        logger.info(`Received ${signal}. Shutting down gracefully...`);
+        try {
+            iptv.stop();
+            await playback.stop();
+            await media.shutdown();
+            await discord.stop();
+            await new Promise<void>(resolveClose => server.close(() => resolveClose()));
+            connection.close();
+            logger.info('Shutdown complete');
+            process.exit(0);
+        } catch (error) {
+            logger.error(`Error during shutdown: ${error}`);
+            process.exit(1);
         }
-        logger.info('Shutdown complete');
-        process.exit(0);
-    } catch (error) {
-        logger.error(`Error during shutdown: ${error}`);
-        process.exit(1);
-    }
+    };
+
+    process.on('SIGTERM', () => void shutdown('SIGTERM'));
+    process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
-// Handle graceful shutdown
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('unhandledRejection', reason => {
+    logger.error(`Unhandled rejection: ${reason}`);
+});
 
-startOrbisCast();
+void main().catch(error => {
+    logger.error(`Boot failed: ${error}`);
+    process.exit(1);
+});

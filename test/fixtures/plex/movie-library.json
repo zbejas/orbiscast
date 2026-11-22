@@ -1,0 +1,35 @@
+{
+    "MediaContainer": {
+        "size": 2,
+        "totalSize": 42,
+        "offset": 0,
+        "librarySectionID": 10,
+        "librarySectionTitle": "Films",
+        "Metadata": [
+            {
+                "ratingKey": "1001",
+                "key": "/library/metadata/1001",
+                "type": "movie",
+                "title": "Aurora Relay",
+                "summary": "A synthetic fixture movie about a relay station at the edge of a quiet system.",
+                "year": 2024,
+                "duration": 6543210,
+                "thumb": "/library/metadata/1001/thumb/1700000000",
+                "addedAt": 1700000000,
+                "updatedAt": 1700000100
+            },
+            {
+                "ratingKey": "1002",
+                "key": "/library/metadata/1002",
+                "type": "movie",
+                "title": "Quiet Machines",
+                "summary": "A synthetic fixture movie about machines that learn to wait.",
+                "year": 2022,
+                "duration": 5400000,
+                "thumb": "/library/metadata/1002/thumb/1700000200",
+                "addedAt": 1700000200,
+                "updatedAt": 1700000300
+            }
+        ]
+    }
+}

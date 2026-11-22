@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDate, isOlderThanSetRefreshTime } from '../src/modules/iptv/utils';
+import { parseDate } from '../src/modules/iptv/utils';
 
 describe('parseDate', () => {
     it('parses an XMLTV timestamp without a timezone offset as UTC', () => {
@@ -16,16 +16,5 @@ describe('parseDate', () => {
 
     it('throws for timestamps that are too short', () => {
         expect(() => parseDate('2024')).toThrow();
-    });
-});
-
-describe('isOlderThanSetRefreshTime', () => {
-    it('returns true for dates older than the refresh interval', () => {
-        const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
-        expect(isOlderThanSetRefreshTime(twoDaysAgo)).toBe(true);
-    });
-
-    it('returns false for recent dates', () => {
-        expect(isOlderThanSetRefreshTime(new Date().toISOString())).toBe(false);
     });
 });

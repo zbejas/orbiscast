@@ -1,21 +1,17 @@
 services:
   orbiscast:
-  # You can use a specific version if you want by replacing latest with the version number
-  # See https://hub.docker.com/r/zbejas/orbiscast/tags?ordering=name for available versions
+    # You can use a specific version if you want by replacing latest with the version number
+    # See https://hub.docker.com/r/zbejas/orbiscast/tags?ordering=name for available versions
     image: docker.io/zbejas/orbiscast:latest
     container_name: orbiscast
     restart: unless-stopped
-    # Data is stored in /app/data inside the container
+    # The WebUI and API listen here. Change the host side if 3000 is taken.
+    ports:
+      - "3000:3000"
+    # Data is stored in /app/data inside the container.
     volumes:
-     - ./data:/app/data
-    # If you don't want to use an .env file, you can uncomment and define your variables directly here
-    # Don't forget to remove the env_file line below if you do this
+      - ./data:/app/data
+    # No env_file is required. Configure everything in the WebUI at http://localhost:3000.
+    # Existing installs can place their old .env at ./data/.env for a one-time import.
     # environment:
-    #   - PLAYLIST="http://example.com/m3u/playlist.m3u"
-    #   - XMLTV="http://example.com/xmltv/guide.xml"
-    # Timezone is optional, but recommended. If you don't set it, the container will use UTC
-    # Get the list of available timezones here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
-    #   - TZ="Europe/Ljubljana"
-    # ... other required variables, see .env.example and README.md
-    env_file:
-      - .env
+    #   - PORT=3000

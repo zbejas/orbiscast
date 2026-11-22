@@ -1,0 +1,58 @@
+{
+    "MediaContainer": {
+        "size": 3,
+        "totalSize": 3,
+        "offset": 0,
+        "librarySectionID": 20,
+        "librarySectionTitle": "Series",
+        "mixedParents": true,
+        "parentTitle": "Season 1",
+        "Metadata": [
+            {
+                "ratingKey": "5111",
+                "key": "/library/metadata/5111",
+                "parentRatingKey": "5101",
+                "grandparentRatingKey": "5001",
+                "type": "episode",
+                "title": "First Signal",
+                "grandparentTitle": "Signal Garden",
+                "parentTitle": "Season 1",
+                "index": 1,
+                "parentIndex": 1,
+                "year": 2023,
+                "duration": 2400000,
+                "thumb": "/library/metadata/5111/thumb/1700001000"
+            },
+            {
+                "ratingKey": "5112",
+                "key": "/library/metadata/5112",
+                "parentRatingKey": "5101",
+                "grandparentRatingKey": "5001",
+                "type": "episode",
+                "title": "Second Signal",
+                "grandparentTitle": "Signal Garden",
+                "parentTitle": "Season 1",
+                "index": 2,
+                "parentIndex": 1,
+                "year": 2023,
+                "duration": 2450000,
+                "thumb": "/library/metadata/5112/thumb/1700001200"
+            },
+            {
+                "ratingKey": "5211",
+                "key": "/library/metadata/5211",
+                "parentRatingKey": "5201",
+                "grandparentRatingKey": "5001",
+                "type": "episode",
+                "title": "Fourth Signal",
+                "grandparentTitle": "Signal Garden",
+                "parentTitle": "Season 2",
+                "index": 1,
+                "parentIndex": 2,
+                "year": 2023,
+                "duration": 2600000,
+                "thumb": "/library/metadata/5211/thumb/1700001600"
+            }
+        ]
+    }
+}
