@@ -4,6 +4,33 @@ import { getLogger } from '../../utils/logger';
 
 const logger = getLogger();
 
+/**
+ * Multiplier applied to the configured maximum video bitrate to set the
+ * minimum rate of the WebRTC packet pacer.
+ *
+ * The streaming library recalculates its pacer from a 250ms frame-size window.
+ * During a low-motion scene that window collapses to a few hundred kbps, then
+ * the next keyframe (which can be hundreds of kilobytes) is transmitted at
+ * that rate and arrives after Discord's jitter buffer has given up. Audio is
+ * paced separately, so viewers see a frozen picture with continuous sound.
+ * Chrome's WebRTC pacer runs at 2.5x its target bitrate; using the same
+ * headroom keeps keyframe bursts short without changing the encoder target.
+ */
+export const VIDEO_PACER_MAX_MULTIPLIER = 2.5;
+
+/** Minimum pacer rate in bits per second; 0 keeps the library value. */
+let videoPacerFloor = 0;
+
+/**
+ * Sets the minimum WebRTC video pacer rate.
+ *
+ * @param bitsPerSecond - Minimum rate, or 0 to use the library's value
+ */
+export function setVideoPacerFloor(bitsPerSecond: number): void {
+    videoPacerFloor =
+        Number.isFinite(bitsPerSecond) && bitsPerSecond > 0 ? Math.round(bitsPerSecond) : 0;
+}
+
 let fixesPromise: Promise<void> | null = null;
 
 /**
@@ -26,6 +53,9 @@ export function signedExpGolombCodeNum(value: number): number {
  *   the whole process.
  * - An error while preparing a video frame is contained instead of escaping a
  *   stream callback.
+ * - The video pacer is floored at a multiple of the configured maximum
+ *   bitrate. The library's short-window estimate collapses on low-motion
+ *   scenes and then stalls the next keyframe behind a slow packet queue.
  *
  * The library's dist modules are patched in place so its own imports see the
  * changes. Safe to call repeatedly; failures are logged, never thrown.
@@ -96,6 +126,7 @@ function guardVideoFrames(requireFromProject: NodeRequire, distDir: string): voi
         let failures = 0;
         const guarded = function (this: unknown, ...args: unknown[]) {
             try {
+                enforceVideoPacerFloor(this);
                 return original.apply(this, args);
             } catch (error) {
                 failures++;
@@ -112,4 +143,31 @@ function guardVideoFrames(requireFromProject: NodeRequire, distDir: string): voi
     } catch (error) {
         logger.warn(`Could not guard discord-video-stream video frames: ${error}`);
     }
+}
+
+/**
+ * Raises the library's adaptive pacer rate to {@link videoPacerFloor}.
+ *
+ * `sendVideoFrame` computes `max(1 Mbps, addSample(bytes) * 1.25)` and passes
+ * it to the native pacer. Wrapping `addSample` keeps the library's own
+ * high-motion estimate while preventing the low-motion collapse. The native
+ * pacer's `setBitrate` is read-only, so the calculator is the patch point.
+ *
+ * @param connection - A `WebRtcConnWrapper` instance
+ */
+function enforceVideoPacerFloor(connection: unknown): void {
+    if (videoPacerFloor <= 0) return;
+    const calculator = (connection as { _bitrateCalculator?: any })?._bitrateCalculator;
+    if (
+        !calculator ||
+        calculator.__orbiscastPacerFloored ||
+        typeof calculator.addSample !== 'function'
+    ) {
+        return;
+    }
+    calculator.__orbiscastPacerFloored = true;
+    const addSample = calculator.addSample.bind(calculator);
+    // sendVideoFrame multiplies the calculator result by 1.25.
+    calculator.addSample = (bytes: number) =>
+        Math.max(addSample(bytes), videoPacerFloor / 1.25);
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { appendFfmpegLine, isUsefulFfmpegLine, LOW_LATENCY_INPUT_OPTIONS } from '../src/modules/streaming/ffmpeg';
+import {
+    appendFfmpegLine,
+    buildScaleFilter,
+    isUsefulFfmpegLine,
+    LOW_LATENCY_INPUT_OPTIONS,
+} from '../src/modules/streaming/ffmpeg';
 
 describe('isUsefulFfmpegLine', () => {
     it('keeps errors and stream information', () => {
@@ -36,5 +41,16 @@ describe('LOW_LATENCY_INPUT_OPTIONS', () => {
     it('uses the valid low_delay flag', () => {
         expect(LOW_LATENCY_INPUT_OPTIONS).toContain('low_delay');
         expect(LOW_LATENCY_INPUT_OPTIONS).not.toContain('lowdelay');
+    });
+});
+
+describe('buildScaleFilter', () => {
+    it('fits a 16:9 box without upscaling either dimension', () => {
+        expect(buildScaleFilter(1080)).toBe(
+            "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2"
+        );
+        expect(buildScaleFilter(720)).toBe(
+            "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2"
+        );
     });
 });

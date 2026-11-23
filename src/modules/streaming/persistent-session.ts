@@ -31,6 +31,8 @@ export interface PersistentStreamOptions {
     headers: Record<string, string>;
     /** Cap the re-encode height. Discord does not need more than 1080p. */
     maxHeight?: number;
+    /** Replaces the library's height-only scale filter with a capped box. */
+    scaleFilter?: string;
 }
 
 interface ActiveSource {
@@ -196,6 +198,10 @@ export class PersistentStream {
                 encoder: this.options.encoder,
                 customInputOptions: this.options.inputOptions,
                 customHeaders: this.options.headers,
+                customFfmpegFlags:
+                    this.options.scaleFilter && !this.options.noTranscoding
+                        ? ['-vf', this.options.scaleFilter]
+                        : [],
             },
             abort.signal
         );

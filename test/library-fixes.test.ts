@@ -1,7 +1,12 @@
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
-import { applyLibraryFixes, signedExpGolombCodeNum } from '../src/modules/streaming/library-fixes';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import {
+    applyLibraryFixes,
+    setVideoPacerFloor,
+    signedExpGolombCodeNum,
+    VIDEO_PACER_MAX_MULTIPLIER,
+} from '../src/modules/streaming/library-fixes';
 
 const requireFromProject = createRequire(join(process.cwd(), 'package.json'));
 const dist = dirname(requireFromProject.resolve('@dank074/discord-video-stream'));
@@ -20,6 +25,7 @@ describe('discord-video-stream fixes', () => {
         lib = {
             ...load('client/processing/AnnexBBitstreamReaderWriter.js'),
             ...load('client/processing/SPSVUIRewriter.js'),
+            ...load('client/voice/BitrateCalculator.js'),
             ...load('client/voice/WebRtcWrapper.js'),
         };
     });
@@ -71,6 +77,27 @@ describe('discord-video-stream fixes', () => {
             },
         };
         expect(() => send.call(broken, Buffer.alloc(4), 40)).not.toThrow();
+    });
+
+    it('keeps the video pacer above the configured floor', () => {
+        setVideoPacerFloor(7500 * 1000 * VIDEO_PACER_MAX_MULTIPLIER);
+        const pacer = { setBitrate: vi.fn() };
+        const wrapper = {
+            ready: true,
+            _bitrateCalculator: new lib.BitrateCalculator(250),
+            _videoPacer: pacer,
+            _videoPacketizer: { rtpConfig: { clockRate: 90000, timestamp: 0 } },
+            _videoCodec: 'H264',
+            _videoTrack: { sendMessageBinary: vi.fn() },
+            mediaConnection: { daveReady: false },
+        };
+        const frame = Buffer.from([0x41, 0x00, 0x00, 0x01, 0x00]);
+
+        lib.WebRtcConnWrapper.prototype.sendVideoFrame.call(wrapper, frame, 33);
+
+        expect(pacer.setBitrate).toHaveBeenCalledTimes(1);
+        expect(pacer.setBitrate.mock.calls[0][0]).toBe(18_750_000);
+        setVideoPacerFloor(0);
     });
 
     it('is safe to apply more than once', async () => {

@@ -10,8 +10,8 @@ import {
 import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
 import type { ChannelEntry } from '../../interfaces/iptv';
-import { appendFfmpegLine, LOW_LATENCY_INPUT_OPTIONS } from './ffmpeg';
-import { applyLibraryFixes } from './library-fixes';
+import { appendFfmpegLine, buildScaleFilter, LOW_LATENCY_INPUT_OPTIONS } from './ffmpeg';
+import { applyLibraryFixes, setVideoPacerFloor, VIDEO_PACER_MAX_MULTIPLIER } from './library-fixes';
 import { PersistentStream } from './persistent-session';
 
 const logger = getLogger();
@@ -47,6 +47,7 @@ let settings: StreamSettings = {
     bitrateVideoMax: 7500,
     defaultStreamTimeout: 10,
 };
+setVideoPacerFloor(settings.bitrateVideoMax * 1000 * VIDEO_PACER_MAX_MULTIPLIER);
 
 const JOIN_VOICE_TIMEOUT_MS = 20_000;
 const ACCEPT_INVITE_TIMEOUT_MS = 20_000;
@@ -87,6 +88,7 @@ function attachJoinListener(): void {
  */
 export function setStreamSettings(next: StreamSettings): void {
     settings = { ...next };
+    setVideoPacerFloor(next.bitrateVideoMax * 1000 * VIDEO_PACER_MAX_MULTIPLIER);
 }
 
 /**
@@ -633,12 +635,15 @@ export async function startMediaStreaming(
             bitrateVideo: settings.bitrateVideo,
             bitrateVideoMax: settings.bitrateVideoMax,
             encoder,
-            inputOptions: [
-                ...(settings.minimizeLatency ? LOW_LATENCY_INPUT_OPTIONS : []),
-                ...(options.inputOptions ?? []),
-            ],
+            // On-demand media keeps the library's buffering. Low-latency
+            // input flags force `low_delay` on sources that can contain
+            // B-frames, and reading with `-re` leaves the demuxer without the
+            // read-ahead that absorbs provider jitter. Both show up as a
+            // frozen picture while audio keeps playing.
+            inputOptions: options.inputOptions ?? [],
             headers: options.headers ?? {},
             maxHeight: options.maxHeight,
+            scaleFilter: options.maxHeight ? buildScaleFilter(options.maxHeight) : undefined,
         });
     } catch (error) {
         const message = String(error);
