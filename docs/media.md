@@ -143,14 +143,16 @@ Plex needs its `X-Plex-*` headers and Jellyfin needs its `Authorization` header.
 - The proxy rewrites absolute manifest URLs to its own origin and drops the stale `content-length`.
 - Jellyfin segment requests drop `StartTimeTicks` because the server rejects it there.
 - Only one proxy per source is running at a time. Changing the source URL or token rebuilds it.
-- The Discord re-encode is capped at 1080p. A 4K queue preset still asks the provider for 4K, but the output is scaled to 1080p; without the cap the software encoder cannot keep up and viewers get a frozen or black frame.
+- The Discord re-encode fits a 1920x1080 box, or 1280x720 for the 720p preset, without upscaling either dimension. Scaling by height alone turned a 1920x800 movie into 2592x1080, which is more pixels than the encoder target covers.
+- A 4K queue preset still asks the provider for 4K, but the Discord output fits 1080p. Without the cap the software encoder cannot keep up and viewers get a frozen or black frame.
+- On-demand playback keeps FFmpeg's default input buffering. `-re` and the low-latency input flags are for live IPTV; they leave the demuxer without the read-ahead that absorbs provider jitter, which shows up as a frozen picture while audio keeps playing.
 - Jellyfin can take 15 to 20 seconds to produce the first HLS segment for a 4K source. The Discord stream shows black until that first frame arrives.
 
 Plex builds `/video/:/transcode/universal/start.m3u8` with `path`, `mediaIndex`, `partIndex`, `protocol=hls`, `directPlay=0`, `directStream=0`, `subtitles=burn`, `videoResolution`, `videoBitrate`, `maxVideoBitrate`, `offset`, and `session`. Jellyfin builds `/Videos/{itemId}/master.m3u8` with the quality, subtitle, seek, and session parameters.
 
 ## Pause and resume
 
-Pause sends Discord's `STREAM_SET_PAUSED` opcode so viewers see Discord's paused screen, then suspends FFmpeg with `SIGSTOP`. The stream stays live, the provider transcode session stays open, and the voice connection is untouched. Resume sends `SIGCONT` and `STREAM_SET_PAUSED` with `paused: false`; the same transcode and stream continue. Both packet pacers rebase their wall-clock origin on resume, so paused audio does not catch up in a burst.
+Pause sends Discord's `STREAM_SET_PAUSED` opcode so viewers see Discord's paused screen, then suspends FFmpeg with `SIGSTOP`. The stream stays live, the provider transcode session stays open, and the voice connection is untouched. Frames already buffered by the demuxer are held while paused, so resume continues from the held frame instead of skipping the read-ahead. Resume sends `SIGCONT` and `STREAM_SET_PAUSED` with `paused: false`; the same transcode and stream continue. Both packet pacers rebase their wall-clock origin on resume, so paused audio does not catch up in a burst.
 
 Stop and skip still stop the provider session. A seek while paused replaces the source and clears the Discord pause state.
 

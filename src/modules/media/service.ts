@@ -1387,7 +1387,6 @@ export class MediaService implements MediaPlaybackProvider {
                 url: current.url,
             },
             {
-                inputOptions: ['-re'],
                 maxHeight: discordHeightForQuality(current.quality),
             }
         );

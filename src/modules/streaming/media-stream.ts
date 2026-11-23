@@ -28,6 +28,7 @@ export abstract class BaseMediaStream extends Writable {
     private generation = 0;
     private pendingWrites = 0;
     private idleWaiters: Array<() => void> = [];
+    private pausedWaiters: Array<() => void> = [];
     private paused = false;
 
     constructor() {
@@ -47,11 +48,13 @@ export abstract class BaseMediaStream extends Writable {
         this.ptsValue = undefined;
         this.startTime = undefined;
         this.startPts = undefined;
+        this.paused = false;
+        this.wakePaused();
     }
 
     /**
-     * Marks the stream as paused so the sync loop stops spinning. Actual
-     * pacing is rebased when {@link resumePacing} runs.
+     * Marks the stream as paused. Frames already buffered are held until
+     * {@link resumePacing} or {@link reset} runs.
      */
     pausePacing(): void {
         this.paused = true;
@@ -66,6 +69,7 @@ export abstract class BaseMediaStream extends Writable {
         if (!this.paused) return;
         this.paused = false;
         this.resetTiming();
+        this.wakePaused();
     }
 
     /**
@@ -112,6 +116,19 @@ export abstract class BaseMediaStream extends Writable {
         this.startPts = undefined;
     }
 
+    /** Releases frames held by {@link pausePacing}. */
+    private wakePaused(): void {
+        const waiters = this.pausedWaiters;
+        this.pausedWaiters = [];
+        for (const resolve of waiters) resolve();
+    }
+
+    /** Holds the current frame until playback resumes or the source resets. */
+    private async waitWhilePaused(): Promise<void> {
+        if (!this.paused) return;
+        await new Promise<void>(resolve => this.pausedWaiters.push(resolve));
+    }
+
     override _write(
         frame: MediaPacket,
         _encoding: BufferEncoding,
@@ -137,6 +154,10 @@ export abstract class BaseMediaStream extends Writable {
         const { data, pts, duration, timeBase } = frame;
         try {
             if (!data) return;
+            if (this.paused) {
+                await this.waitWhilePaused();
+                if (generation !== this.generation) return;
+            }
 
             const frametime = (Number(duration) / timeBase.den) * timeBase.num * 1000;
             const sendStart = performance.now();

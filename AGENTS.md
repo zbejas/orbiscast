@@ -174,14 +174,14 @@ iptv | media -> idle on stop, natural end, or queue end
 - Real playback is exclusive. `isBusy()` covers IPTV and media only.
 - The placeholder uses a generated 6-second MP4 loop from `assets/plex-placeholder.png`. The FFmpeg pipeline loops it with `-stream_loop -1`.
 - The spectator monitor applies to IPTV and media playback, not the placeholder.
-- Media pause sends Discord's `STREAM_SET_PAUSED` and suspends FFmpeg with SIGSTOP: the voice connection and provider session stay open, and viewers see Discord's paused screen. Resume sends SIGCONT, clears the pause state, and rebases both packet pacers so audio cannot catch up in a burst. Seek replaces the provider transcode at the chosen offset without recreating the Discord stream; a seek while paused also clears the pause state. Stop and skip stop the transcode.
+- Media pause sends Discord's `STREAM_SET_PAUSED` and suspends FFmpeg with SIGSTOP: the voice connection and provider session stay open, and viewers see Discord's paused screen. Buffered frames are held while paused. Resume sends SIGCONT, clears the pause state, and rebases both packet pacers so audio cannot catch up in a burst. Seek replaces the provider transcode at the chosen offset without recreating the Discord stream; a seek while paused also clears the pause state. Stop and skip stop the transcode.
 - The queue is persisted in SQLite and managed only in the WebUI. Stop and skip remove the current queue row. Stopping or skipping at or after 85 percent marks the history row completed.
 - `settings.playback.autoplayNextEpisode` queues and starts the next episode when an episode ends naturally and the queue is empty. `settings.playback.autoSkipIntro` skips a Plex intro marker once per item. Both default to off.
 
 ## Streaming library
 
-- `streaming/library-fixes.ts` patches two bugs in `@dank074/discord-video-stream`: the signed Exp-Golomb writer maps 0 to -1 and throws on some H.264 SPS values, and a frame-preparation error can escape the stream callback. `applyLibraryFixes()` runs once and is awaited before IPTV or media playback starts.
-- Do not use the library's `minimizeLatency` option. It passes `-flags lowdelay`, which FFmpeg rejects. Use the valid `low_delay` options from `streaming/ffmpeg.ts` as `customInputOptions` instead.
+- `streaming/library-fixes.ts` patches the signed Exp-Golomb writer, contains frame-preparation errors, and floors the WebRTC video pacer at 2.5x the configured maximum bitrate. The pacer floor stops keyframe bursts from collapsing during low-motion scenes. `applyLibraryFixes()` runs once and is awaited before IPTV or media playback starts.
+- Do not use the library's `minimizeLatency` option. It passes `-flags lowdelay`, which FFmpeg rejects. Live IPTV uses the valid `low_delay` options from `streaming/ffmpeg.ts` as `customInputOptions` instead.
 - FFmpeg stderr is kept in a bounded tail and logged on failure through `redactSecrets`, so provider credentials stay out of logs.
 
 ## Media sources
@@ -198,7 +198,8 @@ iptv | media -> idle on stop, natural end, or queue end
 - `media_queue_items` is global. Every entry carries `source_id` and cascades when the source is deleted. Clearing the queue keeps the active playback row so the queue panel and playback state stay aligned.
 - The legacy `plex_libraries`, `plex_queue_items`, and `settings.plex` rows are migrated once when no media source exists.
 - `PlexProvider` and `JellyfinProvider` implement the shared `MediaProvider` contract. Keep provider-specific HTTP, transcode URLs, and stream mapping inside those adapters.
-- The Discord re-encode is capped at 1080p (`discordHeightForQuality`). A 4K preset is a provider resolution only; the app downscales it because the software encoder cannot sustain 4K. Do not remove the cap without measuring the encoder.
+- The Discord re-encode fits a 1920x1080 box (`discordHeightForQuality`, then `buildScaleFilter`) without upscaling either dimension. A 4K preset is a provider resolution only; the app downscales it because the software encoder cannot sustain 4K. Do not return to `scale=-2:height`, which upscaled 1920x800 content to 2592x1080.
+- On-demand media keeps FFmpeg's input buffering. Do not pass `-re` or the low-latency input options to Plex or Jellyfin playback: they starve the demuxer read-ahead and freeze the picture while audio continues. The low-latency options are for live IPTV.
 - `AuthProxy` injects Plex or Jellyfin headers on loopback. Never put a provider token in an FFmpeg URL.
 - Jellyfin rejects `StartTimeTicks` on segment requests. The proxy strips it from non-manifest requests.
 - Thumbnails go through `/api/media/thumb/:sourceId/:itemId`. Never send a provider URL with a token to the browser.

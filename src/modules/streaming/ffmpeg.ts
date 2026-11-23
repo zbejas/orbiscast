@@ -18,6 +18,24 @@ export const LOW_LATENCY_INPUT_OPTIONS = [
 export const FFMPEG_LOG_LINES = 25;
 
 /**
+ * Builds a scale filter that fits the source inside a 16:9 output box without
+ * upscaling either dimension.
+ *
+ * The streaming library's `scale=-2:height` preserves the aspect ratio from
+ * the height alone, so a 1920x800 movie becomes 2592x1080. Discord does not
+ * need pixels above 1080p, and the extra width makes the software encoder do
+ * more work than the quality preset promises.
+ *
+ * @param maxHeight - Output height cap for the selected quality
+ * @returns An FFmpeg scale filter expression
+ */
+export function buildScaleFilter(maxHeight: number): string {
+    const height = Math.max(2, Math.round(maxHeight));
+    const width = Math.max(2, Math.round((height * 16) / 9));
+    return `scale=w='min(${width},iw)':h='min(${height},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2`;
+}
+
+/**
  * Filters FFmpeg's verbose output down to lines that help explain a failure,
  * skipping the version banner, build configuration, and library metadata.
  *
