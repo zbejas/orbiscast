@@ -3,6 +3,8 @@ import {
     appendFfmpegLine,
     buildScaleFilter,
     isUsefulFfmpegLine,
+    KEYFRAME_INTERVAL_SECONDS,
+    KEYFRAME_OPTIONS,
     LOW_LATENCY_INPUT_OPTIONS,
 } from '../src/modules/streaming/ffmpeg';
 
@@ -52,5 +54,15 @@ describe('buildScaleFilter', () => {
         expect(buildScaleFilter(720)).toBe(
             "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2"
         );
+    });
+});
+
+describe('KEYFRAME_OPTIONS', () => {
+    it('replaces the library one-second keyframe interval with two seconds', () => {
+        expect(KEYFRAME_INTERVAL_SECONDS).toBe(2);
+        expect(KEYFRAME_OPTIONS).toEqual([
+            '-force_key_frames',
+            'expr:gte(t,n_forced*2)',
+        ]);
     });
 });
