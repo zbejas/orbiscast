@@ -1,7 +1,7 @@
 import type { Readable } from 'node:stream';
 import { demux, Encoders, prepareStream, Streamer } from '@dank074/discord-video-stream';
 import { AudioStream, VideoStream } from './media-stream';
-import { appendFfmpegLine } from './ffmpeg';
+import { appendFfmpegLine, KEYFRAME_OPTIONS } from './ffmpeg';
 import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
 import type { StreamResult } from './index';
@@ -198,10 +198,12 @@ export class PersistentStream {
                 encoder: this.options.encoder,
                 customInputOptions: this.options.inputOptions,
                 customHeaders: this.options.headers,
-                customFfmpegFlags:
-                    this.options.scaleFilter && !this.options.noTranscoding
+                customFfmpegFlags: [
+                    ...(this.options.scaleFilter && !this.options.noTranscoding
                         ? ['-vf', this.options.scaleFilter]
-                        : [],
+                        : []),
+                    ...KEYFRAME_OPTIONS,
+                ],
             },
             abort.signal
         );

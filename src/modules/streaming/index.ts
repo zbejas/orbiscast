@@ -10,7 +10,7 @@ import {
 import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
 import type { ChannelEntry } from '../../interfaces/iptv';
-import { appendFfmpegLine, buildScaleFilter, LOW_LATENCY_INPUT_OPTIONS } from './ffmpeg';
+import { appendFfmpegLine, buildScaleFilter, KEYFRAME_OPTIONS, LOW_LATENCY_INPUT_OPTIONS } from './ffmpeg';
 import { applyLibraryFixes, setVideoPacerFloor, VIDEO_PACER_MAX_MULTIPLIER } from './library-fixes';
 import { PersistentStream } from './persistent-session';
 
@@ -545,6 +545,7 @@ export async function startStreaming(
                 encoder,
                 customInputOptions: inputOptions,
                 customHeaders: options.headers ?? {},
+                customFfmpegFlags: KEYFRAME_OPTIONS,
             },
             signal
         );

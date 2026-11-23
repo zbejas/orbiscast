@@ -144,6 +144,7 @@ Plex needs its `X-Plex-*` headers and Jellyfin needs its `Authorization` header.
 - Jellyfin segment requests drop `StartTimeTicks` because the server rejects it there.
 - Only one proxy per source is running at a time. Changing the source URL or token rebuilds it.
 - The Discord re-encode fits a 1920x1080 box, or 1280x720 for the 720p preset, without upscaling either dimension. Scaling by height alone turned a 1920x800 movie into 2592x1080, which is more pixels than the encoder target covers.
+- Forced IDR frames are every two seconds (`KEYFRAME_OPTIONS`). The library's one-second interval produced 150 KB or larger keyframes at 1080p, which arrived as visible video stalls while audio continued.
 - A 4K queue preset still asks the provider for 4K, but the Discord output fits 1080p. Without the cap the software encoder cannot keep up and viewers get a frozen or black frame.
 - On-demand playback keeps FFmpeg's default input buffering. `-re` and the low-latency input flags are for live IPTV; they leave the demuxer without the read-ahead that absorbs provider jitter, which shows up as a frozen picture while audio keeps playing.
 - Jellyfin can take 15 to 20 seconds to produce the first HLS segment for a 4K source. The Discord stream shows black until that first frame arrives.

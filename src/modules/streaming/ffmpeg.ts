@@ -18,6 +18,23 @@ export const LOW_LATENCY_INPUT_OPTIONS = [
 export const FFMPEG_LOG_LINES = 25;
 
 /**
+ * Seconds between forced IDR frames.
+ *
+ * The streaming library hardcodes a one-second interval. At 1080p a one-second
+ * keyframe can be 150 KB or more, so the burst is a large fraction of the
+ * configured bitrate and arrives as a visible stall when the network cannot
+ * drain it instantly. Two seconds keeps the join delay reasonable while
+ * halving the number of keyframe bursts and making each one smaller.
+ */
+export const KEYFRAME_INTERVAL_SECONDS = 2;
+
+/** FFmpeg options that replace the library's one-second keyframe interval. */
+export const KEYFRAME_OPTIONS = [
+    '-force_key_frames',
+    `expr:gte(t,n_forced*${KEYFRAME_INTERVAL_SECONDS})`,
+];
+
+/**
  * Builds a scale filter that fits the source inside a 16:9 output box without
  * upscaling either dimension.
  *

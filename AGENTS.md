@@ -182,6 +182,7 @@ iptv | media -> idle on stop, natural end, or queue end
 
 - `streaming/library-fixes.ts` patches the signed Exp-Golomb writer, contains frame-preparation errors, and floors the WebRTC video pacer at 2.5x the configured maximum bitrate. The pacer floor stops keyframe bursts from collapsing during low-motion scenes. `applyLibraryFixes()` runs once and is awaited before IPTV or media playback starts.
 - Do not use the library's `minimizeLatency` option. It passes `-flags lowdelay`, which FFmpeg rejects. Live IPTV uses the valid `low_delay` options from `streaming/ffmpeg.ts` as `customInputOptions` instead.
+- Do not use the library's one-second forced keyframe interval. `KEYFRAME_OPTIONS` in `streaming/ffmpeg.ts` overrides it with two seconds. At 1080p a one-second keyframe is large enough to arrive as a visible stall while audio continues.
 - FFmpeg stderr is kept in a bounded tail and logged on failure through `redactSecrets`, so provider credentials stay out of logs.
 
 ## Media sources
