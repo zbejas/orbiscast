@@ -47,7 +47,4 @@ test-results
 playwright-report
 blob-report
 .playwright-mcp
-.impeccable/mocks
-.impeccable/review
-.impeccable/live
-.impeccable/config.local.json
+.impeccable/
