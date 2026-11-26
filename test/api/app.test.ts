@@ -68,6 +68,10 @@ describe('API', () => {
         expect(setup.body.discordConfigured).toBe(false);
         expect(setup.body.guildReady).toBe(false);
         expect(setup.body.botInviteUrl).toBeNull();
+
+        const playback = await request(app).get('/api/playback').expect(200);
+        expect(playback.body.viewers).toBe(0);
+        expect(playback.body.watching).toEqual([]);
         expect(setup.body.authEnabled).toBe(false);
     });
 

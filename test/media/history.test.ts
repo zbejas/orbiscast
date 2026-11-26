@@ -19,9 +19,11 @@ const streaming = vi.hoisted(() => ({
 
 vi.mock('../../src/modules/streaming', () => ({
     getViewerCount: () => 1,
+    getViewers: () => [{ id: 'viewer', displayName: 'Viewer' }],
     getVoiceChannelInfo: () => null,
     joinVoiceChannel: async () => true,
     leaveVoiceChannel: async () => undefined,
+    onViewerChange: () => () => undefined,
     pauseStreaming: () => true,
     replaceMediaStreamingSource: async () => true,
     resumeStreaming: () => true,

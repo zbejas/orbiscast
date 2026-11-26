@@ -11,6 +11,13 @@ export type MediaLibraryType = 'movie' | 'show' | 'artist' | 'photo' | 'unknown'
 
 export type MediaItemType = 'movie' | 'show' | 'season' | 'episode';
 
+export interface PlaybackViewerDto {
+    /** Discord user id. */
+    id: string;
+    /** Guild display name, falling back to the username. */
+    displayName: string;
+}
+
 export interface PlaybackStateDto {
     mode: PlaybackMode;
     title: string | null;
@@ -25,6 +32,8 @@ export interface PlaybackStateDto {
     durationMs: number | null;
     positionUpdatedAt: number | null;
     viewers: number;
+    /** Non-bot members in the stream voice channel, excluding the streamer. */
+    watching: PlaybackViewerDto[];
     paused: boolean;
     queueItemId: number | null;
     /** Media source that owns the active on-demand item or placeholder. */

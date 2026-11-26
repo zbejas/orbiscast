@@ -60,7 +60,7 @@ The adapter is built with the public URL and trusted origins present at boot. Ch
 
 ### SSE
 
-`/api/events` sends an initial snapshot for playback, sources, Discord, media, queue, and history, then forwards `playback`, `sources`, `discord`, `media`, `queue`, `history`, and `settings` events. `/api/logs/stream` sends the last 200 lines and then forwards new lines. Both endpoints send a comment heartbeat every 20 seconds and clean up listeners on close. When auth is enabled, the session middleware protects both.
+`/api/events` sends an initial snapshot for playback, sources, Discord, media, queue, and history, then forwards `playback`, `sources`, `discord`, `media`, `queue`, `history`, and `settings` events. Voice state changes in the active stream channel re-emit `playback`, so the Dashboard viewer list updates when someone joins or leaves. `/api/logs/stream` sends the last 200 lines and then forwards new lines. Both endpoints send a comment heartbeat every 20 seconds and clean up listeners on close. When auth is enabled, the session middleware protects both.
 
 ### Origin checks and dev proxy
 
@@ -136,6 +136,7 @@ The old `/api/plex/*` and `/api/queue` aliases were removed. The WebUI uses the 
 - `/media/sources` is the Plex and Jellyfin management page. Add, edit, test, remove, and enable libraries inline. Source forms and library toggles are page sections, not dialogs. The Media nav item stays active there.
 - `/plex` redirects to `/media/sources`.
 - The Dashboard shows a Continue watching card when resumable media exists. Each row links to `/media?source=<id>&item=<id>&play=1`; the media page opens that item and the voice channel prompt automatically.
+- The Dashboard playback card lists the non-bot members in the stream voice channel under Watching now, excluding the streaming account. Names come from the self-bot voice state cache, and the viewer count chip stays visible alongside the list.
 - The Media page puts Continue watching above the library tabs. Resume starts playback from the saved position; opening the row shows the item detail. Each saved row can be removed from the list. A completed episode adds an Up next recommendation for the next episode, which starts from the beginning and cannot be removed.
 - An item detail page with saved progress labels the primary action `Resume from <time>` and adds Start over.
 - Every page has one `<h1>`, a skip link, landmarks, visible focus, and labeled controls.

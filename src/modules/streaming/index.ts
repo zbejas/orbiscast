@@ -10,9 +10,11 @@ import {
 import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
 import type { ChannelEntry } from '../../interfaces/iptv';
+import type { PlaybackViewerDto } from '../../shared/types';
 import { appendFfmpegLine, buildScaleFilter, KEYFRAME_OPTIONS, LOW_LATENCY_INPUT_OPTIONS } from './ffmpeg';
 import { applyLibraryFixes, setVideoPacerFloor, VIDEO_PACER_MAX_MULTIPLIER } from './library-fixes';
 import { PersistentStream } from './persistent-session';
+import { selectViewers } from './viewers';
 
 const logger = getLogger();
 const libraryFixesReady = applyLibraryFixes();
@@ -34,6 +36,7 @@ let streamer = new Streamer(new Client());
 let abortController = new AbortController();
 let joinListenerClient: Client | null = null;
 const streamerJoinHandlers = new Set<(guildId: string) => void>();
+const viewerChangeHandlers = new Set<() => void>();
 let currentChannelEntry: ChannelEntry | null = null;
 let persistentStream: PersistentStream | null = null;
 let streamProcess: (Promise<unknown> & { kill: (signal?: NodeJS.Signals | number) => boolean }) | null = null;
@@ -53,11 +56,11 @@ const JOIN_VOICE_TIMEOUT_MS = 20_000;
 const ACCEPT_INVITE_TIMEOUT_MS = 20_000;
 
 /**
- * Attaches the guild-join listener to the current streamer client once.
+ * Attaches the client listeners that survive reconnects.
  *
  * Reconnects replace the client, so this runs again on every login. The bot
  * client does not request the privileged GuildMembers intent, which is why the
- * user client is the reliable source for this event.
+ * user client is the reliable source for guild joins and voice states.
  */
 function attachJoinListener(): void {
     const client = streamer.client as Client;
@@ -77,6 +80,19 @@ function attachJoinListener(): void {
         }
         for (const handler of streamerJoinHandlers) {
             handler(guildId);
+        }
+    });
+
+    client.on('voiceStateUpdate', (oldState, newState) => {
+        const channelId = streamer.voiceConnection?.channelId;
+        if (!channelId) {
+            return;
+        }
+        if (oldState.channelId !== channelId && newState.channelId !== channelId) {
+            return;
+        }
+        for (const handler of viewerChangeHandlers) {
+            handler();
         }
     });
 }
@@ -242,18 +258,53 @@ export function getVoiceChannelInfo(): {
 }
 
 /**
+ * Lists non-bot members in the streamer's voice channel, excluding the streamer.
+ *
+ * @returns Viewers sorted by display name
+ */
+export function getViewers(): PlaybackViewerDto[] {
+    const guildId = streamer.voiceConnection?.guildId;
+    const channelId = streamer.voiceConnection?.channelId;
+    if (!guildId || !channelId) {
+        return [];
+    }
+    const guild = streamer.client.guilds.cache.get(guildId);
+    const channel = streamer.client.channels.cache.get(channelId);
+    if (!guild || !channel || !channel.isVoice()) {
+        return [];
+    }
+
+    const members = [...guild.voiceStates.cache.values()].map(state => {
+        const user = state.member?.user ?? state.user;
+        return {
+            id: state.id,
+            channelId: state.channelId,
+            bot: user?.bot ?? false,
+            displayName: state.member?.displayName ?? user?.displayName ?? user?.username ?? '',
+            username: user?.username ?? '',
+        };
+    });
+    return selectViewers(members, channelId, streamer.client.user?.id);
+}
+
+/**
  * Counts non-bot members in the streamer's voice channel.
  */
 export function getViewerCount(): number {
-    const channelId = streamer.voiceConnection?.channelId;
-    if (!channelId) {
-        return 0;
-    }
-    const channel = streamer.client.channels.cache.get(channelId);
-    if (!channel || !channel.isVoice()) {
-        return 0;
-    }
-    return Math.max(0, channel.members.filter(member => !member.user.bot).size - 1);
+    return getViewers().length;
+}
+
+/**
+ * Subscribes to viewers joining or leaving the stream voice channel.
+ *
+ * @param handler - Callback invoked after a relevant voice state change
+ * @returns Unsubscribe function
+ */
+export function onViewerChange(handler: () => void): () => void {
+    viewerChangeHandlers.add(handler);
+    return () => {
+        viewerChangeHandlers.delete(handler);
+    };
 }
 
 /**

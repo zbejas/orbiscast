@@ -5,10 +5,11 @@ import { getLogger } from '../../utils/logger';
 import { redactSecrets } from '../../utils/redact';
 import type { ChannelDto, MediaSourceKind, PlaybackStateDto } from '../../shared/types';
 import {
-    getViewerCount,
+    getViewers,
     getVoiceChannelInfo,
     joinVoiceChannel,
     leaveVoiceChannel,
+    onViewerChange,
     setStreamSettings,
     startStreaming,
     stopStreaming,
@@ -80,6 +81,11 @@ export class PlaybackEngine {
         private readonly events: EventEmitter
     ) {
         setStreamSettings(settings.getStream());
+        onViewerChange(() => {
+            if (this.mode !== 'idle') {
+                this.emit();
+            }
+        });
     }
 
     /**
@@ -219,6 +225,7 @@ export class PlaybackEngine {
      */
     getState(): PlaybackStateDto {
         const voice = getVoiceChannelInfo();
+        const watching = getViewers();
         return {
             mode: this.mode,
             title: this.title,
@@ -232,7 +239,8 @@ export class PlaybackEngine {
             positionMs: this.positionMs,
             durationMs: this.durationMs,
             positionUpdatedAt: this.positionUpdatedAt,
-            viewers: getViewerCount(),
+            viewers: watching.length,
+            watching,
             paused: this.paused,
             queueItemId: this.queueItemId,
             sourceId: this.sourceId,

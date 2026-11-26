@@ -174,6 +174,7 @@ iptv | media -> idle on stop, natural end, or queue end
 - Real playback is exclusive. `isBusy()` covers IPTV and media only.
 - The placeholder uses a generated 6-second MP4 loop from `assets/plex-placeholder.png`. The FFmpeg pipeline loops it with `-stream_loop -1`.
 - The spectator monitor applies to IPTV and media playback, not the placeholder.
+- The Dashboard viewer list is the non-bot members of the stream voice channel, excluding the streamer, from the self-bot voice state cache (`streaming/viewers.ts`). `PlaybackEngine` re-emits playback state on `voiceStateUpdate` for the active channel. It is not Discord's per-stream viewer list.
 - Media pause sends Discord's `STREAM_SET_PAUSED` and suspends FFmpeg with SIGSTOP: the voice connection and provider session stay open, and viewers see Discord's paused screen. Buffered frames are held while paused. Resume sends SIGCONT, clears the pause state, and rebases both packet pacers so audio cannot catch up in a burst. Seek replaces the provider transcode at the chosen offset without recreating the Discord stream; a seek while paused also clears the pause state. Stop and skip stop the transcode.
 - The queue is persisted in SQLite and managed only in the WebUI. Stop and skip remove the current queue row. Stopping or skipping at or after 85 percent marks the history row completed.
 - `settings.playback.autoplayNextEpisode` queues and starts the next episode when an episode ends naturally and the queue is empty. `settings.playback.autoSkipIntro` skips a Plex intro marker once per item. Both default to off.
