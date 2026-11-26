@@ -52,12 +52,14 @@ import {
 } from '@/lib/hooks';
 import { cn } from '@/lib/cn';
 import {
+    formatAudience,
     formatClock,
     formatCount,
     formatDuration,
     formatElapsed,
     formatRelative,
     formatUptime,
+    initials,
 } from '@/lib/format';
 import { playbackPositionMs } from '@/lib/playback';
 
@@ -304,15 +306,44 @@ function LivePlaybackCard() {
                                     {state.voiceChannelName ? (
                                         <MetaItem icon={Volume2}>{state.voiceChannelName}</MetaItem>
                                     ) : null}
-                                    <MetaItem icon={Users}>
-                                        {formatCount(state.viewers)} {state.viewers === 1 ? 'viewer' : 'viewers'}
-                                    </MetaItem>
+                                    <MetaItem icon={Users}>{formatAudience(state.viewers)}</MetaItem>
                                     {state.mode === 'placeholder' ? (
                                         <MetaItem icon={Clock}>
                                             Leaves after {activeSource?.idleMinutes ?? 20} min idle
                                         </MetaItem>
                                     ) : null}
                                 </div>
+
+                                {state.watching.length > 0 ? (
+                                    <div className="mt-4">
+                                        <p
+                                            id="dashboard-watchers-label"
+                                            className="text-[11px] font-medium text-text-faint"
+                                        >
+                                            Watching now
+                                        </p>
+                                        <ul
+                                            role="list"
+                                            aria-labelledby="dashboard-watchers-label"
+                                            className="mt-2 flex flex-wrap gap-1.5"
+                                        >
+                                            {state.watching.map((viewer) => (
+                                                <li
+                                                    key={viewer.id}
+                                                    className="inline-flex min-h-7 max-w-full items-center gap-1.5 rounded-full border border-border/60 bg-raised/50 py-0.5 pl-0.5 pr-2.5 text-[11px] text-text-muted"
+                                                >
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className="grid size-6 shrink-0 place-items-center rounded-full bg-primary-container text-[11px] font-semibold text-on-primary-container"
+                                                    >
+                                                        {initials(viewer.displayName)}
+                                                    </span>
+                                                    <span className="truncate">{viewer.displayName}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ) : null}
 
                                 {state.mode === 'media' && duration > 0 ? (
                                     <div className="mt-4 max-w-xl">

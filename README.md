@@ -11,7 +11,7 @@
 
 OrbisCast streams IPTV channels and on-demand Plex or Jellyfin media into Discord voice channels. A browser-based WebUI manages the bot, IPTV sources, channel visibility, the EPG, media sources, Discord permissions, streaming settings, and logs. Configuration lives in SQLite, not in environment variables.
 
-Each media source adds a virtual on-demand channel. When selected in Discord it joins the voice channel and loops a branded placeholder. Playback starts only when someone picks a movie or episode in the WebUI. One queue can mix Plex and Jellyfin items, with play, pause, resume, stop, skip, reorder, shuffle, and clear. OrbisCast saves playback progress, so the Dashboard and Media page offer Continue watching with Resume from the last position. When an episode is finished, it recommends the next episode of that series.
+Each media source adds a virtual on-demand channel. When selected in Discord it joins the voice channel and loops a branded placeholder. Playback starts only when someone picks a movie or episode in the WebUI. One queue can mix Plex and Jellyfin items, with play, pause, resume, stop, skip, reorder, shuffle, and clear. OrbisCast saves playback progress, so the Dashboard and Media page offer Continue watching with Resume from the last position. The Dashboard lists the viewers currently in the stream voice channel. When an episode is finished, it recommends the next episode of that series.
 
 > [!CAUTION]
 > Self-bots violate Discord's Terms of Service and can get an account banned. Use a secondary account and accept the risk. Never commit real tokens. The WebUI encrypts Discord and media server tokens at rest, but the host and the `data/` volume still need protection.
