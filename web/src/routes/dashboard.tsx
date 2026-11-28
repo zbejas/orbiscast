@@ -176,6 +176,7 @@ function LivePlaybackCard() {
         currentItem.data?.streams.filter((stream) => stream.type === 'subtitle') ?? [];
     const subtitleValue = queueItem ? String(queueItem.subtitleMode) : 'auto';
     const tone = state.mode === 'iptv' ? 'live' : state.mode === 'media' ? 'plex' : 'neutral';
+    const displayViewers = state.mode === 'idle' ? null : state.viewers;
     const frameTone =
         state.mode === 'iptv'
             ? 'border-live/25'
@@ -262,6 +263,12 @@ function LivePlaybackCard() {
                                 ? 'Placeholder'
                                 : 'Idle'}
                     </StatusPill>
+                    {displayViewers !== null ? (
+                        <StatusPill tone={tone} dot={false} className="tabular-nums">
+                            <Users size={13} aria-hidden="true" />
+                            {formatAudience(displayViewers)}
+                        </StatusPill>
+                    ) : null}
                 </div>
                 {state.mode !== 'idle' ? (
                     <span className="rounded-full bg-bg/40 px-2.5 py-1 font-mono text-[11px] tabular-nums text-text-muted">
@@ -306,7 +313,6 @@ function LivePlaybackCard() {
                                     {state.voiceChannelName ? (
                                         <MetaItem icon={Volume2}>{state.voiceChannelName}</MetaItem>
                                     ) : null}
-                                    <MetaItem icon={Users}>{formatAudience(state.viewers)}</MetaItem>
                                     {state.mode === 'placeholder' ? (
                                         <MetaItem icon={Clock}>
                                             Leaves after {activeSource?.idleMinutes ?? 20} min idle
