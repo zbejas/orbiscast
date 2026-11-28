@@ -323,8 +323,8 @@ Outlines are 1px and use the outline variant. Cards rely on tonal separation and
 - **Behavior:** native `<dialog>`, no manual focus trap, safe Cancel autofocus, Escape support, and focus return.
 
 ### Mini Player
-- **Desktop:** a 20px card above the streamer status, with a small poster, state label, title, and a link to Dashboard.
-- **Mobile:** a safe-area bottom bar with a 24px radius and e3 shadow. The bar reserves scroll padding so it never covers the last control.
+- **Desktop:** a 20px card above the streamer status, with a small poster, state label, viewer count, title, and a link to Dashboard. The 80px rail overlays the same count on the poster.
+- **Mobile:** a safe-area bottom bar with a 24px radius and e3 shadow. The state line carries the viewer count. The bar reserves scroll padding so it never covers the last control.
 
 ### Tables
 - **Structure:** semantic `<table>` with a sticky tonal header, 48px rows, tabular numerals, and a rounded 16px container.

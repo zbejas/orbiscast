@@ -70,3 +70,55 @@ test('opens the mobile navigation drawer', async ({ page }) => {
     await drawer.getByRole('link', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
 });
+
+test('shows the live viewer count on every now-playing surface', async ({ page }) => {
+    const now = Date.now();
+    const playback = {
+        mode: 'iptv',
+        title: 'Demo News',
+        subtitle: 'News',
+        posterUrl: null,
+        guildId: 'demo-guild',
+        guildName: 'Demo Guild',
+        voiceChannelId: 'demo-voice',
+        voiceChannelName: 'General',
+        startedAt: now - 60_000,
+        positionMs: null,
+        durationMs: null,
+        positionUpdatedAt: null,
+        viewers: 3,
+        watching: [
+            { id: 'viewer-1', displayName: 'Ada' },
+            { id: 'viewer-2', displayName: 'Grace' },
+            { id: 'viewer-3', displayName: 'Linus' },
+        ],
+        paused: false,
+        queueItemId: null,
+        sourceId: null,
+        sourceName: null,
+        sourceKind: null,
+    };
+
+    await page.route('**/api/playback', route => route.fulfill({ json: playback }));
+    await page.route('**/api/events', route =>
+        route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'text/event-stream' },
+            body: '',
+        })
+    );
+
+    await page.goto('/');
+    await expect(
+        page.getByText('3 viewers', { exact: true }).filter({ visible: true })
+    ).toHaveCount(2);
+    await expect(page.getByText('Watching now')).toBeVisible();
+
+    await page.setViewportSize({ width: 900, height: 844 });
+    await page.reload();
+    await expect(page.getByRole('link', { name: /Demo News, 3 viewers/ })).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await expect(page.getByRole('link', { name: /Demo News, 3 viewers/ })).toBeVisible();
+});

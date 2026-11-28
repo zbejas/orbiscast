@@ -10,12 +10,14 @@ import {
     ScrollText,
     Settings,
     Tv,
+    Users,
     X,
     type LucideIcon,
 } from 'lucide-react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import type { PlaybackStateDto } from '@shared/types';
 import { cn } from '@/lib/cn';
+import { formatAudience, formatCount } from '@/lib/format';
 import { useAuthConfig, useDiscordStatus, useLogout, usePlayback, useSession } from '@/lib/hooks';
 import { useAppEvents } from '@/lib/sse';
 import { OrbitalGlyph, Wordmark } from './brand';
@@ -270,32 +272,51 @@ function PlaybackThumb({ state }: { state: PlaybackStateDto }) {
     );
 }
 
+function playbackViewerCount(state: PlaybackStateDto): number | null {
+    return state.mode === 'idle' ? null : state.viewers;
+}
+
 function playbackActionLabel(state: PlaybackStateDto): string {
-    return `${playbackTone(state).label}: ${state.title ?? 'Playback'}. Open Dashboard playback controls.`;
+    const viewers = playbackViewerCount(state);
+    const audience = viewers === null ? '' : `, ${formatAudience(viewers)}`;
+    return `${playbackTone(state).label}: ${state.title ?? 'Playback'}${audience}. Open Dashboard playback controls.`;
 }
 
 function PlaybackMiniRail({ state }: { state: PlaybackStateDto }) {
     const tone = playbackTone(state);
+    const viewers = playbackViewerCount(state);
     return (
         <Link
             to="/"
             aria-label={playbackActionLabel(state)}
             title={playbackActionLabel(state)}
-            className="group mx-auto flex h-12 w-12 items-center justify-center rounded-[16px] bg-raised/40 transition-colors duration-200 hover:bg-raised/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blurple/70"
+            className="group mx-auto flex h-14 w-12 flex-col items-center justify-center gap-1 rounded-[16px] bg-raised/40 transition-colors duration-200 hover:bg-raised/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blurple/70"
         >
-            <span className="relative h-8 w-8 overflow-hidden rounded-lg border border-border/60">
-                <PlaybackThumb state={state} />
+            <span className="relative h-8 w-8">
+                <span className="block h-full w-full overflow-hidden rounded-lg border border-border/60">
+                    <PlaybackThumb state={state} />
+                    <span
+                        aria-hidden="true"
+                        className={cn('absolute right-0.5 top-0.5 size-2 rounded-full ring-2 ring-surface', tone.dot)}
+                    />
+                </span>
+            </span>
+            {viewers !== null ? (
                 <span
                     aria-hidden="true"
-                    className={cn('absolute right-0.5 top-0.5 size-2 rounded-full ring-2 ring-surface', tone.dot)}
-                />
-            </span>
+                    className="flex items-center justify-center gap-0.5 text-[11px] font-medium leading-none text-text tabular-nums"
+                >
+                    <Users size={10} aria-hidden="true" className="text-text-faint" />
+                    {formatCount(viewers)}
+                </span>
+            ) : null}
         </Link>
     );
 }
 
 function PlaybackMiniCard({ state }: { state: PlaybackStateDto }) {
     const tone = playbackTone(state);
+    const viewers = playbackViewerCount(state);
     const detail = state.voiceChannelName ?? state.guildName ?? state.sourceName ?? 'Discord';
     return (
         <Link
@@ -310,6 +331,16 @@ function PlaybackMiniCard({ state }: { state: PlaybackStateDto }) {
                 <span className={cn('flex items-center gap-1.5 text-[11px] font-medium', tone.text)}>
                     <span aria-hidden="true" className={cn('size-1.5 rounded-full', tone.dot)} />
                     {tone.label}
+                    {viewers !== null ? (
+                        <>
+                            <span aria-hidden="true" className="text-text-faint">
+                                ·
+                            </span>
+                            <span className="font-normal tabular-nums text-text-muted">
+                                {formatAudience(viewers)}
+                            </span>
+                        </>
+                    ) : null}
                 </span>
                 <span className="block truncate text-xs font-medium text-text">
                     {state.title ?? 'Playback'}
@@ -327,6 +358,7 @@ function PlaybackMiniCard({ state }: { state: PlaybackStateDto }) {
 
 function MobileNowPlaying({ state }: { state: PlaybackStateDto }) {
     const tone = playbackTone(state);
+    const viewers = playbackViewerCount(state);
     const detail = state.voiceChannelName ?? state.guildName ?? state.sourceName ?? 'Discord';
     return (
         <div className="fixed inset-x-0 bottom-0 z-40 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:hidden">
@@ -342,6 +374,16 @@ function MobileNowPlaying({ state }: { state: PlaybackStateDto }) {
                     <span className={cn('flex items-center gap-1.5 text-[11px] font-medium', tone.text)}>
                         <span aria-hidden="true" className={cn('size-1.5 rounded-full', tone.dot)} />
                         {tone.label}
+                        {viewers !== null ? (
+                            <>
+                                <span aria-hidden="true" className="text-text-faint">
+                                    ·
+                                </span>
+                                <span className="font-normal tabular-nums text-text-muted">
+                                    {formatAudience(viewers)}
+                                </span>
+                            </>
+                        ) : null}
                     </span>
                     <span className="block truncate text-sm font-medium text-text">
                         {state.title ?? 'Playback'}
